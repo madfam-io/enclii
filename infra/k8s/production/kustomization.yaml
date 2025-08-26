@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: enclii-production
+
+resources:
+  - ../base
+
+patchesStrategicMerge:
+  - replicas-patch.yaml
+  - environment-patch.yaml
+  - security-patch.yaml
+
+configMapGenerator:
+  - name: env-config
+    literals:
+      - ENCLII_ENV=production
+      - ENCLII_LOG_LEVEL=warn
+      - ENCLII_METRICS_ENABLED=true
+      - ENCLII_RATE_LIMIT_REQUESTS_PER_MINUTE=10000
+      - ENCLII_ENABLE_PROFILING=false
+
+images:
+  - name: switchyard-api
+    newName: ghcr.io/madfam/switchyard-api
+    digest: sha256:abcdef123456  # Use specific digest in production
+
+commonLabels:
+  environment: production
+  app.kubernetes.io/part-of: enclii
+
+# Production-specific annotations
+commonAnnotations:
+  config.kubernetes.io/local-config: "false"

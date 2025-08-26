@@ -44,6 +44,58 @@ Enclii is a Railway‑style internal platform that lets teams build, deploy, sca
 
 ---
 
+## Architecture & Features
+
+### Production-Ready Infrastructure
+
+Enclii is built with production-grade reliability and observability:
+
+**Security & Authentication:**
+- JWT-based authentication with RSA signing
+- Role-based access control (RBAC) with admin/developer/viewer roles
+- Comprehensive input validation and sanitization
+- Rate limiting and security middleware
+
+**Performance & Scalability:**
+- Redis caching with tag-based invalidation
+- Database connection pooling with configurable limits
+- Kubernetes-native horizontal pod autoscaling
+- Efficient build caching and image layer reuse
+
+**Observability & Monitoring:**
+- Structured logging with OpenTelemetry tracing
+- Prometheus metrics for all components
+- Health checks for dependencies (database, cache, Kubernetes)
+- Distributed tracing across request flows
+
+**Operations & Reliability:**
+- Automated backup and disaster recovery
+- Rolling deployments with readiness/liveness probes
+- Graceful shutdown handling
+- Circuit breaker patterns for external dependencies
+
+### Components
+
+**Control Plane (`apps/switchyard-api`):**
+- REST API with OpenAPI documentation
+- PostgreSQL with migrations
+- Background reconciliation controllers
+- Kubernetes deployment orchestration
+
+**Web UI (`apps/switchyard-ui`):**
+- Next.js dashboard with Tailwind CSS
+- Real-time deployment status updates
+- Project and service management
+- Log streaming and monitoring
+
+**CLI (`packages/cli`):**
+- Developer-friendly deployment workflow
+- Service specification parsing
+- Build and deployment automation
+- Comprehensive error handling
+
+---
+
 ## Prerequisites
 
 * **Core:** Docker ≥ 24, Git, Make, Helm ≥ 3.14, kubectl ≥ 1.29

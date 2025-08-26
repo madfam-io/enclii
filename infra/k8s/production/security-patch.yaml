@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: switchyard-api
+spec:
+  template:
+    spec:
+      securityContext:
+        fsGroup: 65532
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: switchyard-api
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532
+          runAsGroup: 65532
+          capabilities:
+            drop:
+              - ALL
+        # Production-specific environment
+        env:
+        - name: ENCLII_SECURITY_HEADERS_ENABLED
+          value: "true"
+        - name: ENCLII_CORS_ENABLED
+          value: "true"
+        - name: ENCLII_AUDIT_LOG_ENABLED
+          value: "true"

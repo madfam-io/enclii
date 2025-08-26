@@ -5,8 +5,16 @@ metadata:
   name: switchyard-api
   labels:
     app: switchyard-api
+    app.kubernetes.io/name: switchyard-api
+    app.kubernetes.io/component: control-plane
+    app.kubernetes.io/part-of: enclii
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: switchyard-api
@@ -14,32 +22,100 @@ spec:
     metadata:
       labels:
         app: switchyard-api
+        app.kubernetes.io/name: switchyard-api
+        app.kubernetes.io/component: control-plane
+        app.kubernetes.io/part-of: enclii
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
     spec:
+      serviceAccountName: switchyard-api
       containers:
         - name: switchyard-api
           image: switchyard-api:latest
           imagePullPolicy: Never # For local development
           env:
             - name: ENCLII_DB_URL
-              value: "postgres://postgres:password@postgres:5432/enclii_dev?sslmode=disable"
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: database-url
+            - name: ENCLII_REDIS_URL
+              value: "redis://redis:6379"
             - name: ENCLII_PORT
               value: "8080"
             - name: ENCLII_LOG_LEVEL
-              value: "debug"
+              value: "info"
+            - name: ENCLII_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secrets
+                  key: jwt-secret
+            - name: ENCLII_OIDC_ISSUER
+              value: "http://localhost:5556"
+            - name: OTEL_EXPORTER_JAEGER_ENDPOINT
+              value: "http://jaeger:14268/api/traces"
+            - name: ENCLII_METRICS_ENABLED
+              value: "true"
+            - name: ENCLII_CACHE_ENABLED
+              value: "true"
+            - name: ENCLII_RATE_LIMIT_REQUESTS_PER_MINUTE
+              value: "1000"
           ports:
             - containerPort: 8080
+              name: http
+              protocol: TCP
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/ready
               port: 8080
-            initialDelaySeconds: 5
+              scheme: HTTP
+            initialDelaySeconds: 10
             periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /health
+              path: /health/live
               port: 8080
-            initialDelaySeconds: 15
-            periodSeconds: 20
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp-volume
+              mountPath: /tmp
+            - name: var-run-volume
+              mountPath: /var/run
+      volumes:
+        - name: tmp-volume
+          emptyDir: {}
+        - name: var-run-volume
+          emptyDir: {}
+      securityContext:
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
 ---
 apiVersion: v1
 kind: Service

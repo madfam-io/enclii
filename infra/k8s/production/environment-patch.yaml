@@ -1,0 +1,48 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: switchyard-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: switchyard-api
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        env:
+        - name: ENCLII_LOG_LEVEL
+          value: "warn"
+        - name: ENCLII_RATE_LIMIT_REQUESTS_PER_MINUTE
+          value: "10000"
+        - name: ENCLII_DB_POOL_SIZE
+          value: "50"
+        - name: ENCLII_CACHE_TTL_SECONDS
+          value: "7200"
+        - name: ENCLII_ENABLE_PROFILING
+          value: "false"
+        - name: ENCLII_MAX_REQUEST_SIZE
+          value: "10MB"
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 3
+          timeoutSeconds: 2
+          successThreshold: 2
+          failureThreshold: 2
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 2

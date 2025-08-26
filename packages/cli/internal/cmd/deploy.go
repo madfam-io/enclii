@@ -41,6 +41,14 @@ func deployService(cfg *config.Config, environment string, wait bool) error {
 	
 	fmt.Printf("🚂 Deploying to %s environment...\n", environment)
 
+	// Check if we're in a git repository and get current commit
+	gitSHA, err := getCurrentGitSHA()
+	if err != nil {
+		return fmt.Errorf("failed to get git SHA: %w", err)
+	}
+
+	fmt.Printf("📦 Building from commit: %s\n", gitSHA[:8])
+
 	// 1. Parse service.yaml
 	parser := spec.NewParser()
 	serviceSpec, err := parser.ParseServiceSpec("service.yaml")
@@ -48,65 +56,61 @@ func deployService(cfg *config.Config, environment string, wait bool) error {
 		return fmt.Errorf("failed to parse service.yaml: %w", err)
 	}
 
-	// 2. Get current git SHA
-	gitSHA, err := getCurrentGitSHA()
-	if err != nil {
-		return fmt.Errorf("failed to get git SHA: %w", err)
-	}
+	fmt.Printf("🔧 Service: %s (project: %s)\n", serviceSpec.Name, serviceSpec.Project)
 
-	// 3. Create API client
-	apiClient := client.NewAPIClient(cfg.APIEndpoint, cfg.APIToken)
+	// 2. Create API client
+	apiClient := client.NewAPIClient(cfg.APIBaseURL, cfg.Token)
 
-	// 4. Ensure project exists
-	project, err := ensureProject(ctx, apiClient, serviceSpec.Metadata.Project)
+	// 3. Ensure project exists
+	project, err := ensureProject(ctx, apiClient, serviceSpec.Project)
 	if err != nil {
 		return fmt.Errorf("failed to ensure project: %w", err)
 	}
 
-	// 5. Ensure service exists
+	// 4. Ensure service exists  
 	service, err := ensureService(ctx, apiClient, project, serviceSpec)
 	if err != nil {
 		return fmt.Errorf("failed to ensure service: %w", err)
 	}
 
-	// 6. Trigger build
+	// 5. Trigger build
 	fmt.Println("🏗️  Building service...")
-	release, err := apiClient.BuildService(ctx, service.ID.String(), gitSHA)
+	release, err := apiClient.BuildService(ctx, service.ID, gitSHA)
 	if err != nil {
 		return fmt.Errorf("failed to build service: %w", err)
 	}
 
 	fmt.Printf("📦 Build initiated: %s\n", release.Version)
 
-	// 7. Wait for build completion (simplified polling)
-	if err := waitForBuild(ctx, apiClient, service.ID.String(), release.ID.String()); err != nil {
+	// 6. Wait for build completion (simplified polling)
+	if err := waitForBuild(ctx, apiClient, service.ID, release.ID); err != nil {
 		return fmt.Errorf("build failed: %w", err)
 	}
 
-	// 8. Deploy to environment
+	// 7. Deploy to environment
 	fmt.Println("🚀 Deploying to Kubernetes...")
 	deployReq := client.DeployRequest{
-		Environment: environment,
-		ReleaseID:   release.ID.String(),
-		Wait:        wait,
+		ReleaseID:   release.ID,
+		Environment: map[string]string{"ENV": environment},
+		Replicas:    1,
 	}
 
-	deployment, err := apiClient.DeployService(ctx, service.ID.String(), deployReq)
+	deployment, err := apiClient.DeployService(ctx, service.ID, deployReq)
 	if err != nil {
 		return fmt.Errorf("failed to deploy service: %w", err)
 	}
 
 	if wait {
 		fmt.Println("⏳ Waiting for deployment...")
-		if err := waitForDeployment(ctx, apiClient, service.ID.String()); err != nil {
+		if err := waitForDeployment(ctx, apiClient, service.ID); err != nil {
 			return fmt.Errorf("deployment failed: %w", err)
 		}
 		fmt.Println("✅ Deployment successful!")
 		fmt.Printf("🌐 Service available at: https://%s.%s.%s.enclii.dev\n", 
-			serviceSpec.Metadata.Name, serviceSpec.Metadata.Project, environment)
+			serviceSpec.Name, serviceSpec.Project, environment)
 	} else {
 		fmt.Println("✅ Deployment initiated")
-		fmt.Printf("📊 Monitor progress: enclii logs %s -f\n", serviceSpec.Metadata.Name)
+		fmt.Printf("📊 Monitor progress: enclii logs %s -f\n", serviceSpec.Name)
 	}
 
 	return nil
@@ -146,20 +150,20 @@ func ensureService(ctx context.Context, apiClient *client.APIClient, project *ty
 
 	// Check if service already exists
 	for _, svc := range services {
-		if svc.Name == serviceSpec.Metadata.Name {
+		if svc.Name == serviceSpec.Name {
 			return svc, nil
 		}
 	}
 
 	// Create new service
-	fmt.Printf("Creating service: %s\n", serviceSpec.Metadata.Name)
+	fmt.Printf("Creating service: %s\n", serviceSpec.Name)
 	newService := &types.Service{
 		ProjectID: project.ID,
-		Name:      serviceSpec.Metadata.Name,
-		GitRepo:   getCurrentGitRepo(), // TODO: Get from git
+		Name:      serviceSpec.Name,
+		GitRepo:   getCurrentGitRepo(),
 		BuildConfig: types.BuildConfig{
-			Type:       types.BuildType(serviceSpec.Spec.Build.Type),
-			Dockerfile: serviceSpec.Spec.Build.Dockerfile,
+			Type:       "buildpacks", // Default for now
+			Dockerfile: "",
 		},
 	}
 
@@ -191,7 +195,7 @@ func waitForBuild(ctx context.Context, apiClient *client.APIClient, serviceID, r
 			}
 
 			for _, release := range releases {
-				if release.ID.String() == releaseID {
+				if release.ID == releaseID {
 					switch release.Status {
 					case types.ReleaseStatusReady:
 						fmt.Println("✅ Build completed successfully")

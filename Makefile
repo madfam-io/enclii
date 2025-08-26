@@ -1,6 +1,7 @@
 .PHONY: bootstrap build-all build-api build-cli build-ui build-reconcilers
-.PHONY: test lint run-switchyard run-ui run-reconcilers
-.PHONY: kind-up kind-down infra-dev clean
+.PHONY: test test-integration test-coverage test-benchmark test-all lint 
+.PHONY: run-switchyard run-ui run-reconcilers
+.PHONY: kind-up kind-down infra-dev deploy-staging deploy-prod health-check clean
 
 # Variables
 REGISTRY ?= ghcr.io/madfam
@@ -35,18 +36,30 @@ build-reconcilers:
 
 # Testing
 test:
-	@echo "🧪 Running tests..."
-	go test ./...
+	@echo "🧪 Running unit tests..."
+	cd apps/switchyard-api && go test -v -race -cover ./...
+	cd packages/cli && go test -v -race -cover ./...
 	cd apps/switchyard-ui && npm test
 
 test-integration:
 	@echo "🧪 Running integration tests..."
-	go test ./... -tags=integration
+	cd apps/switchyard-api && go test -v -tags=integration ./...
 
 test-coverage:
-	@echo "📊 Running tests with coverage..."
-	go test ./... -coverprofile=coverage.out
-	go tool cover -html=coverage.out -o coverage.html
+	@echo "📊 Generating test coverage report..."
+	cd apps/switchyard-api && go test -coverprofile=coverage.out ./...
+	cd apps/switchyard-api && go tool cover -html=coverage.out -o coverage.html
+	cd packages/cli && go test -coverprofile=cli-coverage.out ./...
+	cd packages/cli && go tool cover -html=cli-coverage.out -o cli-coverage.html
+	@echo "Coverage reports generated"
+
+test-benchmark:
+	@echo "⚡ Running benchmark tests..."
+	cd apps/switchyard-api && go test -bench=. -benchmem ./...
+	cd packages/cli && go test -bench=. -benchmem ./...
+
+test-all: test test-integration test-coverage
+	@echo "✅ All tests completed successfully"
 
 # Linting
 lint:
@@ -82,6 +95,36 @@ infra-dev:
 	@echo "🏗️ Installing development infrastructure..."
 	kubectl apply -f infra/dev/namespace.yaml
 	kubectl apply -k infra/k8s/base
+	@echo "⏳ Waiting for services to be ready..."
+	kubectl wait --for=condition=ready pod -l app=postgres --timeout=300s
+	kubectl wait --for=condition=ready pod -l app=redis --timeout=300s
+	kubectl wait --for=condition=ready pod -l app=switchyard-api --timeout=300s
+
+# Deploy to staging
+deploy-staging:
+	@echo "🚀 Deploying to staging environment..."
+	kubectl create namespace enclii-staging --dry-run=client -o yaml | kubectl apply -f -
+	kubectl apply -k infra/k8s/staging
+	kubectl rollout status deployment/switchyard-api -n enclii-staging --timeout=300s
+
+# Deploy to production  
+deploy-prod:
+	@echo "🚀 Deploying to production environment..."
+	@echo "⚠️  Production deployment requires manual confirmation"
+	@read -p "Deploy to production? (yes/no): " confirm && [ "$$confirm" = "yes" ]
+	kubectl create namespace enclii-production --dry-run=client -o yaml | kubectl apply -f -
+	kubectl apply -k infra/k8s/production
+	kubectl rollout status deployment/switchyard-api -n enclii-production --timeout=600s
+
+# Health check all environments
+health-check:
+	@echo "🏥 Checking health of all environments..."
+	@echo "Development:"
+	kubectl get pods -l app=switchyard-api || true
+	@echo "Staging:"  
+	kubectl get pods -l app=switchyard-api -n enclii-staging || true
+	@echo "Production:"
+	kubectl get pods -l app=switchyard-api -n enclii-production || true
 
 # Clean build artifacts
 clean:

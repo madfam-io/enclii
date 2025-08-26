@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: enclii-staging
+
+resources:
+  - ../base
+
+patchesStrategicMerge:
+  - replicas-patch.yaml
+  - environment-patch.yaml
+
+configMapGenerator:
+  - name: env-config
+    literals:
+      - ENCLII_ENV=staging
+      - ENCLII_LOG_LEVEL=info
+      - ENCLII_METRICS_ENABLED=true
+      - ENCLII_RATE_LIMIT_REQUESTS_PER_MINUTE=5000
+
+images:
+  - name: switchyard-api
+    newName: ghcr.io/madfam/switchyard-api
+    newTag: staging
+
+commonLabels:
+  environment: staging
+  app.kubernetes.io/part-of: enclii

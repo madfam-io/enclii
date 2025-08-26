@@ -1,10 +1,186 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+
+interface DashboardStats {
+  healthy_services: number;
+  deployments_today: number;
+  active_projects: number;
+  avg_deploy_time: string;
+}
+
+interface RecentActivity {
+  id: string;
+  type: string;
+  message: string;
+  timestamp: string;
+  status: 'success' | 'running' | 'failed' | 'pending';
+  metadata?: any;
+}
+
+interface ServiceOverview {
+  id: string;
+  name: string;
+  project_name: string;
+  environment: string;
+  status: 'healthy' | 'unhealthy' | 'unknown';
+  version: string;
+  replicas: string;
+}
+
 export default function Dashboard() {
+  const [stats, setStats] = useState<DashboardStats>({
+    healthy_services: 0,
+    deployments_today: 0,
+    active_projects: 0,
+    avg_deploy_time: '0m'
+  });
+  const [activities, setActivities] = useState<RecentActivity[]>([]);
+  const [services, setServices] = useState<ServiceOverview[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDashboardData = async () => {
+    try {
+      // In a real implementation, these would be API calls
+      // For now, we'll use mock data since the API endpoints might not be fully set up
+      
+      // Mock stats
+      setStats({
+        healthy_services: 12,
+        deployments_today: 8,
+        active_projects: 3,
+        avg_deploy_time: '2.3m'
+      });
+
+      // Mock recent activities
+      setActivities([
+        {
+          id: '1',
+          type: 'deployment',
+          message: 'Deployed api to production',
+          timestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+          status: 'success',
+          metadata: { version: 'v2024.01.15-14.02' }
+        },
+        {
+          id: '2',
+          type: 'environment',
+          message: 'Created preview environment',
+          timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+          status: 'running',
+          metadata: { environment: 'preview-feature-auth' }
+        },
+        {
+          id: '3',
+          type: 'build',
+          message: 'Build completed for worker service',
+          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+          status: 'success'
+        }
+      ]);
+
+      // Mock services overview
+      setServices([
+        {
+          id: '1',
+          name: 'api',
+          project_name: 'core-platform',
+          environment: 'production',
+          status: 'healthy',
+          version: 'v2024.01.15-14.02',
+          replicas: '2/2'
+        },
+        {
+          id: '2',
+          name: 'worker',
+          project_name: 'core-platform',
+          environment: 'staging',
+          status: 'healthy',
+          version: 'v2024.01.15-13.45',
+          replicas: '1/1'
+        },
+        {
+          id: '3',
+          name: 'frontend',
+          project_name: 'web-app',
+          environment: 'production',
+          status: 'healthy',
+          version: 'v2024.01.15-12.30',
+          replicas: '3/3'
+        }
+      ]);
+      
+      setLoading(false);
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+    
+    // Refresh data every 30 seconds
+    const interval = setInterval(fetchDashboardData, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTimeAgo = (timestamp: string) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInSeconds = Math.floor((now.getTime() - time.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) {
+      return `${diffInSeconds} seconds ago`;
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    } else {
+      const days = Math.floor(diffInSeconds / 86400);
+      return `${days} day${days > 1 ? 's' : ''} ago`;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-24 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+          <div className="space-y-6">
+            <div className="h-64 bg-gray-200 rounded"></div>
+            <div className="h-64 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          Dashboard
-        </h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">
+            Dashboard
+          </h1>
+          <button
+            onClick={fetchDashboardData}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+        </div>
 
         {/* Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -22,7 +198,7 @@ export default function Dashboard() {
                       Healthy Services
                     </dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      12
+                      {stats.healthy_services}
                     </dd>
                   </dl>
                 </div>
@@ -44,7 +220,7 @@ export default function Dashboard() {
                       Deployments Today
                     </dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      8
+                      {stats.deployments_today}
                     </dd>
                   </dl>
                 </div>
@@ -66,7 +242,7 @@ export default function Dashboard() {
                       Active Projects
                     </dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      3
+                      {stats.active_projects}
                     </dd>
                   </dl>
                 </div>
@@ -88,7 +264,7 @@ export default function Dashboard() {
                       Avg Deploy Time
                     </dt>
                     <dd className="text-lg font-medium text-gray-900">
-                      2.3m
+                      {stats.avg_deploy_time}
                     </dd>
                   </dl>
                 </div>
@@ -108,42 +284,42 @@ export default function Dashboard() {
             </p>
           </div>
           <ul className="divide-y divide-gray-200">
-            <li className="px-4 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-enclii-green rounded-full mr-3"></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      Deployed api to production
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      v2024.01.15-14.02 • 2 minutes ago
-                    </p>
+            {activities.length === 0 ? (
+              <li className="px-4 py-8 text-center text-gray-500">
+                No recent activity
+              </li>
+            ) : (
+              activities.map((activity) => (
+                <li key={activity.id} className="px-4 py-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <div className={`w-2 h-2 rounded-full mr-3 ${
+                        activity.status === 'success' ? 'bg-green-500' :
+                        activity.status === 'running' ? 'bg-blue-500' :
+                        activity.status === 'failed' ? 'bg-red-500' :
+                        'bg-yellow-500'
+                      }`}></div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">
+                          {activity.message}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {activity.metadata?.version || activity.metadata?.environment || ''} • {formatTimeAgo(activity.timestamp)}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      activity.status === 'success' ? 'bg-green-100 text-green-800' :
+                      activity.status === 'running' ? 'bg-blue-100 text-blue-800' :
+                      activity.status === 'failed' ? 'bg-red-100 text-red-800' :
+                      'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {activity.status.charAt(0).toUpperCase() + activity.status.slice(1)}
+                    </span>
                   </div>
-                </div>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  Success
-                </span>
-              </div>
-            </li>
-            <li className="px-4 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="w-2 h-2 bg-enclii-blue rounded-full mr-3"></div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      Created preview environment
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      preview-feature-auth • 15 minutes ago
-                    </p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                  Running
-                </span>
-              </div>
-            </li>
+                </li>
+              ))
+            )}
           </ul>
         </div>
 
@@ -179,52 +355,55 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="text-sm font-medium text-gray-900">api</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      production
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      healthy
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    v2024.01.15-14.02
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    2/2
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="text-sm font-medium text-gray-900">worker</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                      staging
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      healthy
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    v2024.01.15-13.45
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    1/1
-                  </td>
-                </tr>
+                {services.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                      No services found
+                    </td>
+                  </tr>
+                ) : (
+                  services.map((service) => (
+                    <tr key={service.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <Link 
+                            href={`/services/${service.id}`}
+                            className="text-sm font-medium text-gray-900 hover:text-enclii-blue"
+                          >
+                            {service.name}
+                          </Link>
+                          <div className="text-xs text-gray-500 ml-2">
+                            in {service.project_name}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          service.environment === 'production' ? 'bg-green-100 text-green-800' :
+                          service.environment === 'staging' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-blue-100 text-blue-800'
+                        }`}>
+                          {service.environment}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          service.status === 'healthy' ? 'bg-green-100 text-green-800' :
+                          service.status === 'unhealthy' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {service.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {service.version}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {service.replicas}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

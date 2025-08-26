@@ -17,12 +17,14 @@ type APIClient struct {
 	baseURL    string
 	httpClient *http.Client
 	token      string
+	userAgent  string
 }
 
 func NewAPIClient(baseURL, token string) *APIClient {
 	return &APIClient{
-		baseURL: baseURL,
-		token:   token,
+		baseURL:   baseURL,
+		token:     token,
+		userAgent: "enclii-cli/1.0.0",
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -40,6 +42,92 @@ func (e APIError) Error() string {
 		return fmt.Sprintf("API error %d: %s (%s)", e.StatusCode, e.Message, e.Details)
 	}
 	return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Message)
+}
+
+// HTTP helper methods
+func (c *APIClient) makeRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	url := c.baseURL + path
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", c.userAgent)
+	
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+
+	return resp, nil
+}
+
+func (c *APIClient) get(ctx context.Context, path string, result interface{}) error {
+	resp, err := c.makeRequest(ctx, "GET", path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return c.handleResponse(resp, result)
+}
+
+func (c *APIClient) post(ctx context.Context, path string, payload interface{}, result interface{}) error {
+	var body io.Reader
+	if payload != nil {
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal payload: %w", err)
+		}
+		body = bytes.NewBuffer(jsonData)
+	}
+
+	resp, err := c.makeRequest(ctx, "POST", path, body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return c.handleResponse(resp, result)
+}
+
+func (c *APIClient) handleResponse(resp *http.Response, result interface{}) error {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		var apiErr struct {
+			Error string `json:"error"`
+		}
+		
+		if err := json.Unmarshal(body, &apiErr); err == nil && apiErr.Error != "" {
+			return APIError{
+				StatusCode: resp.StatusCode,
+				Message:    apiErr.Error,
+			}
+		}
+
+		return APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	if result != nil {
+		if err := json.Unmarshal(body, result); err != nil {
+			return fmt.Errorf("failed to unmarshal response: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Projects
@@ -207,90 +295,12 @@ func (c *APIClient) Health(ctx context.Context) (*HealthResponse, error) {
 	return &health, nil
 }
 
-// HTTP helpers
-func (c *APIClient) get(ctx context.Context, path string, result interface{}) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+path, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create GET request: %w", err)
-	}
-
-	return c.doRequest(req, result)
-}
-
-func (c *APIClient) post(ctx context.Context, path string, body interface{}, result interface{}) error {
-	var bodyReader io.Reader
-
-	if body != nil {
-		bodyBytes, err := json.Marshal(body)
-		if err != nil {
-			return fmt.Errorf("failed to marshal request body: %w", err)
-		}
-		bodyReader = bytes.NewReader(bodyBytes)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+path, bodyReader)
-	if err != nil {
-		return fmt.Errorf("failed to create POST request: %w", err)
-	}
-
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	return c.doRequest(req, result)
-}
-
-func (c *APIClient) doRequest(req *http.Request, result interface{}) error {
-	// Add authentication if token is available
-	if c.token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.token)
-	}
-
-	// Add common headers
-	req.Header.Set("User-Agent", "enclii-cli/1.0.0")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Check for HTTP errors
-	if resp.StatusCode >= 400 {
-		var apiErr APIError
-		if err := json.Unmarshal(body, &apiErr); err != nil {
-			// Fallback to generic error
-			return APIError{
-				StatusCode: resp.StatusCode,
-				Message:    string(body),
-			}
-		}
-		apiErr.StatusCode = resp.StatusCode
-		return apiErr
-	}
-
-	// Parse success response
-	if result != nil {
-		if err := json.Unmarshal(body, result); err != nil {
-			return fmt.Errorf("failed to unmarshal response: %w", err)
-		}
-	}
-
-	return nil
-}
 
 // Request/Response types
 type DeployRequest struct {
-	Environment string `json:"environment"`
-	ReleaseID   string `json:"release_id,omitempty"`
-	Wait        bool   `json:"wait"`
+	ReleaseID   string            `json:"release_id"`
+	Environment map[string]string `json:"environment,omitempty"`
+	Replicas    int               `json:"replicas,omitempty"`
 }
 
 type RollbackRequest struct {
