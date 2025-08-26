@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: enclii_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  switchyard-api:
+    build:
+      context: .
+      dockerfile: apps/switchyard-api/Dockerfile
+    environment:
+      ENCLII_DB_URL: "postgres://postgres:password@postgres:5432/enclii_dev?sslmode=disable"
+      ENCLII_PORT: "8080"
+      ENCLII_LOG_LEVEL: "debug"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
