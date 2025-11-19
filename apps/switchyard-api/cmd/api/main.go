@@ -62,6 +62,7 @@ func main() {
 	authManager, err := auth.NewJWTManager(
 		15*time.Minute, // Access token duration
 		7*24*time.Hour, // Refresh token duration (7 days)
+		repos,          // Database repositories for authorization
 	)
 	if err != nil {
 		logrus.Fatal("Failed to initialize auth manager:", err)

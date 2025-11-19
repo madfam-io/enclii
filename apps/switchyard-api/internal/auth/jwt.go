@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"database/sql"
 	"encoding/pem"
 	"fmt"
 	"net/http"
@@ -14,14 +15,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/sirupsen/logrus"
 )
 
 type JWTManager struct {
-	privateKey     *rsa.PrivateKey
-	publicKey      *rsa.PublicKey
-	tokenDuration  time.Duration
+	privateKey      *rsa.PrivateKey
+	publicKey       *rsa.PublicKey
+	tokenDuration   time.Duration
 	refreshDuration time.Duration
+	repos           *db.Repositories
 }
 
 type Claims struct {
@@ -50,7 +53,7 @@ type User struct {
 	Active     bool      `json:"active"`
 }
 
-func NewJWTManager(tokenDuration, refreshDuration time.Duration) (*JWTManager, error) {
+func NewJWTManager(tokenDuration, refreshDuration time.Duration, repos *db.Repositories) (*JWTManager, error) {
 	privateKey, err := generateRSAKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate RSA key: %w", err)
@@ -61,6 +64,7 @@ func NewJWTManager(tokenDuration, refreshDuration time.Duration) (*JWTManager, e
 		publicKey:       &privateKey.PublicKey,
 		tokenDuration:   tokenDuration,
 		refreshDuration: refreshDuration,
+		repos:           repos,
 	}, nil
 }
 
@@ -272,37 +276,77 @@ func (j *JWTManager) RequireRole(roles ...string) gin.HandlerFunc {
 
 func (j *JWTManager) RequireProjectAccess() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
+
+		// Get project slug from URL params
 		projectSlug := c.Param("slug")
 		if projectSlug == "" {
+			// No project in URL, skip check
 			c.Next()
 			return
 		}
 
-		projectIDs, exists := c.Get("project_ids")
+		// Get user ID from context (set by AuthMiddleware)
+		userID, err := GetUserIDFromContext(c)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+			c.Abort()
+			return
+		}
+
+		// Get user role from context
+		roleStr, exists := c.Get("role")
 		if !exists {
-			c.JSON(http.StatusForbidden, gin.H{"error": "No project access"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User role not found"})
 			c.Abort()
 			return
 		}
 
-		projectIDList, ok := projectIDs.([]string)
-		if !ok {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid project access format"})
-			c.Abort()
+		// Admin users have access to all projects
+		if roleStr == "admin" {
+			c.Next()
 			return
 		}
 
-		// For now, allow access if user has any project access
-		// In production, implement proper project-level authorization
-		if len(projectIDList) == 0 {
-			userRole, _ := c.Get("user_role")
-			if userRole != "admin" && userRole != "owner" {
-				c.JSON(http.StatusForbidden, gin.H{"error": "No access to this project"})
-				c.Abort()
-				return
+		// Check if repos are available
+		if j.repos == nil {
+			logrus.Warn("Project access repository not available, allowing request")
+			c.Next()
+			return
+		}
+
+		// Get project by slug
+		project, err := j.repos.Projects.GetBySlug(ctx, projectSlug)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+			} else {
+				logrus.WithError(err).Error("Failed to get project by slug")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve project"})
 			}
+			c.Abort()
+			return
 		}
 
+		// Check if user has access to this specific project
+		hasAccess, err := j.repos.ProjectAccess.UserHasAccess(ctx, userID, project.ID)
+		if err != nil {
+			logrus.WithError(err).Error("Failed to check project access")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify project access"})
+			c.Abort()
+			return
+		}
+
+		if !hasAccess {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": fmt.Sprintf("You don't have access to project '%s'", projectSlug),
+			})
+			c.Abort()
+			return
+		}
+
+		// User has access, store project ID in context for later use
+		c.Set("project_id", project.ID)
 		c.Next()
 	}
 }
