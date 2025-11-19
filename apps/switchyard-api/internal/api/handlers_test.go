@@ -133,7 +133,7 @@ func (m *MockLogger) WithContext(ctx context.Context) logging.Logger {
 
 func setupTestHandler() (*Handler, *MockProjectRepository, *MockCacheService, *MockLogger) {
 	gin.SetMode(gin.TestMode)
-	
+
 	mockProjectRepo := &MockProjectRepository{}
 	mockCache := &MockCacheService{}
 	mockLogger := &MockLogger{}
@@ -141,7 +141,7 @@ func setupTestHandler() (*Handler, *MockProjectRepository, *MockCacheService, *M
 	repos := &db.Repositories{
 		Project: mockProjectRepo,
 	}
-	
+
 	cfg := &config.Config{
 		Registry: "test-registry",
 	}
@@ -236,18 +236,18 @@ func TestListProjects(t *testing.T) {
 	t.Run("successful list", func(t *testing.T) {
 		projects := []*types.Project{
 			{
-				ID:          "1",
-				Name:        "Project 1",
-				Slug:        "project-1",
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
+				ID:        "1",
+				Name:      "Project 1",
+				Slug:      "project-1",
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
 			},
 			{
-				ID:          "2", 
-				Name:        "Project 2",
-				Slug:        "project-2",
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
+				ID:        "2",
+				Name:      "Project 2",
+				Slug:      "project-2",
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
 			},
 		}
 
@@ -262,12 +262,12 @@ func TestListProjects(t *testing.T) {
 		handler.ListProjects(c)
 
 		assert.Equal(t, http.StatusOK, w.Code)
-		
+
 		var response map[string]interface{}
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.Contains(t, response, "projects")
-		
+
 		mockRepo.AssertExpectations(t)
 	})
 
@@ -296,11 +296,11 @@ func TestGetProject(t *testing.T) {
 
 	t.Run("successful get", func(t *testing.T) {
 		project := &types.Project{
-			ID:          "1",
-			Name:        "Test Project",
-			Slug:        "test-project",
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
+			ID:        "1",
+			Name:      "Test Project",
+			Slug:      "test-project",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
 
 		mockRepo.On("GetBySlug", mock.Anything, "test-project").Return(project, nil)

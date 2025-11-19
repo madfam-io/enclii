@@ -17,6 +17,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/config"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
@@ -29,18 +30,19 @@ import (
 )
 
 type Handler struct {
-	repos           *db.Repositories
-	config          *config.Config
-	auth            *auth.JWTManager
-	auditMiddleware *audit.Middleware
-	cache           cache.CacheService
-	builder         *builder.Service
-	k8sClient       *k8s.Client
-	reconciler      *reconciler.Controller
-	metrics         *monitoring.MetricsCollector
-	logger          logging.Logger
-	validator       *validation.Validator
-	provenanceChecker *provenance.Checker
+	repos              *db.Repositories
+	config             *config.Config
+	auth               *auth.JWTManager
+	auditMiddleware    *audit.Middleware
+	cache              cache.CacheService
+	builder            *builder.Service
+	k8sClient          *k8s.Client
+	reconciler         *reconciler.Controller
+	metrics            *monitoring.MetricsCollector
+	logger             logging.Logger
+	validator          *validation.Validator
+	provenanceChecker  *provenance.Checker
+	complianceExporter *compliance.Exporter
 }
 
 func NewHandler(
@@ -55,20 +57,22 @@ func NewHandler(
 	logger logging.Logger,
 	validator *validation.Validator,
 	provenanceChecker *provenance.Checker,
+	complianceExporter *compliance.Exporter,
 ) *Handler {
 	return &Handler{
-		repos:             repos,
-		config:            config,
-		auth:              auth,
-		auditMiddleware:   audit.NewMiddleware(repos),
-		cache:             cache,
-		builder:           builder,
-		k8sClient:         k8sClient,
-		reconciler:        reconciler,
-		metrics:           metrics,
-		logger:            logger,
-		validator:         validator,
-		provenanceChecker: provenanceChecker,
+		repos:              repos,
+		config:             config,
+		auth:               auth,
+		auditMiddleware:    audit.NewMiddleware(repos),
+		cache:              cache,
+		builder:            builder,
+		k8sClient:          k8sClient,
+		reconciler:         reconciler,
+		metrics:            metrics,
+		logger:             logger,
+		validator:          validator,
+		provenanceChecker:  provenanceChecker,
+		complianceExporter: complianceExporter,
 	}
 }
 
@@ -408,7 +412,7 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 		}
 	}
 
-	if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusReady); err != nil{
+	if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusReady); err != nil {
 		h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
 		h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusFailed)
 		return
@@ -523,7 +527,7 @@ func (h *Handler) DeployService(c *gin.Context) {
 		if err != nil {
 			h.logger.Error(ctx, "Failed to check deployment approval", logging.Error("provenance_error", err))
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to verify deployment approval",
+				"error":   "Failed to verify deployment approval",
 				"details": err.Error(),
 			})
 			return
@@ -536,10 +540,10 @@ func (h *Handler) DeployService(c *gin.Context) {
 				logging.String("violations", approvalResult.Violations.Error()))
 
 			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Deployment does not meet approval requirements",
+				"error":             "Deployment does not meet approval requirements",
 				"policy_violations": approvalResult.Violations,
-				"environment": req.EnvironmentName,
-				"help": "Ensure your PR has sufficient approvals and CI checks pass before deploying to this environment",
+				"environment":       req.EnvironmentName,
+				"help":              "Ensure your PR has sufficient approvals and CI checks pass before deploying to this environment",
 			})
 			return
 		}
@@ -572,6 +576,11 @@ func (h *Handler) DeployService(c *gin.Context) {
 					logging.String("pr_url", approvalResult.PRURL),
 					logging.String("approver", approvalResult.ApproverEmail))
 			}
+
+			// Send compliance evidence to Vanta/Drata (if enabled)
+			if h.complianceExporter != nil && h.complianceExporter.IsEnabled() {
+				go h.sendComplianceWebhooks(ctx, deployment, release, service, req.EnvironmentName, approvalResult, receiptJSON)
+			}
 		}
 	}
 
@@ -591,7 +600,7 @@ func (h *Handler) DeployService(c *gin.Context) {
 	// Record metrics
 	h.metrics.RecordDeployment(service.Name, release.Version)
 
-	h.logger.Info(ctx, "Deployment created", 
+	h.logger.Info(ctx, "Deployment created",
 		logging.String("deployment_id", deployment.ID),
 		logging.String("service_id", serviceID.String()),
 		logging.String("release_id", req.ReleaseID))
@@ -687,7 +696,7 @@ func (h *Handler) GetLogs(c *gin.Context) {
 	// Get query parameters for log options
 	lines := c.DefaultQuery("lines", "100")
 	follow := c.Query("follow") == "true"
-	
+
 	linesInt, err := strconv.Atoi(lines)
 	if err != nil {
 		linesInt = 100
@@ -897,4 +906,86 @@ func (h *Handler) ListServiceDeployments(c *gin.Context) {
 		"deployments": allDeployments,
 		"count":       len(allDeployments),
 	})
+}
+
+// sendComplianceWebhooks sends deployment evidence to Vanta/Drata
+func (h *Handler) sendComplianceWebhooks(
+	ctx context.Context,
+	deployment *types.Deployment,
+	release *types.Release,
+	service *types.Service,
+	environmentName string,
+	approvalResult *provenance.ApprovalResult,
+	receiptJSON string,
+) {
+	// Get project information
+	project, err := h.repos.Project.GetByID(ctx, service.ProjectID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get project for compliance webhook", logging.Error("db_error", err))
+		return
+	}
+
+	// Get user context (who is deploying)
+	userEmail := "system@enclii.dev" // Default
+	userName := "System"
+	if userCtx := ctx.Value("user"); userCtx != nil {
+		if user, ok := userCtx.(*types.User); ok {
+			userEmail = user.Email
+			userName = user.Name
+		}
+	}
+
+	// Construct deployment evidence
+	evidence := &compliance.DeploymentEvidence{
+		EventType:   "deployment",
+		EventID:     deployment.ID,
+		Timestamp:   time.Now().UTC(),
+		ServiceName: service.Name,
+		Environment: environmentName,
+		ProjectName: project.Name,
+
+		DeploymentID:   deployment.ID,
+		ReleaseVersion: release.Version,
+		ImageURI:       release.ImageURI,
+
+		GitSHA:  release.GitSHA,
+		GitRepo: service.GitRepo,
+
+		// Provenance from PR approval
+		PRURL:      approvalResult.PRURL,
+		PRNumber:   approvalResult.PRNumber,
+		ApprovedBy: approvalResult.ApproverEmail,
+		ApprovedAt: approvalResult.ApprovedAt,
+		CIStatus:   approvalResult.CIStatus,
+
+		// Deployer information
+		DeployedBy:      userName,
+		DeployedByEmail: userEmail,
+		DeployedAt:      time.Now().UTC(),
+
+		// Supply chain security
+		SBOM:              release.SBOM,
+		SBOMFormat:        release.SBOMFormat,
+		ImageSignature:    release.ImageSignature,
+		SignatureVerified: release.SignatureVerifiedAt != nil,
+
+		// Compliance receipt
+		ComplianceReceipt: receiptJSON,
+	}
+
+	h.logger.Info(ctx, "Sending compliance evidence webhooks",
+		logging.String("deployment_id", deployment.ID),
+		logging.String("service", service.Name),
+		logging.String("environment", environmentName))
+
+	// Send to configured webhooks
+	results := h.complianceExporter.ExportDeployment(
+		ctx,
+		evidence,
+		h.config.VantaWebhookURL,
+		h.config.DrataWebhookURL,
+	)
+
+	// Log results
+	h.complianceExporter.LogExportResults(results)
 }

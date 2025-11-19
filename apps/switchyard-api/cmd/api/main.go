@@ -17,6 +17,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/config"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
@@ -123,6 +124,28 @@ func main() {
 		logrus.Warn("   Set ENCLII_GITHUB_TOKEN to enable deployment approval verification")
 	}
 
+	// Initialize compliance exporter (Vanta/Drata webhooks)
+	complianceExporter := compliance.NewExporter(&compliance.Config{
+		Enabled:      cfg.ComplianceWebhooksEnabled,
+		VantaWebhook: cfg.VantaWebhookURL,
+		DrataWebhook: cfg.DrataWebhookURL,
+		MaxRetries:   3,
+		RetryDelay:   2 * time.Second,
+	}, logrus.StandardLogger())
+
+	if cfg.ComplianceWebhooksEnabled {
+		logrus.Info("✓ Compliance webhooks enabled")
+		if cfg.VantaWebhookURL != "" {
+			logrus.Info("  → Vanta webhook configured")
+		}
+		if cfg.DrataWebhookURL != "" {
+			logrus.Info("  → Drata webhook configured")
+		}
+	} else {
+		logrus.Info("ℹ Compliance webhooks disabled")
+		logrus.Info("   Set ENCLII_COMPLIANCE_WEBHOOKS_ENABLED=true to enable")
+	}
+
 	// Setup HTTP server
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -145,6 +168,7 @@ func main() {
 		logger,
 		validatorInstance,
 		provenanceChecker,
+		complianceExporter,
 	)
 	api.SetupRoutes(router, apiHandler)
 

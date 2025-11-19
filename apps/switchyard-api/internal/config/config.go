@@ -34,6 +34,11 @@ type Config struct {
 
 	// Provenance / PR Approval
 	GitHubToken string // GitHub API token for PR verification
+
+	// Compliance Webhooks
+	ComplianceWebhooksEnabled bool
+	VantaWebhookURL          string
+	DrataWebhookURL          string
 }
 
 func Load() (*Config, error) {
@@ -56,6 +61,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("build-timeout", 1800) // 30 minutes
 	viper.SetDefault("build-work-dir", "/tmp/enclii-builds")
 	viper.SetDefault("build-cache-dir", "/var/cache/enclii-buildpacks")
+	viper.SetDefault("compliance-webhooks-enabled", false)
 
 	// Parse log level
 	logLevelStr := viper.GetString("log-level")
@@ -80,6 +86,9 @@ func Load() (*Config, error) {
 		BuildWorkDir:    viper.GetString("build-work-dir"),
 		BuildCacheDir:   viper.GetString("build-cache-dir"),
 		GitHubToken:     viper.GetString("github-token"),
+		ComplianceWebhooksEnabled: viper.GetBool("compliance-webhooks-enabled"),
+		VantaWebhookURL:          viper.GetString("vanta-webhook-url"),
+		DrataWebhookURL:          viper.GetString("drata-webhook-url"),
 	}
 
 	return config, nil
