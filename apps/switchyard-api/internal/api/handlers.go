@@ -68,32 +68,44 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	// Health check (no auth required)
 	router.GET("/health", h.Health)
 
-	// API v1 routes with authentication
+	// API v1 routes
 	v1 := router.Group("/v1")
-	v1.Use(h.auth.AuthMiddleware())
 	{
-		// Projects
-		v1.POST("/projects", h.auth.RequireRole(types.RoleAdmin), h.CreateProject)
-		v1.GET("/projects", h.ListProjects)
-		v1.GET("/projects/:slug", h.GetProject)
+		// Auth routes (no authentication required)
+		v1.POST("/auth/register", h.Register)
+		v1.POST("/auth/login", h.Login)
+		v1.POST("/auth/refresh", h.RefreshToken)
 
-		// Services
-		v1.POST("/projects/:slug/services", h.auth.RequireRole(types.RoleDeveloper), h.CreateService)
-		v1.GET("/projects/:slug/services", h.ListServices)
-		v1.GET("/services/:id", h.GetService)
+		// Logout requires authentication
+		v1.POST("/auth/logout", h.auth.AuthMiddleware(), h.Logout)
 
-		// Build & Deploy
-		v1.POST("/services/:id/build", h.auth.RequireRole(types.RoleDeveloper), h.BuildService)
-		v1.GET("/services/:id/releases", h.ListReleases)
-		v1.POST("/services/:id/deploy", h.auth.RequireRole(types.RoleDeveloper), h.DeployService)
+		// Protected routes (require authentication)
+		protected := v1.Group("")
+		protected.Use(h.auth.AuthMiddleware())
+		{
+			// Projects
+			protected.POST("/projects", h.auth.RequireRole(types.RoleAdmin), h.CreateProject)
+			protected.GET("/projects", h.ListProjects)
+			protected.GET("/projects/:slug", h.GetProject)
 
-		// Status & Deployments
-		v1.GET("/services/:id/status", h.GetServiceStatus)
-		v1.GET("/services/:id/deployments", h.ListServiceDeployments)
-		v1.GET("/services/:id/deployments/latest", h.GetLatestDeployment)
-		v1.GET("/deployments/:id", h.GetDeployment)
-		v1.GET("/deployments/:id/logs", h.GetLogs)
-		v1.POST("/deployments/:id/rollback", h.auth.RequireRole(types.RoleDeveloper), h.RollbackDeployment)
+			// Services
+			protected.POST("/projects/:slug/services", h.auth.RequireRole(types.RoleDeveloper), h.CreateService)
+			protected.GET("/projects/:slug/services", h.ListServices)
+			protected.GET("/services/:id", h.GetService)
+
+			// Build & Deploy
+			protected.POST("/services/:id/build", h.auth.RequireRole(types.RoleDeveloper), h.BuildService)
+			protected.GET("/services/:id/releases", h.ListReleases)
+			protected.POST("/services/:id/deploy", h.auth.RequireRole(types.RoleDeveloper), h.DeployService)
+
+			// Status & Deployments
+			protected.GET("/services/:id/status", h.GetServiceStatus)
+			protected.GET("/services/:id/deployments", h.ListServiceDeployments)
+			protected.GET("/services/:id/deployments/latest", h.GetLatestDeployment)
+			protected.GET("/deployments/:id", h.GetDeployment)
+			protected.GET("/deployments/:id/logs", h.GetLogs)
+			protected.POST("/deployments/:id/rollback", h.auth.RequireRole(types.RoleDeveloper), h.RollbackDeployment)
+		}
 	}
 }
 
