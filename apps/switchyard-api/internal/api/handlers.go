@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
+	"github.com/madfam/enclii/apps/switchyard-api/internal/audit"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
@@ -26,16 +28,17 @@ import (
 )
 
 type Handler struct {
-	repos       *db.Repositories
-	config      *config.Config
-	auth        *auth.JWTManager
-	cache       cache.CacheService
-	builder     *builder.Service
-	k8sClient   *k8s.Client
-	reconciler  *reconciler.Controller
-	metrics     *monitoring.MetricsCollector
-	logger      logging.Logger
-	validator   *validation.Validator
+	repos          *db.Repositories
+	config         *config.Config
+	auth           *auth.JWTManager
+	auditMiddleware *audit.Middleware
+	cache          cache.CacheService
+	builder        *builder.Service
+	k8sClient      *k8s.Client
+	reconciler     *reconciler.Controller
+	metrics        *monitoring.MetricsCollector
+	logger         logging.Logger
+	validator      *validation.Validator
 }
 
 func NewHandler(
@@ -51,16 +54,17 @@ func NewHandler(
 	validator *validation.Validator,
 ) *Handler {
 	return &Handler{
-		repos:      repos,
-		config:     config,
-		auth:       auth,
-		cache:      cache,
-		builder:    builder,
-		k8sClient:  k8sClient,
-		reconciler: reconciler,
-		metrics:    metrics,
-		logger:     logger,
-		validator:  validator,
+		repos:           repos,
+		config:          config,
+		auth:            auth,
+		auditMiddleware: audit.NewMiddleware(repos),
+		cache:           cache,
+		builder:         builder,
+		k8sClient:       k8sClient,
+		reconciler:      reconciler,
+		metrics:         metrics,
+		logger:          logger,
+		validator:       validator,
 	}
 }
 
@@ -71,17 +75,18 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	// API v1 routes
 	v1 := router.Group("/v1")
 	{
-		// Auth routes (no authentication required)
-		v1.POST("/auth/register", h.Register)
-		v1.POST("/auth/login", h.Login)
+		// Auth routes (no authentication required, but audit login/register)
+		v1.POST("/auth/register", h.auditMiddleware.AuditMiddleware(), h.Register)
+		v1.POST("/auth/login", h.auditMiddleware.AuditMiddleware(), h.Login)
 		v1.POST("/auth/refresh", h.RefreshToken)
 
-		// Logout requires authentication
-		v1.POST("/auth/logout", h.auth.AuthMiddleware(), h.Logout)
+		// Logout requires authentication and audit
+		v1.POST("/auth/logout", h.auth.AuthMiddleware(), h.auditMiddleware.AuditMiddleware(), h.Logout)
 
-		// Protected routes (require authentication)
+		// Protected routes (require authentication + audit)
 		protected := v1.Group("")
 		protected.Use(h.auth.AuthMiddleware())
+		protected.Use(h.auditMiddleware.AuditMiddleware())
 		{
 			// Projects
 			protected.POST("/projects", h.auth.RequireRole(types.RoleAdmin), h.CreateProject)
