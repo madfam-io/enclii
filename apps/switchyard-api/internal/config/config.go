@@ -29,6 +29,8 @@ type Config struct {
 	// Build Configuration
 	BuildkitAddr    string
 	BuildTimeout    int
+	BuildWorkDir    string // Directory for cloning repositories during builds
+	BuildCacheDir   string // Directory for buildpack layer cache
 }
 
 func Load() (*Config, error) {
@@ -48,7 +50,9 @@ func Load() (*Config, error) {
 	viper.SetDefault("kube-config", os.Getenv("HOME")+"/.kube/config")
 	viper.SetDefault("kube-context", "kind-enclii")
 	viper.SetDefault("buildkit-addr", "docker://")
-	viper.SetDefault("build-timeout", 300)
+	viper.SetDefault("build-timeout", 1800) // 30 minutes
+	viper.SetDefault("build-work-dir", "/tmp/enclii-builds")
+	viper.SetDefault("build-cache-dir", "/var/cache/enclii-buildpacks")
 
 	// Parse log level
 	logLevelStr := viper.GetString("log-level")
@@ -70,6 +74,8 @@ func Load() (*Config, error) {
 		KubeContext:     viper.GetString("kube-context"),
 		BuildkitAddr:    viper.GetString("buildkit-addr"),
 		BuildTimeout:    viper.GetInt("build-timeout"),
+		BuildWorkDir:    viper.GetString("build-work-dir"),
+		BuildCacheDir:   viper.GetString("build-cache-dir"),
 	}
 
 	return config, nil

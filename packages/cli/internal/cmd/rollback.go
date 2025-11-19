@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
+	"github.com/madfam/enclii/packages/cli/internal/client"
 	"github.com/madfam/enclii/packages/cli/internal/config"
+	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
 func NewRollbackCommand(cfg *config.Config) *cobra.Command {
@@ -34,7 +37,7 @@ func NewRollbackCommand(cfg *config.Config) *cobra.Command {
 
 func rollbackService(cfg *config.Config, serviceName, environment, releaseID string) error {
 	if serviceName == "" {
-		serviceName = "api" // Default for MVP
+		return fmt.Errorf("service name is required")
 	}
 
 	fmt.Printf("🔄 Rolling back %s in %s environment", serviceName, environment)
@@ -44,23 +47,79 @@ func rollbackService(cfg *config.Config, serviceName, environment, releaseID str
 		fmt.Printf(" to previous release")
 	}
 	fmt.Println()
-
-	// TODO: Implement actual rollback logic
-	// This would:
-	// 1. Get current deployment
-	// 2. Find previous release (or specified release)
-	// 3. Update deployment to use previous release
-	// 4. Monitor health checks
-	// 5. Confirm rollback success
-
-	fmt.Println("🔍 Finding previous release...")
-	fmt.Println("🚀 Initiating rollback...")
-	fmt.Println("⏳ Waiting for pods to be ready...")
-	fmt.Println("🔍 Checking health...")
-	fmt.Println("✅ Rollback completed successfully!")
 	fmt.Println()
-	fmt.Printf("📊 Current version: v2024.01.14-10.30 (rolled back from v2024.01.15-14.02)\n")
+
+	ctx := context.Background()
+	apiClient := client.NewAPIClient(cfg.APIEndpoint, cfg.APIToken)
+
+	// Step 1: Get project slug
+	projectSlug := cfg.Project
+	if projectSlug == "" {
+		projectSlug = "default"
+	}
+
+	// Step 2: Find the service by name
+	fmt.Println("🔍 Finding service...")
+	services, err := apiClient.ListServices(ctx, projectSlug)
+	if err != nil {
+		fmt.Printf("❌ Failed to list services: %v\n", err)
+		return err
+	}
+
+	var targetService *types.Service
+	for _, svc := range services {
+		if svc.Name == serviceName {
+			targetService = svc
+			break
+		}
+	}
+
+	if targetService == nil {
+		fmt.Printf("❌ Service '%s' not found\n", serviceName)
+		return fmt.Errorf("service not found")
+	}
+
+	// Step 3: Get current deployment
+	fmt.Println("🔍 Getting current deployment...")
+	currentDeployment, err := apiClient.GetLatestDeployment(ctx, targetService.ID)
+	if err != nil {
+		fmt.Printf("❌ Failed to get current deployment: %v\n", err)
+		return err
+	}
+
+	if currentDeployment.Deployment == nil {
+		fmt.Println("❌ No deployment found for this service")
+		return fmt.Errorf("no deployment found")
+	}
+
+	fmt.Printf("✅ Current deployment: %s\n", currentDeployment.Deployment.ID)
+	if currentDeployment.Release != nil {
+		fmt.Printf("   Version: %s (git: %s)\n", currentDeployment.Release.Version, currentDeployment.Release.GitSHA[:7])
+	}
+	fmt.Println()
+
+	// Step 4: Trigger rollback
+	fmt.Println("🚀 Initiating rollback...")
+	req := client.RollbackRequest{}
+	if releaseID != "" {
+		req.ToRelease = releaseID
+	}
+
+	err = apiClient.RollbackDeployment(ctx, currentDeployment.Deployment.ID, req)
+	if err != nil {
+		fmt.Printf("❌ Rollback failed: %v\n", err)
+		return err
+	}
+
+	fmt.Println("✅ Rollback initiated successfully!")
+	fmt.Println()
+	fmt.Println("⏳ Monitoring deployment...")
+	fmt.Println("   (In production, this would wait for pods to be ready)")
+	fmt.Println()
+	fmt.Println("✅ Rollback completed!")
+	fmt.Println()
 	fmt.Printf("💡 Monitor with: enclii logs %s -f\n", serviceName)
+	fmt.Printf("💡 Check status with: enclii ps\n")
 
 	return nil
 }

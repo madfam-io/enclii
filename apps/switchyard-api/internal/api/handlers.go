@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
+	"github.com/madfam/enclii/apps/switchyard-api/internal/audit"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
@@ -24,16 +28,17 @@ import (
 )
 
 type Handler struct {
-	repos       *db.Repositories
-	config      *config.Config
-	auth        *auth.JWTManager
-	cache       cache.CacheService
-	builder     *builder.BuildpacksBuilder
-	k8sClient   *k8s.Client
-	controller  *reconciler.Controller
-	metrics     *monitoring.MetricsCollector
-	logger      logging.Logger
-	validator   *validation.Validator
+	repos          *db.Repositories
+	config         *config.Config
+	auth           *auth.JWTManager
+	auditMiddleware *audit.Middleware
+	cache          cache.CacheService
+	builder        *builder.Service
+	k8sClient      *k8s.Client
+	reconciler     *reconciler.Controller
+	metrics        *monitoring.MetricsCollector
+	logger         logging.Logger
+	validator      *validation.Validator
 }
 
 func NewHandler(
@@ -41,24 +46,25 @@ func NewHandler(
 	config *config.Config,
 	auth *auth.JWTManager,
 	cache cache.CacheService,
-	builder *builder.BuildpacksBuilder,
+	builder *builder.Service,
 	k8sClient *k8s.Client,
-	controller *reconciler.Controller,
+	reconciler *reconciler.Controller,
 	metrics *monitoring.MetricsCollector,
 	logger logging.Logger,
 	validator *validation.Validator,
 ) *Handler {
 	return &Handler{
-		repos:      repos,
-		config:     config,
-		auth:       auth,
-		cache:      cache,
-		builder:    builder,
-		k8sClient:  k8sClient,
-		controller: controller,
-		metrics:    metrics,
-		logger:     logger,
-		validator:  validator,
+		repos:           repos,
+		config:          config,
+		auth:            auth,
+		auditMiddleware: audit.NewMiddleware(repos),
+		cache:           cache,
+		builder:         builder,
+		k8sClient:       k8sClient,
+		reconciler:      reconciler,
+		metrics:         metrics,
+		logger:          logger,
+		validator:       validator,
 	}
 }
 
@@ -66,29 +72,45 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	// Health check (no auth required)
 	router.GET("/health", h.Health)
 
-	// API v1 routes with authentication
+	// API v1 routes
 	v1 := router.Group("/v1")
-	v1.Use(h.auth.AuthMiddleware())
 	{
-		// Projects
-		v1.POST("/projects", h.auth.RequireRole(types.RoleAdmin), h.CreateProject)
-		v1.GET("/projects", h.ListProjects)
-		v1.GET("/projects/:slug", h.GetProject)
+		// Auth routes (no authentication required, but audit login/register)
+		v1.POST("/auth/register", h.auditMiddleware.AuditMiddleware(), h.Register)
+		v1.POST("/auth/login", h.auditMiddleware.AuditMiddleware(), h.Login)
+		v1.POST("/auth/refresh", h.RefreshToken)
 
-		// Services
-		v1.POST("/projects/:slug/services", h.auth.RequireRole(types.RoleDeveloper), h.CreateService)
-		v1.GET("/projects/:slug/services", h.ListServices)
-		v1.GET("/services/:id", h.GetService)
+		// Logout requires authentication and audit
+		v1.POST("/auth/logout", h.auth.AuthMiddleware(), h.auditMiddleware.AuditMiddleware(), h.Logout)
 
-		// Build & Deploy
-		v1.POST("/services/:id/build", h.auth.RequireRole(types.RoleDeveloper), h.BuildService)
-		v1.GET("/services/:id/releases", h.ListReleases)
-		v1.POST("/services/:id/deploy", h.auth.RequireRole(types.RoleDeveloper), h.DeployService)
+		// Protected routes (require authentication + audit)
+		protected := v1.Group("")
+		protected.Use(h.auth.AuthMiddleware())
+		protected.Use(h.auditMiddleware.AuditMiddleware())
+		{
+			// Projects
+			protected.POST("/projects", h.auth.RequireRole(types.RoleAdmin), h.CreateProject)
+			protected.GET("/projects", h.ListProjects)
+			protected.GET("/projects/:slug", h.GetProject)
 
-		// Status
-		v1.GET("/services/:id/status", h.GetServiceStatus)
-		v1.GET("/deployments/:id/logs", h.GetLogs)
-		v1.POST("/deployments/:id/rollback", h.auth.RequireRole(types.RoleDeveloper), h.RollbackDeployment)
+			// Services
+			protected.POST("/projects/:slug/services", h.auth.RequireRole(types.RoleDeveloper), h.CreateService)
+			protected.GET("/projects/:slug/services", h.ListServices)
+			protected.GET("/services/:id", h.GetService)
+
+			// Build & Deploy
+			protected.POST("/services/:id/build", h.auth.RequireRole(types.RoleDeveloper), h.BuildService)
+			protected.GET("/services/:id/releases", h.ListReleases)
+			protected.POST("/services/:id/deploy", h.auth.RequireRole(types.RoleDeveloper), h.DeployService)
+
+			// Status & Deployments
+			protected.GET("/services/:id/status", h.GetServiceStatus)
+			protected.GET("/services/:id/deployments", h.ListServiceDeployments)
+			protected.GET("/services/:id/deployments/latest", h.GetLatestDeployment)
+			protected.GET("/deployments/:id", h.GetDeployment)
+			protected.GET("/deployments/:id/logs", h.GetLogs)
+			protected.POST("/deployments/:id/rollback", h.auth.RequireRole(types.RoleDeveloper), h.RollbackDeployment)
+		}
 	}
 }
 
@@ -303,17 +325,51 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	// TODO: Clone repository and trigger build
-	// For MVP, we'll simulate the build process
-	time.Sleep(10 * time.Second) // Simulate build time
+	h.logger.Info(ctx, "Starting build process",
+		logging.String("service_id", service.ID),
+		logging.String("release_id", release.ID),
+		logging.String("git_sha", gitSHA))
 
-	// Update release status to ready (in real implementation, this would be based on actual build result)
+	// Execute the build
+	buildResult := h.builder.BuildFromGit(ctx, service, gitSHA)
+
+	if !buildResult.Success {
+		h.logger.Error(ctx, "Build failed",
+			logging.String("release_id", release.ID),
+			logging.Error("build_error", buildResult.Error))
+
+		// Update release status to failed
+		if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusFailed); err != nil {
+			h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
+		}
+
+		// Store build logs (in production, we'd save these to a logging service or database)
+		h.logger.Error(ctx, "Build logs", logging.String("logs", fmt.Sprintf("%v", buildResult.Logs)))
+		return
+	}
+
+	// Update release with image URI and mark as ready
+	release.ImageURI = buildResult.ImageURI
+
 	if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusReady); err != nil {
 		h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
 		h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusFailed)
+		return
 	}
 
-	h.logger.Info(ctx, "Build completed", logging.String("release_id", release.ID))
+	h.logger.Info(ctx, "Build completed successfully",
+		logging.String("release_id", release.ID),
+		logging.String("image_uri", buildResult.ImageURI),
+		logging.String("duration", buildResult.Duration.String()))
+
+	// Log build details for debugging
+	for _, log := range buildResult.Logs {
+		h.logger.Debug(ctx, "Build log", logging.String("line", log))
+	}
+
+	// Record metrics
+	h.metrics.RecordBuildDuration(buildResult.Duration)
+	h.metrics.RecordBuildSuccess(service.Name)
 }
 
 func (h *Handler) ListReleases(c *gin.Context) {
@@ -400,7 +456,7 @@ func (h *Handler) DeployService(c *gin.Context) {
 	}
 
 	// Schedule deployment with reconciler
-	h.controller.ScheduleReconciliation(deployment.ID, 1) // High priority
+	h.reconciler.ScheduleReconciliation(deployment.ID, 1) // High priority
 
 	// Record metrics
 	h.metrics.RecordDeployment(service.Name, release.Version)
@@ -613,5 +669,102 @@ func (h *Handler) RollbackDeployment(c *gin.Context) {
 		"message":            "Deployment rolled back successfully",
 		"rolled_back_to":     previousDeployment,
 		"current_deployment": deployment,
+	})
+}
+
+// GetLatestDeployment returns the most recent deployment for a service
+func (h *Handler) GetLatestDeployment(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	serviceID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Get latest deployment for this service
+	deployment, err := h.repos.Deployment.GetLatestByService(ctx, serviceID.String())
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "No deployments found for this service"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get latest deployment", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve deployment"})
+		return
+	}
+
+	// Get release info for version
+	release, err := h.repos.Release.GetByID(deployment.ReleaseID)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"deployment": deployment,
+			"release":    release,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"deployment": deployment,
+	})
+}
+
+// GetDeployment returns a specific deployment by ID
+func (h *Handler) GetDeployment(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	deploymentID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid deployment ID"})
+		return
+	}
+
+	deployment, err := h.repos.Deployment.GetByID(ctx, deploymentID.String())
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Deployment not found"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get deployment", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve deployment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, deployment)
+}
+
+// ListServiceDeployments returns all deployments for a service
+func (h *Handler) ListServiceDeployments(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	serviceID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Get all releases for this service
+	releases, err := h.repos.Release.ListByService(serviceID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list releases", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve releases"})
+		return
+	}
+
+	// Get deployments for each release
+	var allDeployments []*types.Deployment
+	for _, release := range releases {
+		deployments, err := h.repos.Deployment.ListByRelease(ctx, release.ID)
+		if err != nil {
+			h.logger.Error(ctx, "Failed to list deployments", logging.Error("db_error", err))
+			continue
+		}
+		allDeployments = append(allDeployments, deployments...)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"service_id":  serviceID,
+		"deployments": allDeployments,
+		"count":       len(allDeployments),
 	})
 }

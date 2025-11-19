@@ -16,7 +16,8 @@ type Config struct {
 	APIEndpoint string
 	APIToken    string
 
-	// Local Configuration
+	// Project Configuration
+	Project    string
 	ProjectDir string
 	ConfigFile string
 }
@@ -30,6 +31,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("log-level", "info")
 	viper.SetDefault("api-endpoint", "http://localhost:8080")
+	viper.SetDefault("project", "default")
 	viper.SetDefault("project-dir", ".")
 	viper.SetDefault("config-file", os.Getenv("HOME")+"/.enclii/config.yml")
 
@@ -45,6 +47,7 @@ func Load() (*Config, error) {
 		LogLevel:    logLevel,
 		APIEndpoint: viper.GetString("api-endpoint"),
 		APIToken:    viper.GetString("api-token"),
+		Project:     viper.GetString("project"),
 		ProjectDir:  viper.GetString("project-dir"),
 		ConfigFile:  viper.GetString("config-file"),
 	}
