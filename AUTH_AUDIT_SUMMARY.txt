@@ -1,0 +1,237 @@
+================================================================================
+ENCLII AUTHENTICATION & AUTHORIZATION AUDIT - EXECUTIVE SUMMARY
+================================================================================
+Date: November 19, 2025 | Status: CRITICAL GAPS | Maturity: ~12%
+
+OVERALL FINDINGS
+================================================================================
+
+1. SSO & AUTH IMPLEMENTATION (30% complete)
+   ✓ JWT with RSA-2048 signing implemented
+   ✓ Access/refresh token pair mechanism
+   ✗ OIDC BROKEN - wrong parameters in initialization (main.go:62-66)
+   ✗ No token issuance endpoint (no login)
+   ✗ No CLI auth command exists (README claims it does)
+   ✗ No OIDC flow implementation
+   ✗ No MFA support
+   ✗ No token revocation mechanism
+
+2. RBAC SCHEMA ANALYSIS (0% complete)
+   ✗ NO users table in database
+   ✗ NO teams table in database
+   ✗ NO roles table in database
+   ✗ NO permissions table in database
+   ✗ Role constants referenced but NOT defined (RoleAdmin, RoleDeveloper)
+   ✗ Single role per user (no inheritance)
+   ✗ No team/group support
+
+3. PERMISSION MODEL (20% complete)
+   ✓ Basic route-level role checks
+   ✗ NO environment-level permissions (e.g., Admin in Prod, Dev in Staging)
+   ✗ NO project-level authorization (code comment: "TODO: implement in production")
+   ✗ NO resource-level access checks
+   ✗ NO audit logging of access/changes
+
+4. SOC 2 COMPLIANCE GAPS
+   ✗ NO audit_logs table
+   ✗ NO user provisioning/deprovisioning
+   ✗ NO session management table
+   ✗ NO change history tracking
+   ✗ NO permission change audit trail
+   ✗ NO user management console/API
+   ✗ Missing 21/24 required endpoints
+
+CRITICAL BUGS
+================================================================================
+
+1. INITIALIZATION MISMATCH (apps/switchyard-api/cmd/api/main.go:62-66)
+   - Passing OIDCIssuer (string) where time.Duration expected
+   - Passing OIDCClientID (string) where time.Duration expected
+   - Code will panic at runtime
+
+2. UNDEFINED CONSTANTS (packages/sdk-go/pkg/types/types.go)
+   - types.RoleAdmin referenced but not defined
+   - types.RoleDeveloper referenced but not defined
+   - types.RoleViewer mentioned in README but not defined
+   - API handlers will fail if roles don't match string values
+
+3. NO LOGIN ENDPOINT
+   - No way to obtain JWT tokens
+   - README promises "auth login" command that doesn't exist
+   - CLI only reads ENCLII_API_TOKEN from environment
+
+4. PROJECT ACCESS TODO (apps/switchyard-api/internal/auth/jwt.go:295-296)
+   - Comment: "In production, implement proper project-level authorization"
+   - Current code allows ANY project access if user has ANY project
+   - No actual slug validation
+
+DATABASE GAPS
+================================================================================
+
+Missing Tables (Required for RBAC):
+- users (id, email, name, sso_provider, sso_id, created_at, last_login, active)
+- teams (id, name, organization_id, created_at)
+- team_members (user_id, team_id, role, created_at)
+- roles (id, name, description, organization_id)
+- permissions (id, name, resource, action, description)
+- role_permissions (role_id, permission_id)
+- project_access (user_id, project_id, role, environment_id, created_at)
+- audit_logs (id, user_id, action, resource_type, resource_id, changes, ip, timestamp)
+- sessions (id, user_id, token_hash, created_at, expires_at, last_used, revoked_at, ip)
+
+Current Tables:
+- projects
+- environments
+- services
+- releases
+- deployments
+(That's all - only 5 tables total)
+
+CODE LOCATIONS
+================================================================================
+
+Critical Files to Fix:
+1. apps/switchyard-api/cmd/api/main.go (Lines 62-66) - OIDC init bug
+2. apps/switchyard-api/internal/auth/jwt.go (Lines 273-308) - TODO: project auth
+3. packages/sdk-go/pkg/types/types.go (Line 135+) - Missing role constants
+4. apps/switchyard-api/internal/db/migrations/ - Missing schema migration #2
+5. apps/switchyard-api/internal/api/handlers.go (Lines 76-96) - No login endpoint
+
+Missing Files to Create:
+1. apps/switchyard-api/internal/auth/rbac.go - Permission model
+2. apps/switchyard-api/internal/auth/oidc.go - OIDC provider integration
+3. apps/switchyard-api/internal/db/audit.go - Audit logging
+4. packages/cli/internal/cmd/auth.go - CLI login command
+5. apps/switchyard-api/internal/db/migrations/002_add_users_teams_rbac.up.sql - Schema
+
+ENDPOINT GAPS
+================================================================================
+
+Missing Auth Endpoints:
+- POST   /v1/auth/login
+- POST   /v1/auth/logout
+- POST   /v1/auth/refresh
+- POST   /v1/auth/callback (OIDC)
+
+Missing User Management:
+- GET    /v1/users
+- POST   /v1/users
+- GET    /v1/users/:id
+- PATCH  /v1/users/:id
+- DELETE /v1/users/:id
+
+Missing Team Management:
+- POST   /v1/teams
+- GET    /v1/teams/:id
+- PATCH  /v1/teams/:id
+- POST   /v1/teams/:id/members
+- DELETE /v1/teams/:id/members/:uid
+
+Missing Access Control:
+- POST   /v1/projects/:id/access
+- GET    /v1/projects/:id/access
+- PATCH  /v1/projects/:id/access/:uid
+- DELETE /v1/projects/:id/access/:uid
+
+Missing Audit:
+- GET    /v1/audit-logs
+
+PRIORITY ROADMAP
+================================================================================
+
+WEEK 1 (CRITICAL):
+1. Fix JWT manager initialization bug
+2. Define role constants (RoleOwner, RoleAdmin, RoleDeveloper, RoleReadOnly)
+3. Create migration #2 with users/teams/roles/permissions/project_access tables
+4. Create audit_logs table
+5. Add login/logout endpoints
+
+WEEKS 2-4 (HIGH):
+1. Implement OIDC flow properly
+2. Fix project-level authorization middleware
+3. Add user CRUD endpoints
+4. Add team management endpoints
+5. Implement audit logging middleware
+6. Add CLI auth command
+
+WEEKS 5-8 (MEDIUM):
+1. Implement permission matrix checking
+2. Add environment-aware authorization
+3. Add MFA support
+4. Implement token revocation
+5. Create admin console UI
+6. Add comprehensive tests
+
+COMPLIANCE STATUS
+================================================================================
+
+SOC 2 Requirement           | Status    | Gap
+---------------------------|-----------|------------------------------------------------
+Access Control             | 10%       | No granular user/role database
+Audit Logging              | 0%        | No audit_logs table or logging
+Authentication             | 30%       | JWT ok, OIDC broken, no SSO
+Authorization              | 20%       | Basic roles, no fine-grained control
+Session Management         | 0%        | No session table, no revocation
+User Management            | 0%        | No users table, no admin console
+Change Log                 | 0%        | No audit trail for permission changes
+
+OVERALL MATURITY: ~12% of SOC 2 requirements
+
+ADDITIONAL ISSUES
+================================================================================
+
+1. Configuration Issues:
+   - OIDC defaults point to localhost:5556 (dev Dex server)
+   - No production OIDC provider configuration documented
+   - JWT token durations hardcoded (15 min access, 30 day refresh)
+
+2. Design Issues:
+   - Single role per user (should support multiple roles or inheritance)
+   - ProjectIDs array in JWT (should use permission check at request time)
+   - No role hierarchy (Admin should inherit Developer permissions)
+   - No resource-level ownership tracking
+
+3. Testing Gaps:
+   - No unit tests for auth middleware
+   - No integration tests for RBAC
+   - No permission boundary tests
+   - No token validation tests
+
+4. Documentation Gaps:
+   - README claims auth login works (it doesn't)
+   - No RBAC design document
+   - No security model documentation
+   - No compliance checklist
+
+RECOMMENDATIONS
+================================================================================
+
+1. IMMEDIATE (DO FIRST):
+   - Fix initialization bug in main.go
+   - Define all role constants
+   - Create audit_logs table
+   - Create users/teams/roles tables
+
+2. SHORT-TERM (NEXT 2 WEEKS):
+   - Complete OIDC integration
+   - Add login/logout endpoints
+   - Implement project-level auth
+   - Add audit logging middleware
+
+3. MEDIUM-TERM (WEEKS 3-4):
+   - Fine-grained permissions
+   - Environment-level access control
+   - User management UI
+   - Comprehensive test coverage
+
+FULL AUDIT REPORT
+================================================================================
+
+See AUTH_AUDIT_REPORT.md for complete analysis including:
+- Detailed code locations
+- Missing SQL schema
+- API endpoint specifications
+- Complete SOC 2 checklist
+- Risk assessment
+- Configuration reference
+
