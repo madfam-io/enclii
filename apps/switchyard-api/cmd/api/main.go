@@ -60,9 +60,8 @@ func main() {
 
 	// Initialize authentication
 	authManager, err := auth.NewJWTManager(
-		cfg.OIDCIssuer,
-		cfg.OIDCClientID,
-		cfg.OIDCClientSecret,
+		15*time.Minute, // Access token duration
+		7*24*time.Hour, // Refresh token duration (7 days)
 	)
 	if err != nil {
 		logrus.Fatal("Failed to initialize auth manager:", err)

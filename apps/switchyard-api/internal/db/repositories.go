@@ -12,20 +12,26 @@ import (
 )
 
 type Repositories struct {
-	Projects     *ProjectRepository
-	Environments *EnvironmentRepository
-	Services     *ServiceRepository
-	Releases     *ReleaseRepository
-	Deployments  *DeploymentRepository
+	Projects       *ProjectRepository
+	Environments   *EnvironmentRepository
+	Services       *ServiceRepository
+	Releases       *ReleaseRepository
+	Deployments    *DeploymentRepository
+	Users          *UserRepository
+	ProjectAccess  *ProjectAccessRepository
+	AuditLogs      *AuditLogRepository
 }
 
 func NewRepositories(db *sql.DB) *Repositories {
 	return &Repositories{
-		Projects:     NewProjectRepository(db),
-		Environments: NewEnvironmentRepository(db),
-		Services:     NewServiceRepository(db),
-		Releases:     NewReleaseRepository(db),
-		Deployments:  NewDeploymentRepository(db),
+		Projects:      NewProjectRepository(db),
+		Environments:  NewEnvironmentRepository(db),
+		Services:      NewServiceRepository(db),
+		Releases:      NewReleaseRepository(db),
+		Deployments:   NewDeploymentRepository(db),
+		Users:         NewUserRepository(db),
+		ProjectAccess: NewProjectAccessRepository(db),
+		AuditLogs:     NewAuditLogRepository(db),
 	}
 }
 
@@ -360,4 +366,350 @@ func (r *DeploymentRepository) GetLatestByService(ctx context.Context, serviceID
 	}
 
 	return deployment, nil
+}
+
+// UserRepository handles user CRUD operations
+type UserRepository struct {
+	db *sql.DB
+}
+
+func NewUserRepository(db *sql.DB) *UserRepository {
+	return &UserRepository{db: db}
+}
+
+func (r *UserRepository) Create(ctx context.Context, user *types.User) error {
+	user.ID = uuid.New()
+	user.CreatedAt = time.Now()
+	user.UpdatedAt = time.Now()
+
+	query := `
+		INSERT INTO users (id, email, password_hash, name, oidc_sub, active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		user.ID, user.Email, user.PasswordHash, user.Name, user.OIDCSub,
+		user.Active, user.CreatedAt, user.UpdatedAt,
+	)
+	return err
+}
+
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*types.User, error) {
+	user := &types.User{}
+	query := `
+		SELECT id, email, password_hash, name, oidc_sub, active, created_at, updated_at, last_login_at
+		FROM users WHERE email = $1
+	`
+
+	err := r.db.QueryRowContext(ctx, query, email).Scan(
+		&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.OIDCSub,
+		&user.Active, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*types.User, error) {
+	user := &types.User{}
+	query := `
+		SELECT id, email, password_hash, name, oidc_sub, active, created_at, updated_at, last_login_at
+		FROM users WHERE id = $1
+	`
+
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.OIDCSub,
+		&user.Active, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
+}
+
+func (r *UserRepository) Update(ctx context.Context, user *types.User) error {
+	user.UpdatedAt = time.Now()
+
+	query := `
+		UPDATE users
+		SET email = $1, password_hash = $2, name = $3, oidc_sub = $4, active = $5, updated_at = $6, last_login_at = $7
+		WHERE id = $8
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		user.Email, user.PasswordHash, user.Name, user.OIDCSub,
+		user.Active, user.UpdatedAt, user.LastLoginAt, user.ID,
+	)
+	return err
+}
+
+func (r *UserRepository) UpdateLastLogin(ctx context.Context, id uuid.UUID) error {
+	query := `UPDATE users SET last_login_at = NOW() WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, id)
+	return err
+}
+
+func (r *UserRepository) List(ctx context.Context) ([]*types.User, error) {
+	query := `
+		SELECT id, email, password_hash, name, oidc_sub, active, created_at, updated_at, last_login_at
+		FROM users ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*types.User
+	for rows.Next() {
+		user := &types.User{}
+		err := rows.Scan(
+			&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.OIDCSub,
+			&user.Active, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	return users, nil
+}
+
+// ProjectAccessRepository handles project access control
+type ProjectAccessRepository struct {
+	db *sql.DB
+}
+
+func NewProjectAccessRepository(db *sql.DB) *ProjectAccessRepository {
+	return &ProjectAccessRepository{db: db}
+}
+
+func (r *ProjectAccessRepository) Grant(ctx context.Context, access *types.ProjectAccess) error {
+	access.ID = uuid.New()
+	access.GrantedAt = time.Now()
+
+	query := `
+		INSERT INTO project_access (id, user_id, project_id, environment_id, role, granted_by, granted_at, expires_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (user_id, project_id, environment_id) DO UPDATE
+		SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by, granted_at = EXCLUDED.granted_at, expires_at = EXCLUDED.expires_at
+	`
+	_, err := r.db.ExecContext(ctx, query,
+		access.ID, access.UserID, access.ProjectID, access.EnvironmentID,
+		access.Role, access.GrantedBy, access.GrantedAt, access.ExpiresAt,
+	)
+	return err
+}
+
+func (r *ProjectAccessRepository) Revoke(ctx context.Context, userID, projectID uuid.UUID, environmentID *uuid.UUID) error {
+	query := `
+		DELETE FROM project_access
+		WHERE user_id = $1 AND project_id = $2 AND (environment_id = $3 OR ($3 IS NULL AND environment_id IS NULL))
+	`
+	_, err := r.db.ExecContext(ctx, query, userID, projectID, environmentID)
+	return err
+}
+
+func (r *ProjectAccessRepository) UserHasAccess(ctx context.Context, userID uuid.UUID, projectID uuid.UUID) (bool, error) {
+	var count int
+	query := `
+		SELECT COUNT(*) FROM project_access
+		WHERE user_id = $1 AND project_id = $2
+		AND (expires_at IS NULL OR expires_at > NOW())
+	`
+	err := r.db.QueryRowContext(ctx, query, userID, projectID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (r *ProjectAccessRepository) GetUserRole(ctx context.Context, userID, projectID uuid.UUID, environmentID *uuid.UUID) (types.Role, error) {
+	var role types.Role
+	query := `
+		SELECT role FROM project_access
+		WHERE user_id = $1 AND project_id = $2
+		AND (environment_id = $3 OR environment_id IS NULL)
+		AND (expires_at IS NULL OR expires_at > NOW())
+		ORDER BY environment_id NULLS LAST
+		LIMIT 1
+	`
+	err := r.db.QueryRowContext(ctx, query, userID, projectID, environmentID).Scan(&role)
+	if err != nil {
+		return "", err
+	}
+	return role, nil
+}
+
+func (r *ProjectAccessRepository) ListByUser(ctx context.Context, userID uuid.UUID) ([]*types.ProjectAccess, error) {
+	query := `
+		SELECT id, user_id, project_id, environment_id, role, granted_by, granted_at, expires_at
+		FROM project_access
+		WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW())
+		ORDER BY granted_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accesses []*types.ProjectAccess
+	for rows.Next() {
+		access := &types.ProjectAccess{}
+		err := rows.Scan(
+			&access.ID, &access.UserID, &access.ProjectID, &access.EnvironmentID,
+			&access.Role, &access.GrantedBy, &access.GrantedAt, &access.ExpiresAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		accesses = append(accesses, access)
+	}
+
+	return accesses, nil
+}
+
+func (r *ProjectAccessRepository) ListByProject(ctx context.Context, projectID uuid.UUID) ([]*types.ProjectAccess, error) {
+	query := `
+		SELECT id, user_id, project_id, environment_id, role, granted_by, granted_at, expires_at
+		FROM project_access
+		WHERE project_id = $1 AND (expires_at IS NULL OR expires_at > NOW())
+		ORDER BY granted_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var accesses []*types.ProjectAccess
+	for rows.Next() {
+		access := &types.ProjectAccess{}
+		err := rows.Scan(
+			&access.ID, &access.UserID, &access.ProjectID, &access.EnvironmentID,
+			&access.Role, &access.GrantedBy, &access.GrantedAt, &access.ExpiresAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		accesses = append(accesses, access)
+	}
+
+	return accesses, nil
+}
+
+// AuditLogRepository handles audit log operations (immutable)
+type AuditLogRepository struct {
+	db *sql.DB
+}
+
+func NewAuditLogRepository(db *sql.DB) *AuditLogRepository {
+	return &AuditLogRepository{db: db}
+}
+
+func (r *AuditLogRepository) Log(ctx context.Context, log *types.AuditLog) error {
+	log.ID = uuid.New()
+	log.Timestamp = time.Now()
+
+	contextJSON, err := json.Marshal(log.Context)
+	if err != nil {
+		return fmt.Errorf("failed to marshal context: %w", err)
+	}
+
+	metadataJSON, err := json.Marshal(log.Metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	query := `
+		INSERT INTO audit_logs (
+			id, timestamp, actor_id, actor_email, actor_role, action,
+			resource_type, resource_id, resource_name,
+			project_id, environment_id, ip_address, user_agent, outcome, context, metadata
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+	`
+	_, err = r.db.ExecContext(ctx, query,
+		log.ID, log.Timestamp, log.ActorID, log.ActorEmail, log.ActorRole, log.Action,
+		log.ResourceType, log.ResourceID, log.ResourceName,
+		log.ProjectID, log.EnvironmentID, log.IPAddress, log.UserAgent, log.Outcome,
+		contextJSON, metadataJSON,
+	)
+	return err
+}
+
+func (r *AuditLogRepository) Query(ctx context.Context, filters map[string]interface{}, limit int, offset int) ([]*types.AuditLog, error) {
+	query := `
+		SELECT id, timestamp, actor_id, actor_email, actor_role, action,
+		       resource_type, resource_id, resource_name,
+		       project_id, environment_id, ip_address, user_agent, outcome, context, metadata
+		FROM audit_logs
+		WHERE 1=1
+	`
+	args := []interface{}{}
+	argCount := 1
+
+	// Add filters dynamically
+	if actorID, ok := filters["actor_id"].(uuid.UUID); ok {
+		query += fmt.Sprintf(" AND actor_id = $%d", argCount)
+		args = append(args, actorID)
+		argCount++
+	}
+	if action, ok := filters["action"].(string); ok {
+		query += fmt.Sprintf(" AND action = $%d", argCount)
+		args = append(args, action)
+		argCount++
+	}
+	if resourceType, ok := filters["resource_type"].(string); ok {
+		query += fmt.Sprintf(" AND resource_type = $%d", argCount)
+		args = append(args, resourceType)
+		argCount++
+	}
+	if projectID, ok := filters["project_id"].(uuid.UUID); ok {
+		query += fmt.Sprintf(" AND project_id = $%d", argCount)
+		args = append(args, projectID)
+		argCount++
+	}
+
+	query += " ORDER BY timestamp DESC"
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argCount, argCount+1)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*types.AuditLog
+	for rows.Next() {
+		log := &types.AuditLog{}
+		var contextJSON, metadataJSON []byte
+
+		err := rows.Scan(
+			&log.ID, &log.Timestamp, &log.ActorID, &log.ActorEmail, &log.ActorRole, &log.Action,
+			&log.ResourceType, &log.ResourceID, &log.ResourceName,
+			&log.ProjectID, &log.EnvironmentID, &log.IPAddress, &log.UserAgent, &log.Outcome,
+			&contextJSON, &metadataJSON,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(contextJSON, &log.Context); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal context: %w", err)
+		}
+		if err := json.Unmarshal(metadataJSON, &log.Metadata); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
+		}
+
+		logs = append(logs, log)
+	}
+
+	return logs, nil
 }
