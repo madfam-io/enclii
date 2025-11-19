@@ -53,14 +53,18 @@ const (
 
 // Release represents a built and immutable version of a service
 type Release struct {
-	ID       uuid.UUID     `json:"id" db:"id"`
-	ServiceID uuid.UUID    `json:"service_id" db:"service_id"`
-	Version   string       `json:"version" db:"version"`
-	ImageURI  string       `json:"image_uri" db:"image_uri"`
-	GitSHA    string       `json:"git_sha" db:"git_sha"`
-	Status    ReleaseStatus `json:"status" db:"status"`
-	CreatedAt time.Time     `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at" db:"updated_at"`
+	ID                  uuid.UUID     `json:"id" db:"id"`
+	ServiceID           uuid.UUID     `json:"service_id" db:"service_id"`
+	Version             string        `json:"version" db:"version"`
+	ImageURI            string        `json:"image_uri" db:"image_uri"`
+	GitSHA              string        `json:"git_sha" db:"git_sha"`
+	Status              ReleaseStatus `json:"status" db:"status"`
+	SBOM                string        `json:"sbom,omitempty" db:"sbom"`                 // Software Bill of Materials (JSON)
+	SBOMFormat          string        `json:"sbom_format,omitempty" db:"sbom_format"`   // e.g., "cyclonedx-json", "spdx-json"
+	ImageSignature      string        `json:"image_signature,omitempty" db:"image_signature"` // Cosign signature
+	SignatureVerifiedAt *time.Time    `json:"signature_verified_at,omitempty" db:"signature_verified_at"`
+	CreatedAt           time.Time     `json:"created_at" db:"created_at"`
+	UpdatedAt           time.Time     `json:"updated_at" db:"updated_at"`
 }
 
 type ReleaseStatus string
@@ -195,4 +199,19 @@ type AuditLog struct {
 	Outcome      string            `json:"outcome" db:"outcome"` // 'success', 'failure', 'denied'
 	Context      map[string]interface{} `json:"context" db:"context"` // {pr_url, commit_sha, approver, change_ticket}
 	Metadata     map[string]interface{} `json:"metadata,omitempty" db:"metadata"`
+}
+
+// ApprovalRecord represents deployment provenance and approval evidence
+type ApprovalRecord struct {
+	ID                uuid.UUID  `json:"id" db:"id"`
+	DeploymentID      uuid.UUID  `json:"deployment_id" db:"deployment_id"`
+	PRURL             string     `json:"pr_url" db:"pr_url"`
+	PRNumber          int        `json:"pr_number" db:"pr_number"`
+	ApproverEmail     string     `json:"approver_email" db:"approver_email"`
+	ApproverName      string     `json:"approver_name" db:"approver_name"`
+	ApprovedAt        *time.Time `json:"approved_at,omitempty" db:"approved_at"`
+	CIStatus          string     `json:"ci_status" db:"ci_status"` // 'passed', 'failed', 'pending'
+	ChangeTicketURL   string     `json:"change_ticket_url,omitempty" db:"change_ticket_url"`
+	ComplianceReceipt string     `json:"compliance_receipt" db:"compliance_receipt"` // JSON receipt for auditors
+	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
 }

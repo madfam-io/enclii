@@ -17,28 +17,34 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/config"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/topology"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
 type Handler struct {
-	repos          *db.Repositories
-	config         *config.Config
-	auth           *auth.JWTManager
-	auditMiddleware *audit.Middleware
-	cache          cache.CacheService
-	builder        *builder.Service
-	k8sClient      *k8s.Client
-	reconciler     *reconciler.Controller
-	metrics        *monitoring.MetricsCollector
-	logger         logging.Logger
-	validator      *validation.Validator
+	repos              *db.Repositories
+	config             *config.Config
+	auth               *auth.JWTManager
+	auditMiddleware    *audit.Middleware
+	cache              cache.CacheService
+	builder            *builder.Service
+	k8sClient          *k8s.Client
+	reconciler         *reconciler.Controller
+	metrics            *monitoring.MetricsCollector
+	logger             logging.Logger
+	validator          *validation.Validator
+	provenanceChecker  *provenance.Checker
+	complianceExporter *compliance.Exporter
+	topologyBuilder    *topology.GraphBuilder
 }
 
 func NewHandler(
@@ -52,25 +58,32 @@ func NewHandler(
 	metrics *monitoring.MetricsCollector,
 	logger logging.Logger,
 	validator *validation.Validator,
+	provenanceChecker *provenance.Checker,
+	complianceExporter *compliance.Exporter,
+	topologyBuilder *topology.GraphBuilder,
 ) *Handler {
 	return &Handler{
-		repos:           repos,
-		config:          config,
-		auth:            auth,
-		auditMiddleware: audit.NewMiddleware(repos),
-		cache:           cache,
-		builder:         builder,
-		k8sClient:       k8sClient,
-		reconciler:      reconciler,
-		metrics:         metrics,
-		logger:          logger,
-		validator:       validator,
+		repos:              repos,
+		config:             config,
+		auth:               auth,
+		auditMiddleware:    audit.NewMiddleware(repos),
+		cache:              cache,
+		builder:            builder,
+		k8sClient:          k8sClient,
+		reconciler:         reconciler,
+		metrics:            metrics,
+		logger:             logger,
+		validator:          validator,
+		provenanceChecker:  provenanceChecker,
+		complianceExporter: complianceExporter,
+		topologyBuilder:    topologyBuilder,
 	}
 }
 
 func SetupRoutes(router *gin.Engine, h *Handler) {
 	// Health check (no auth required)
 	router.GET("/health", h.Health)
+	router.GET("/v1/build/status", h.GetBuildStatus)
 
 	// API v1 routes
 	v1 := router.Group("/v1")
@@ -110,6 +123,12 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/deployments/:id", h.GetDeployment)
 			protected.GET("/deployments/:id/logs", h.GetLogs)
 			protected.POST("/deployments/:id/rollback", h.auth.RequireRole(types.RoleDeveloper), h.RollbackDeployment)
+
+			// Topology
+			protected.GET("/topology", h.GetTopology)
+			protected.GET("/topology/services/:id/dependencies", h.GetServiceDependencies)
+			protected.GET("/topology/services/:id/impact", h.GetServiceImpact)
+			protected.GET("/topology/path", h.FindDependencyPath)
 		}
 	}
 }
@@ -120,6 +139,29 @@ func (h *Handler) Health(c *gin.Context) {
 		"status":  "healthy",
 		"service": "switchyard-api",
 		"version": "1.0.0",
+	})
+}
+
+// GetBuildStatus returns the status of the build pipeline and available tools
+func (h *Handler) GetBuildStatus(c *gin.Context) {
+	status := h.builder.GetBuildStatus()
+
+	// Determine overall health
+	toolsAvailable, _ := status["tools_available"].(bool)
+	overallStatus := "healthy"
+	if !toolsAvailable {
+		overallStatus = "degraded"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":         overallStatus,
+		"build_pipeline": status,
+		"message": func() string {
+			if toolsAvailable {
+				return "Build pipeline is ready"
+			}
+			return "Build tools not available. Run: ./scripts/setup-build-tools.sh"
+		}(),
 	})
 }
 
@@ -351,6 +393,35 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	// Update release with image URI and mark as ready
 	release.ImageURI = buildResult.ImageURI
 
+	// Store SBOM if generated
+	if buildResult.SBOMGenerated && buildResult.SBOM != nil {
+		h.logger.Info(ctx, "Storing SBOM",
+			logging.String("release_id", release.ID),
+			logging.String("format", buildResult.SBOMFormat),
+			logging.Int("package_count", buildResult.SBOM.PackageCount))
+
+		if err := h.repos.Release.UpdateSBOM(ctx, uuid.MustParse(release.ID), buildResult.SBOM.Content, buildResult.SBOMFormat); err != nil {
+			// SBOM storage failure is non-fatal - log warning and continue
+			h.logger.Error(ctx, "Failed to store SBOM (non-fatal)", logging.Error("db_error", err))
+		} else {
+			h.logger.Info(ctx, "✓ SBOM stored successfully")
+		}
+	}
+
+	// Store signature if generated
+	if buildResult.ImageSigned && buildResult.Signature != nil {
+		h.logger.Info(ctx, "Storing image signature",
+			logging.String("release_id", release.ID),
+			logging.String("signing_method", buildResult.Signature.SigningMethod))
+
+		if err := h.repos.Release.UpdateSignature(ctx, uuid.MustParse(release.ID), buildResult.Signature.Signature); err != nil {
+			// Signature storage failure is non-fatal - log warning and continue
+			h.logger.Error(ctx, "Failed to store signature (non-fatal)", logging.Error("db_error", err))
+		} else {
+			h.logger.Info(ctx, "✓ Image signature stored successfully")
+		}
+	}
+
 	if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusReady); err != nil {
 		h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
 		h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusFailed)
@@ -401,14 +472,21 @@ func (h *Handler) DeployService(c *gin.Context) {
 	}
 
 	var req struct {
-		ReleaseID   string            `json:"release_id" binding:"required"`
-		Environment map[string]string `json:"environment"`
-		Replicas    int               `json:"replicas,omitempty"`
+		ReleaseID       string            `json:"release_id" binding:"required"`
+		Environment     map[string]string `json:"environment"`
+		EnvironmentName string            `json:"environment_name"` // e.g., "production", "staging", "dev"
+		Replicas        int               `json:"replicas,omitempty"`
+		ChangeTicketURL string            `json:"change_ticket_url,omitempty"` // For production deployments
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Default environment name to "development" if not specified
+	if req.EnvironmentName == "" {
+		req.EnvironmentName = "development"
 	}
 
 	// Get service details
@@ -445,6 +523,77 @@ func (h *Handler) DeployService(c *gin.Context) {
 		UpdatedAt:   time.Now(),
 	}
 
+	// Check PR approvals before deployment (if provenance checker is configured)
+	if h.provenanceChecker != nil {
+		approvalResult, err := h.provenanceChecker.CheckDeploymentApproval(
+			ctx,
+			deployment,
+			release,
+			service,
+			req.EnvironmentName,
+			req.ChangeTicketURL,
+		)
+
+		if err != nil {
+			h.logger.Error(ctx, "Failed to check deployment approval", logging.Error("provenance_error", err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Failed to verify deployment approval",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		if !approvalResult.Approved {
+			h.logger.Warn(ctx, "Deployment blocked by approval policy",
+				logging.String("environment", req.EnvironmentName),
+				logging.String("service_id", serviceID.String()),
+				logging.String("violations", approvalResult.Violations.Error()))
+
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":             "Deployment does not meet approval requirements",
+				"policy_violations": approvalResult.Violations,
+				"environment":       req.EnvironmentName,
+				"help":              "Ensure your PR has sufficient approvals and CI checks pass before deploying to this environment",
+			})
+			return
+		}
+
+		// Store approval record for audit trail
+		if approvalResult.Receipt != nil {
+			receiptJSON, err := approvalResult.Receipt.ToJSON()
+			if err != nil {
+				h.logger.Error(ctx, "Failed to serialize compliance receipt", logging.Error("receipt_error", err))
+			}
+
+			approvalRecord := &types.ApprovalRecord{
+				DeploymentID:      uuid.MustParse(deployment.ID),
+				PRURL:             approvalResult.PRURL,
+				PRNumber:          approvalResult.PRNumber,
+				ApproverEmail:     approvalResult.ApproverEmail,
+				ApproverName:      approvalResult.ApproverName,
+				ApprovedAt:        &approvalResult.ApprovedAt,
+				CIStatus:          approvalResult.CIStatus,
+				ChangeTicketURL:   req.ChangeTicketURL,
+				ComplianceReceipt: receiptJSON,
+			}
+
+			if err := h.repos.ApprovalRecords.Create(ctx, approvalRecord); err != nil {
+				// Log error but don't block deployment - approval record is for audit only
+				h.logger.Error(ctx, "Failed to store approval record", logging.Error("db_error", err))
+			} else {
+				h.logger.Info(ctx, "Approval record stored",
+					logging.String("deployment_id", deployment.ID),
+					logging.String("pr_url", approvalResult.PRURL),
+					logging.String("approver", approvalResult.ApproverEmail))
+			}
+
+			// Send compliance evidence to Vanta/Drata (if enabled)
+			if h.complianceExporter != nil && h.complianceExporter.IsEnabled() {
+				go h.sendComplianceWebhooks(ctx, deployment, release, service, req.EnvironmentName, approvalResult, receiptJSON)
+			}
+		}
+	}
+
 	if deployment.Replicas <= 0 {
 		deployment.Replicas = 1 // Default to 1 replica
 	}
@@ -461,7 +610,7 @@ func (h *Handler) DeployService(c *gin.Context) {
 	// Record metrics
 	h.metrics.RecordDeployment(service.Name, release.Version)
 
-	h.logger.Info(ctx, "Deployment created", 
+	h.logger.Info(ctx, "Deployment created",
 		logging.String("deployment_id", deployment.ID),
 		logging.String("service_id", serviceID.String()),
 		logging.String("release_id", req.ReleaseID))
@@ -557,7 +706,7 @@ func (h *Handler) GetLogs(c *gin.Context) {
 	// Get query parameters for log options
 	lines := c.DefaultQuery("lines", "100")
 	follow := c.Query("follow") == "true"
-	
+
 	linesInt, err := strconv.Atoi(lines)
 	if err != nil {
 		linesInt = 100
@@ -767,4 +916,167 @@ func (h *Handler) ListServiceDeployments(c *gin.Context) {
 		"deployments": allDeployments,
 		"count":       len(allDeployments),
 	})
+}
+
+// sendComplianceWebhooks sends deployment evidence to Vanta/Drata
+func (h *Handler) sendComplianceWebhooks(
+	ctx context.Context,
+	deployment *types.Deployment,
+	release *types.Release,
+	service *types.Service,
+	environmentName string,
+	approvalResult *provenance.ApprovalResult,
+	receiptJSON string,
+) {
+	// Get project information
+	project, err := h.repos.Project.GetByID(ctx, service.ProjectID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get project for compliance webhook", logging.Error("db_error", err))
+		return
+	}
+
+	// Get user context (who is deploying)
+	userEmail := "system@enclii.dev" // Default
+	userName := "System"
+	if userCtx := ctx.Value("user"); userCtx != nil {
+		if user, ok := userCtx.(*types.User); ok {
+			userEmail = user.Email
+			userName = user.Name
+		}
+	}
+
+	// Construct deployment evidence
+	evidence := &compliance.DeploymentEvidence{
+		EventType:   "deployment",
+		EventID:     deployment.ID,
+		Timestamp:   time.Now().UTC(),
+		ServiceName: service.Name,
+		Environment: environmentName,
+		ProjectName: project.Name,
+
+		DeploymentID:   deployment.ID,
+		ReleaseVersion: release.Version,
+		ImageURI:       release.ImageURI,
+
+		GitSHA:  release.GitSHA,
+		GitRepo: service.GitRepo,
+
+		// Provenance from PR approval
+		PRURL:      approvalResult.PRURL,
+		PRNumber:   approvalResult.PRNumber,
+		ApprovedBy: approvalResult.ApproverEmail,
+		ApprovedAt: approvalResult.ApprovedAt,
+		CIStatus:   approvalResult.CIStatus,
+
+		// Deployer information
+		DeployedBy:      userName,
+		DeployedByEmail: userEmail,
+		DeployedAt:      time.Now().UTC(),
+
+		// Supply chain security
+		SBOM:              release.SBOM,
+		SBOMFormat:        release.SBOMFormat,
+		ImageSignature:    release.ImageSignature,
+		SignatureVerified: release.SignatureVerifiedAt != nil,
+
+		// Compliance receipt
+		ComplianceReceipt: receiptJSON,
+	}
+
+	h.logger.Info(ctx, "Sending compliance evidence webhooks",
+		logging.String("deployment_id", deployment.ID),
+		logging.String("service", service.Name),
+		logging.String("environment", environmentName))
+
+	// Send to configured webhooks
+	results := h.complianceExporter.ExportDeployment(
+		ctx,
+		evidence,
+		h.config.VantaWebhookURL,
+		h.config.DrataWebhookURL,
+	)
+
+	// Log results
+	h.complianceExporter.LogExportResults(results)
+}
+
+// Topology handlers
+
+// GetTopology returns the complete service topology graph
+func (h *Handler) GetTopology(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Optional environment filter
+	environment := c.DefaultQuery("environment", "all")
+
+	h.logger.Info(ctx, "Building topology graph", logging.String("environment", environment))
+
+	graph, err := h.topologyBuilder.BuildTopology(ctx, environment)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to build topology", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to build topology graph"})
+		return
+	}
+
+	c.JSON(http.StatusOK, graph)
+}
+
+// GetServiceDependencies returns upstream and downstream dependencies for a service
+func (h *Handler) GetServiceDependencies(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+
+	h.logger.Info(ctx, "Getting service dependencies", logging.String("service_id", idStr))
+
+	deps, err := h.topologyBuilder.GetServiceDependencies(ctx, idStr)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get dependencies", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get service dependencies"})
+		return
+	}
+
+	c.JSON(http.StatusOK, deps)
+}
+
+// GetServiceImpact returns impact analysis for a service
+func (h *Handler) GetServiceImpact(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+
+	h.logger.Info(ctx, "Analyzing service impact", logging.String("service_id", idStr))
+
+	impact, err := h.topologyBuilder.AnalyzeImpact(ctx, idStr)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to analyze impact", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to analyze service impact"})
+		return
+	}
+
+	c.JSON(http.StatusOK, impact)
+}
+
+// FindDependencyPath finds a path between two services
+func (h *Handler) FindDependencyPath(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	sourceID := c.Query("source")
+	targetID := c.Query("target")
+
+	if sourceID == "" || targetID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Both source and target query parameters are required"})
+		return
+	}
+
+	h.logger.Info(ctx, "Finding dependency path",
+		logging.String("source", sourceID),
+		logging.String("target", targetID))
+
+	path, err := h.topologyBuilder.FindPath(ctx, sourceID, targetID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to find path", logging.Error("error", err))
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, path)
 }

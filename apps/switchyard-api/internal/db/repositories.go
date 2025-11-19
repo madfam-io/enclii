@@ -12,26 +12,28 @@ import (
 )
 
 type Repositories struct {
-	Projects       *ProjectRepository
-	Environments   *EnvironmentRepository
-	Services       *ServiceRepository
-	Releases       *ReleaseRepository
-	Deployments    *DeploymentRepository
-	Users          *UserRepository
-	ProjectAccess  *ProjectAccessRepository
-	AuditLogs      *AuditLogRepository
+	Projects        *ProjectRepository
+	Environments    *EnvironmentRepository
+	Services        *ServiceRepository
+	Releases        *ReleaseRepository
+	Deployments     *DeploymentRepository
+	Users           *UserRepository
+	ProjectAccess   *ProjectAccessRepository
+	AuditLogs       *AuditLogRepository
+	ApprovalRecords *ApprovalRecordRepository
 }
 
 func NewRepositories(db *sql.DB) *Repositories {
 	return &Repositories{
-		Projects:      NewProjectRepository(db),
-		Environments:  NewEnvironmentRepository(db),
-		Services:      NewServiceRepository(db),
-		Releases:      NewReleaseRepository(db),
-		Deployments:   NewDeploymentRepository(db),
-		Users:         NewUserRepository(db),
-		ProjectAccess: NewProjectAccessRepository(db),
-		AuditLogs:     NewAuditLogRepository(db),
+		Projects:        NewProjectRepository(db),
+		Environments:    NewEnvironmentRepository(db),
+		Services:        NewServiceRepository(db),
+		Releases:        NewReleaseRepository(db),
+		Deployments:     NewDeploymentRepository(db),
+		Users:           NewUserRepository(db),
+		ProjectAccess:   NewProjectAccessRepository(db),
+		AuditLogs:       NewAuditLogRepository(db),
+		ApprovalRecords: NewApprovalRecordRepository(db),
 	}
 }
 
@@ -60,7 +62,7 @@ func (r *ProjectRepository) Create(project *types.Project) error {
 func (r *ProjectRepository) GetBySlug(slug string) (*types.Project, error) {
 	project := &types.Project{}
 	query := `SELECT id, name, slug, created_at, updated_at FROM projects WHERE slug = $1`
-	
+
 	err := r.db.QueryRow(query, slug).Scan(
 		&project.ID, &project.Name, &project.Slug,
 		&project.CreatedAt, &project.UpdatedAt,
@@ -68,13 +70,13 @@ func (r *ProjectRepository) GetBySlug(slug string) (*types.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return project, nil
 }
 
 func (r *ProjectRepository) List() ([]*types.Project, error) {
 	query := `SELECT id, name, slug, created_at, updated_at FROM projects ORDER BY created_at DESC`
-	
+
 	rows, err := r.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -126,7 +128,7 @@ func (r *ServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 	var buildConfigJSON []byte
 
 	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services WHERE id = $1`
-	
+
 	err := r.db.QueryRow(query, id).Scan(
 		&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
 		&buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
@@ -138,13 +140,45 @@ func (r *ServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 	if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
 	}
-	
+
 	return service, nil
+}
+
+func (r *ServiceRepository) ListAll(ctx context.Context) ([]*types.Service, error) {
+	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var services []*types.Service
+	for rows.Next() {
+		service := &types.Service{}
+		var buildConfigJSON []byte
+
+		err := rows.Scan(
+			&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
+			&buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
+		}
+
+		services = append(services, service)
+	}
+
+	return services, nil
 }
 
 func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service, error) {
 	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services WHERE project_id = $1 ORDER BY created_at DESC`
-	
+
 	rows, err := r.db.Query(query, projectID)
 	if err != nil {
 		return nil, err
@@ -155,7 +189,7 @@ func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service
 	for rows.Next() {
 		service := &types.Service{}
 		var buildConfigJSON []byte
-		
+
 		err := rows.Scan(&service.ID, &service.ProjectID, &service.Name, &service.GitRepo, &buildConfigJSON, &service.CreatedAt, &service.UpdatedAt)
 		if err != nil {
 			return nil, err
@@ -196,7 +230,7 @@ func (r *EnvironmentRepository) Create(env *types.Environment) error {
 func (r *EnvironmentRepository) GetByProjectAndName(projectID uuid.UUID, name string) (*types.Environment, error) {
 	env := &types.Environment{}
 	query := `SELECT id, project_id, name, kube_namespace, created_at, updated_at FROM environments WHERE project_id = $1 AND name = $2`
-	
+
 	err := r.db.QueryRow(query, projectID, name).Scan(
 		&env.ID, &env.ProjectID, &env.Name, &env.KubeNamespace,
 		&env.CreatedAt, &env.UpdatedAt,
@@ -204,7 +238,7 @@ func (r *EnvironmentRepository) GetByProjectAndName(projectID uuid.UUID, name st
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return env, nil
 }
 
@@ -236,24 +270,54 @@ func (r *ReleaseRepository) UpdateStatus(id uuid.UUID, status types.ReleaseStatu
 	return err
 }
 
+func (r *ReleaseRepository) UpdateSBOM(ctx context.Context, id uuid.UUID, sbom, sbomFormat string) error {
+	query := `UPDATE releases SET sbom = $1, sbom_format = $2, updated_at = NOW() WHERE id = $3`
+	_, err := r.db.ExecContext(ctx, query, sbom, sbomFormat, id)
+	return err
+}
+
+func (r *ReleaseRepository) UpdateSignature(ctx context.Context, id uuid.UUID, signature string) error {
+	query := `UPDATE releases SET image_signature = $1, signature_verified_at = NOW(), updated_at = NOW() WHERE id = $2`
+	_, err := r.db.ExecContext(ctx, query, signature, id)
+	return err
+}
+
 func (r *ReleaseRepository) GetByID(id uuid.UUID) (*types.Release, error) {
 	release := &types.Release{}
-	query := `SELECT id, service_id, version, image_uri, git_sha, status, created_at, updated_at FROM releases WHERE id = $1`
-	
+	query := `SELECT id, service_id, version, image_uri, git_sha, status, sbom, sbom_format, image_signature, signature_verified_at, created_at, updated_at FROM releases WHERE id = $1`
+
+	var sbom, sbomFormat, imageSignature sql.NullString
+	var signatureVerifiedAt sql.NullTime
 	err := r.db.QueryRow(query, id).Scan(
 		&release.ID, &release.ServiceID, &release.Version, &release.ImageURI,
-		&release.GitSHA, &release.Status, &release.CreatedAt, &release.UpdatedAt,
+		&release.GitSHA, &release.Status, &sbom, &sbomFormat, &imageSignature, &signatureVerifiedAt, &release.CreatedAt, &release.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
-	
+
+	// Handle nullable SBOM fields
+	if sbom.Valid {
+		release.SBOM = sbom.String
+	}
+	if sbomFormat.Valid {
+		release.SBOMFormat = sbomFormat.String
+	}
+
+	// Handle nullable signature fields
+	if imageSignature.Valid {
+		release.ImageSignature = imageSignature.String
+	}
+	if signatureVerifiedAt.Valid {
+		release.SignatureVerifiedAt = &signatureVerifiedAt.Time
+	}
+
 	return release, nil
 }
 
 func (r *ReleaseRepository) ListByService(serviceID uuid.UUID) ([]*types.Release, error) {
-	query := `SELECT id, service_id, version, image_uri, git_sha, status, created_at, updated_at FROM releases WHERE service_id = $1 ORDER BY created_at DESC`
-	
+	query := `SELECT id, service_id, version, image_uri, git_sha, status, sbom, sbom_format, image_signature, signature_verified_at, created_at, updated_at FROM releases WHERE service_id = $1 ORDER BY created_at DESC`
+
 	rows, err := r.db.Query(query, serviceID)
 	if err != nil {
 		return nil, err
@@ -263,10 +327,30 @@ func (r *ReleaseRepository) ListByService(serviceID uuid.UUID) ([]*types.Release
 	var releases []*types.Release
 	for rows.Next() {
 		release := &types.Release{}
-		err := rows.Scan(&release.ID, &release.ServiceID, &release.Version, &release.ImageURI, &release.GitSHA, &release.Status, &release.CreatedAt, &release.UpdatedAt)
+		var sbom, sbomFormat, imageSignature sql.NullString
+		var signatureVerifiedAt sql.NullTime
+
+		err := rows.Scan(&release.ID, &release.ServiceID, &release.Version, &release.ImageURI, &release.GitSHA, &release.Status, &sbom, &sbomFormat, &imageSignature, &signatureVerifiedAt, &release.CreatedAt, &release.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
+
+		// Handle nullable SBOM fields
+		if sbom.Valid {
+			release.SBOM = sbom.String
+		}
+		if sbomFormat.Valid {
+			release.SBOMFormat = sbomFormat.String
+		}
+
+		// Handle nullable signature fields
+		if imageSignature.Valid {
+			release.ImageSignature = imageSignature.String
+		}
+		if signatureVerifiedAt.Valid {
+			release.SignatureVerifiedAt = &signatureVerifiedAt.Time
+		}
+
 		releases = append(releases, release)
 	}
 
@@ -712,4 +796,141 @@ func (r *AuditLogRepository) Query(ctx context.Context, filters map[string]inter
 	}
 
 	return logs, nil
+}
+
+// ApprovalRecordRepository handles approval record operations
+type ApprovalRecordRepository struct {
+	db *sql.DB
+}
+
+func NewApprovalRecordRepository(db *sql.DB) *ApprovalRecordRepository {
+	return &ApprovalRecordRepository{db: db}
+}
+
+// Create inserts a new approval record
+func (r *ApprovalRecordRepository) Create(ctx context.Context, record *types.ApprovalRecord) error {
+	record.ID = uuid.New()
+	record.CreatedAt = time.Now()
+
+	query := `
+		INSERT INTO approval_records (
+			id, deployment_id, pr_url, pr_number, approver_email, approver_name,
+			approved_at, ci_status, change_ticket_url, compliance_receipt, created_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`
+
+	_, err := r.db.ExecContext(ctx, query,
+		record.ID,
+		record.DeploymentID,
+		record.PRURL,
+		record.PRNumber,
+		record.ApproverEmail,
+		record.ApproverName,
+		record.ApprovedAt,
+		record.CIStatus,
+		record.ChangeTicketURL,
+		record.ComplianceReceipt,
+		record.CreatedAt,
+	)
+
+	return err
+}
+
+// GetByDeploymentID retrieves the approval record for a deployment
+func (r *ApprovalRecordRepository) GetByDeploymentID(ctx context.Context, deploymentID uuid.UUID) (*types.ApprovalRecord, error) {
+	record := &types.ApprovalRecord{}
+
+	query := `
+		SELECT id, deployment_id, pr_url, pr_number, approver_email, approver_name,
+		       approved_at, ci_status, change_ticket_url, compliance_receipt, created_at
+		FROM approval_records
+		WHERE deployment_id = $1
+	`
+
+	err := r.db.QueryRowContext(ctx, query, deploymentID).Scan(
+		&record.ID,
+		&record.DeploymentID,
+		&record.PRURL,
+		&record.PRNumber,
+		&record.ApproverEmail,
+		&record.ApproverName,
+		&record.ApprovedAt,
+		&record.CIStatus,
+		&record.ChangeTicketURL,
+		&record.ComplianceReceipt,
+		&record.CreatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // No approval record found (OK for dev deployments)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return record, nil
+}
+
+// List retrieves approval records with optional filtering
+func (r *ApprovalRecordRepository) List(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]*types.ApprovalRecord, error) {
+	query := `
+		SELECT id, deployment_id, pr_url, pr_number, approver_email, approver_name,
+		       approved_at, ci_status, change_ticket_url, compliance_receipt, created_at
+		FROM approval_records
+		WHERE 1=1
+	`
+
+	args := []interface{}{}
+	argCount := 1
+
+	// Add filters dynamically
+	if deploymentID, ok := filters["deployment_id"].(uuid.UUID); ok {
+		query += fmt.Sprintf(" AND deployment_id = $%d", argCount)
+		args = append(args, deploymentID)
+		argCount++
+	}
+
+	if approverEmail, ok := filters["approver_email"].(string); ok {
+		query += fmt.Sprintf(" AND approver_email = $%d", argCount)
+		args = append(args, approverEmail)
+		argCount++
+	}
+
+	query += " ORDER BY created_at DESC"
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argCount, argCount+1)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*types.ApprovalRecord
+	for rows.Next() {
+		record := &types.ApprovalRecord{}
+
+		err := rows.Scan(
+			&record.ID,
+			&record.DeploymentID,
+			&record.PRURL,
+			&record.PRNumber,
+			&record.ApproverEmail,
+			&record.ApproverName,
+			&record.ApprovedAt,
+			&record.CIStatus,
+			&record.ChangeTicketURL,
+			&record.ComplianceReceipt,
+			&record.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		records = append(records, record)
+	}
+
+	return records, nil
 }

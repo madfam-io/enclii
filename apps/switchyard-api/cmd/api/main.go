@@ -17,12 +17,15 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/config"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/topology"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
 )
 
@@ -62,6 +65,7 @@ func main() {
 	authManager, err := auth.NewJWTManager(
 		15*time.Minute, // Access token duration
 		7*24*time.Hour, // Refresh token duration (7 days)
+		repos,          // Database repositories for authorization
 	)
 	if err != nil {
 		logrus.Fatal("Failed to initialize auth manager:", err)
@@ -86,10 +90,12 @@ func main() {
 
 	// Initialize builder service
 	builderService := builder.NewService(&builder.Config{
-		WorkDir:  cfg.BuildWorkDir,
-		Registry: cfg.Registry,
-		CacheDir: cfg.BuildCacheDir,
-		Timeout:  time.Duration(cfg.BuildTimeout) * time.Second,
+		WorkDir:      cfg.BuildWorkDir,
+		Registry:     cfg.Registry,
+		CacheDir:     cfg.BuildCacheDir,
+		Timeout:      time.Duration(cfg.BuildTimeout) * time.Second,
+		GenerateSBOM: true, // Enable SBOM generation with Syft
+		SignImages:   true, // Enable image signing with Cosign
 	}, logrus.StandardLogger())
 
 	// Ensure build directories exist
@@ -108,6 +114,42 @@ func main() {
 
 	// Initialize validator
 	validatorInstance := validation.NewValidator()
+
+	// Initialize provenance checker (PR approval verification)
+	var provenanceChecker *provenance.Checker
+	if cfg.GitHubToken != "" {
+		provenanceChecker = provenance.NewChecker(cfg.GitHubToken, nil) // nil = use default policy
+		logrus.Info("✓ PR approval checking enabled")
+	} else {
+		logrus.Warn("⚠ GitHub token not configured - PR approval checking disabled")
+		logrus.Warn("   Set ENCLII_GITHUB_TOKEN to enable deployment approval verification")
+	}
+
+	// Initialize compliance exporter (Vanta/Drata webhooks)
+	complianceExporter := compliance.NewExporter(&compliance.Config{
+		Enabled:      cfg.ComplianceWebhooksEnabled,
+		VantaWebhook: cfg.VantaWebhookURL,
+		DrataWebhook: cfg.DrataWebhookURL,
+		MaxRetries:   3,
+		RetryDelay:   2 * time.Second,
+	}, logrus.StandardLogger())
+
+	if cfg.ComplianceWebhooksEnabled {
+		logrus.Info("✓ Compliance webhooks enabled")
+		if cfg.VantaWebhookURL != "" {
+			logrus.Info("  → Vanta webhook configured")
+		}
+		if cfg.DrataWebhookURL != "" {
+			logrus.Info("  → Drata webhook configured")
+		}
+	} else {
+		logrus.Info("ℹ Compliance webhooks disabled")
+		logrus.Info("   Set ENCLII_COMPLIANCE_WEBHOOKS_ENABLED=true to enable")
+	}
+
+	// Initialize topology builder
+	topologyBuilder := topology.NewGraphBuilder(repos, k8sClient, logrus.StandardLogger())
+	logrus.Info("✓ Topology graph builder initialized")
 
 	// Setup HTTP server
 	if cfg.Environment == "production" {
@@ -130,6 +172,9 @@ func main() {
 		metricsCollector,
 		logger,
 		validatorInstance,
+		provenanceChecker,
+		complianceExporter,
+		topologyBuilder,
 	)
 	api.SetupRoutes(router, apiHandler)
 

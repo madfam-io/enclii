@@ -55,14 +55,14 @@ func NewClient(kubeconfig string, kubecontext string) (*Client, error) {
 }
 
 type DeploymentSpec struct {
-	Name         string
-	Namespace    string
-	ImageURI     string
-	Port         int32
-	Replicas     int32
-	HealthPath   string
-	Environment  map[string]string
-	Labels       map[string]string
+	Name        string
+	Namespace   string
+	ImageURI    string
+	Port        int32
+	Replicas    int32
+	HealthPath  string
+	Environment map[string]string
+	Labels      map[string]string
 }
 
 func (c *Client) DeployService(ctx context.Context, spec *DeploymentSpec) error {
@@ -313,13 +313,13 @@ func (c *Client) GetLogs(ctx context.Context, namespace, labelSelector string, l
 	}
 
 	var allLogs strings.Builder
-	
+
 	// Get logs from all pods
 	for i, pod := range pods.Items {
 		if i > 0 {
 			allLogs.WriteString("\n--- Pod: " + pod.Name + " ---\n")
 		}
-		
+
 		req := c.Clientset.CoreV1().Pods(namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
 			Follow:    follow,
 			TailLines: int64Ptr(int64(lines)),
@@ -349,4 +349,61 @@ func (c *Client) GetLogs(ctx context.Context, namespace, labelSelector string, l
 
 func int64Ptr(i int64) *int64 {
 	return &i
+}
+
+// DeploymentStatusInfo contains detailed deployment status information
+type DeploymentStatusInfo struct {
+	Replicas            int32
+	UpdatedReplicas     int32
+	ReadyReplicas       int32
+	AvailableReplicas   int32
+	UnavailableReplicas int32
+	Generation          int64
+	ObservedGeneration  int64
+}
+
+// GetDeploymentStatusInfo returns detailed status information about a deployment
+func (c *Client) GetDeploymentStatusInfo(ctx context.Context, namespace, name string) (*DeploymentStatusInfo, error) {
+	deployment, err := c.Clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	status := &DeploymentStatusInfo{
+		Replicas:            deployment.Status.Replicas,
+		UpdatedReplicas:     deployment.Status.UpdatedReplicas,
+		ReadyReplicas:       deployment.Status.ReadyReplicas,
+		AvailableReplicas:   deployment.Status.AvailableReplicas,
+		UnavailableReplicas: deployment.Status.UnavailableReplicas,
+		Generation:          deployment.Generation,
+		ObservedGeneration:  deployment.Status.ObservedGeneration,
+	}
+
+	return status, nil
+}
+
+// RollingRestart triggers a rolling restart of a deployment by updating the restart annotation
+func (c *Client) RollingRestart(ctx context.Context, namespace, name string) error {
+	// Get the deployment
+	deployment, err := c.Clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	// Add/update restart annotation to trigger rolling restart
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = make(map[string]string)
+	}
+
+	// Update restart annotation with current timestamp to trigger rollout
+	deployment.Spec.Template.Annotations["enclii.dev/restartedAt"] = metav1.Now().Format(time.RFC3339)
+	deployment.Spec.Template.Annotations["enclii.dev/restartReason"] = "secret-rotation"
+
+	// Update the deployment
+	_, err = c.Clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update deployment for rolling restart: %w", err)
+	}
+
+	return nil
 }

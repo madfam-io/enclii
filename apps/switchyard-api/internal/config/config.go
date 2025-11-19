@@ -27,10 +27,25 @@ type Config struct {
 	KubeContext string
 
 	// Build Configuration
-	BuildkitAddr    string
-	BuildTimeout    int
-	BuildWorkDir    string // Directory for cloning repositories during builds
-	BuildCacheDir   string // Directory for buildpack layer cache
+	BuildkitAddr  string
+	BuildTimeout  int
+	BuildWorkDir  string // Directory for cloning repositories during builds
+	BuildCacheDir string // Directory for buildpack layer cache
+
+	// Provenance / PR Approval
+	GitHubToken string // GitHub API token for PR verification
+
+	// Compliance Webhooks
+	ComplianceWebhooksEnabled bool
+	VantaWebhookURL           string
+	DrataWebhookURL           string
+
+	// Secret Rotation (Vault)
+	SecretRotationEnabled bool
+	VaultAddress          string
+	VaultToken            string
+	VaultNamespace        string
+	VaultPollInterval     int // Seconds
 }
 
 func Load() (*Config, error) {
@@ -53,6 +68,9 @@ func Load() (*Config, error) {
 	viper.SetDefault("build-timeout", 1800) // 30 minutes
 	viper.SetDefault("build-work-dir", "/tmp/enclii-builds")
 	viper.SetDefault("build-cache-dir", "/var/cache/enclii-buildpacks")
+	viper.SetDefault("compliance-webhooks-enabled", false)
+	viper.SetDefault("secret-rotation-enabled", false)
+	viper.SetDefault("vault-poll-interval", 60) // Poll every 60 seconds
 
 	// Parse log level
 	logLevelStr := viper.GetString("log-level")
@@ -62,20 +80,29 @@ func Load() (*Config, error) {
 	}
 
 	config := &Config{
-		Environment:      viper.GetString("environment"),
-		Port:            viper.GetString("port"),
-		DatabaseURL:     viper.GetString("database-url"),
-		LogLevel:        logLevel,
-		Registry:        viper.GetString("registry"),
-		OIDCIssuer:      viper.GetString("oidc-issuer"),
-		OIDCClientID:    viper.GetString("oidc-client-id"),
-		OIDCClientSecret: viper.GetString("oidc-client-secret"),
-		KubeConfig:      viper.GetString("kube-config"),
-		KubeContext:     viper.GetString("kube-context"),
-		BuildkitAddr:    viper.GetString("buildkit-addr"),
-		BuildTimeout:    viper.GetInt("build-timeout"),
-		BuildWorkDir:    viper.GetString("build-work-dir"),
-		BuildCacheDir:   viper.GetString("build-cache-dir"),
+		Environment:               viper.GetString("environment"),
+		Port:                      viper.GetString("port"),
+		DatabaseURL:               viper.GetString("database-url"),
+		LogLevel:                  logLevel,
+		Registry:                  viper.GetString("registry"),
+		OIDCIssuer:                viper.GetString("oidc-issuer"),
+		OIDCClientID:              viper.GetString("oidc-client-id"),
+		OIDCClientSecret:          viper.GetString("oidc-client-secret"),
+		KubeConfig:                viper.GetString("kube-config"),
+		KubeContext:               viper.GetString("kube-context"),
+		BuildkitAddr:              viper.GetString("buildkit-addr"),
+		BuildTimeout:              viper.GetInt("build-timeout"),
+		BuildWorkDir:              viper.GetString("build-work-dir"),
+		BuildCacheDir:             viper.GetString("build-cache-dir"),
+		GitHubToken:               viper.GetString("github-token"),
+		ComplianceWebhooksEnabled: viper.GetBool("compliance-webhooks-enabled"),
+		VantaWebhookURL:           viper.GetString("vanta-webhook-url"),
+		DrataWebhookURL:           viper.GetString("drata-webhook-url"),
+		SecretRotationEnabled:     viper.GetBool("secret-rotation-enabled"),
+		VaultAddress:              viper.GetString("vault-address"),
+		VaultToken:                viper.GetString("vault-token"),
+		VaultNamespace:            viper.GetString("vault-namespace"),
+		VaultPollInterval:         viper.GetInt("vault-poll-interval"),
 	}
 
 	return config, nil
