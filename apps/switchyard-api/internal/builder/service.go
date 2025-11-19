@@ -6,24 +6,28 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/sbom"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
-// Service orchestrates the complete build process: clone → build → cleanup
+// Service orchestrates the complete build process: clone → build → SBOM → cleanup
 type Service struct {
-	git      *GitService
-	builder  *BuildpacksBuilder
-	logger   *logrus.Logger
-	workDir  string
-	registry string
-	timeout  time.Duration
+	git          *GitService
+	builder      *BuildpacksBuilder
+	sbomGen      *sbom.Generator
+	logger       *logrus.Logger
+	workDir      string
+	registry     string
+	timeout      time.Duration
+	generateSBOM bool // Enable/disable SBOM generation
 }
 
 type Config struct {
-	WorkDir  string
-	Registry string
-	CacheDir string
-	Timeout  time.Duration
+	WorkDir      string
+	Registry     string
+	CacheDir     string
+	Timeout      time.Duration
+	GenerateSBOM bool // Enable SBOM generation (requires Syft)
 }
 
 func NewService(cfg *Config, logger *logrus.Logger) *Service {
@@ -31,24 +35,43 @@ func NewService(cfg *Config, logger *logrus.Logger) *Service {
 		cfg.Timeout = 30 * time.Minute
 	}
 
+	sbomGenerator := sbom.NewGenerator(5 * time.Minute)
+
+	// Check if Syft is available (non-fatal if missing)
+	generateSBOM := cfg.GenerateSBOM
+	if generateSBOM {
+		if err := sbomGenerator.ValidateSyftInstalled(); err != nil {
+			logger.Warn("SBOM generation disabled: Syft not installed")
+			logger.Warnf("  %v", err)
+			generateSBOM = false
+		} else {
+			logger.Info("✓ SBOM generation enabled (Syft installed)")
+		}
+	}
+
 	return &Service{
-		git:      NewGitService(cfg.WorkDir),
-		builder:  NewBuildpacksBuilder(cfg.Registry, cfg.CacheDir, cfg.Timeout),
-		logger:   logger,
-		workDir:  cfg.WorkDir,
-		registry: cfg.Registry,
-		timeout:  cfg.Timeout,
+		git:          NewGitService(cfg.WorkDir),
+		builder:      NewBuildpacksBuilder(cfg.Registry, cfg.CacheDir, cfg.Timeout),
+		sbomGen:      sbomGenerator,
+		logger:       logger,
+		workDir:      cfg.WorkDir,
+		registry:     cfg.Registry,
+		timeout:      cfg.Timeout,
+		generateSBOM: generateSBOM,
 	}
 }
 
 type CompleteBuildResult struct {
-	ImageURI  string
-	GitSHA    string
-	Success   bool
-	Error     error
-	Logs      []string
-	Duration  time.Duration
-	ClonePath string
+	ImageURI     string
+	GitSHA       string
+	Success      bool
+	Error        error
+	Logs         []string
+	Duration     time.Duration
+	ClonePath    string
+	SBOM         *sbom.SBOM // Software Bill of Materials
+	SBOMFormat   string     // e.g., "cyclonedx-json"
+	SBOMGenerated bool      // Whether SBOM was successfully generated
 }
 
 // BuildFromGit clones a repository and builds it
@@ -100,6 +123,25 @@ func (s *Service) BuildFromGit(ctx context.Context, service *types.Service, gitS
 	result.ImageURI = buildResult.ImageURI
 	result.Success = true
 	result.Logs = append(result.Logs, buildResult.Logs...)
+
+	// Step 3: Generate SBOM (if enabled)
+	if s.generateSBOM {
+		result.Logs = append(result.Logs, "Generating SBOM with Syft...")
+		sbomResult, err := s.sbomGen.GenerateFromImage(buildCtx, result.ImageURI, sbom.GetDefaultFormat())
+
+		if err != nil {
+			// SBOM generation failure is non-fatal - log warning and continue
+			s.logger.Warnf("SBOM generation failed (non-fatal): %v", err)
+			result.Logs = append(result.Logs, fmt.Sprintf("WARNING: SBOM generation failed: %v", err))
+			result.SBOMGenerated = false
+		} else {
+			result.SBOM = sbomResult
+			result.SBOMFormat = string(sbomResult.Format)
+			result.SBOMGenerated = true
+			result.Logs = append(result.Logs, fmt.Sprintf("✓ SBOM generated (%d packages found)", sbomResult.PackageCount))
+		}
+	}
+
 	result.Duration = time.Since(start)
 
 	result.Logs = append(result.Logs, fmt.Sprintf("Build completed successfully in %v", result.Duration))
@@ -137,6 +179,17 @@ func (s *Service) GetBuildStatus() map[string]interface{} {
 		status["tools_error"] = err.Error()
 	} else {
 		status["tools_available"] = true
+	}
+
+	// Check if SBOM generation is enabled and available
+	status["sbom_enabled"] = s.generateSBOM
+	if s.generateSBOM {
+		if err := s.sbomGen.ValidateSyftInstalled(); err != nil {
+			status["sbom_available"] = false
+			status["sbom_error"] = err.Error()
+		} else {
+			status["sbom_available"] = true
+		}
 	}
 
 	return status

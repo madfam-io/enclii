@@ -238,24 +238,39 @@ func (r *ReleaseRepository) UpdateStatus(id uuid.UUID, status types.ReleaseStatu
 	return err
 }
 
+func (r *ReleaseRepository) UpdateSBOM(ctx context.Context, id uuid.UUID, sbom, sbomFormat string) error {
+	query := `UPDATE releases SET sbom = $1, sbom_format = $2, updated_at = NOW() WHERE id = $3`
+	_, err := r.db.ExecContext(ctx, query, sbom, sbomFormat, id)
+	return err
+}
+
 func (r *ReleaseRepository) GetByID(id uuid.UUID) (*types.Release, error) {
 	release := &types.Release{}
-	query := `SELECT id, service_id, version, image_uri, git_sha, status, created_at, updated_at FROM releases WHERE id = $1`
-	
+	query := `SELECT id, service_id, version, image_uri, git_sha, status, sbom, sbom_format, created_at, updated_at FROM releases WHERE id = $1`
+
+	var sbom, sbomFormat sql.NullString
 	err := r.db.QueryRow(query, id).Scan(
 		&release.ID, &release.ServiceID, &release.Version, &release.ImageURI,
-		&release.GitSHA, &release.Status, &release.CreatedAt, &release.UpdatedAt,
+		&release.GitSHA, &release.Status, &sbom, &sbomFormat, &release.CreatedAt, &release.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
-	
+
+	// Handle nullable SBOM fields
+	if sbom.Valid {
+		release.SBOM = sbom.String
+	}
+	if sbomFormat.Valid {
+		release.SBOMFormat = sbomFormat.String
+	}
+
 	return release, nil
 }
 
 func (r *ReleaseRepository) ListByService(serviceID uuid.UUID) ([]*types.Release, error) {
-	query := `SELECT id, service_id, version, image_uri, git_sha, status, created_at, updated_at FROM releases WHERE service_id = $1 ORDER BY created_at DESC`
-	
+	query := `SELECT id, service_id, version, image_uri, git_sha, status, sbom, sbom_format, created_at, updated_at FROM releases WHERE service_id = $1 ORDER BY created_at DESC`
+
 	rows, err := r.db.Query(query, serviceID)
 	if err != nil {
 		return nil, err
@@ -265,10 +280,21 @@ func (r *ReleaseRepository) ListByService(serviceID uuid.UUID) ([]*types.Release
 	var releases []*types.Release
 	for rows.Next() {
 		release := &types.Release{}
-		err := rows.Scan(&release.ID, &release.ServiceID, &release.Version, &release.ImageURI, &release.GitSHA, &release.Status, &release.CreatedAt, &release.UpdatedAt)
+		var sbom, sbomFormat sql.NullString
+
+		err := rows.Scan(&release.ID, &release.ServiceID, &release.Version, &release.ImageURI, &release.GitSHA, &release.Status, &sbom, &sbomFormat, &release.CreatedAt, &release.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
+
+		// Handle nullable SBOM fields
+		if sbom.Valid {
+			release.SBOM = sbom.String
+		}
+		if sbomFormat.Valid {
+			release.SBOMFormat = sbomFormat.String
+		}
+
 		releases = append(releases, release)
 	}
 

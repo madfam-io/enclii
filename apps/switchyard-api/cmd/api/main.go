@@ -88,10 +88,11 @@ func main() {
 
 	// Initialize builder service
 	builderService := builder.NewService(&builder.Config{
-		WorkDir:  cfg.BuildWorkDir,
-		Registry: cfg.Registry,
-		CacheDir: cfg.BuildCacheDir,
-		Timeout:  time.Duration(cfg.BuildTimeout) * time.Second,
+		WorkDir:      cfg.BuildWorkDir,
+		Registry:     cfg.Registry,
+		CacheDir:     cfg.BuildCacheDir,
+		Timeout:      time.Duration(cfg.BuildTimeout) * time.Second,
+		GenerateSBOM: true, // Enable SBOM generation with Syft
 	}, logrus.StandardLogger())
 
 	// Ensure build directories exist

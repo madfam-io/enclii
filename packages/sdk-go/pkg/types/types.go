@@ -59,6 +59,8 @@ type Release struct {
 	ImageURI  string       `json:"image_uri" db:"image_uri"`
 	GitSHA    string       `json:"git_sha" db:"git_sha"`
 	Status    ReleaseStatus `json:"status" db:"status"`
+	SBOM      string       `json:"sbom,omitempty" db:"sbom"`           // Software Bill of Materials (JSON)
+	SBOMFormat string      `json:"sbom_format,omitempty" db:"sbom_format"` // e.g., "cyclonedx-json", "spdx-json"
 	CreatedAt time.Time     `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time     `json:"updated_at" db:"updated_at"`
 }

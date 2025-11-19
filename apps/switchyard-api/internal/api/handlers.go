@@ -379,6 +379,21 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	// Update release with image URI and mark as ready
 	release.ImageURI = buildResult.ImageURI
 
+	// Store SBOM if generated
+	if buildResult.SBOMGenerated && buildResult.SBOM != nil {
+		h.logger.Info(ctx, "Storing SBOM",
+			logging.String("release_id", release.ID),
+			logging.String("format", buildResult.SBOMFormat),
+			logging.Int("package_count", buildResult.SBOM.PackageCount))
+
+		if err := h.repos.Release.UpdateSBOM(ctx, uuid.MustParse(release.ID), buildResult.SBOM.Content, buildResult.SBOMFormat); err != nil {
+			// SBOM storage failure is non-fatal - log warning and continue
+			h.logger.Error(ctx, "Failed to store SBOM (non-fatal)", logging.Error("db_error", err))
+		} else {
+			h.logger.Info(ctx, "✓ SBOM stored successfully")
+		}
+	}
+
 	if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusReady); err != nil {
 		h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
 		h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusFailed)
