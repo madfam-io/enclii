@@ -1,8 +1,10 @@
-go 1.22
+go 1.23.0
+
+toolchain go1.24.7
 
 use (
-	./apps/switchyard-api
 	./apps/reconcilers
+	./apps/switchyard-api
 	./packages/cli
 	./packages/sdk-go
 )

@@ -30,9 +30,9 @@ type Handler struct {
 	config      *config.Config
 	auth        *auth.JWTManager
 	cache       cache.CacheService
-	builder     *builder.BuildpacksBuilder
+	builder     *builder.Service
 	k8sClient   *k8s.Client
-	controller  *reconciler.Controller
+	reconciler  *reconciler.Controller
 	metrics     *monitoring.MetricsCollector
 	logger      logging.Logger
 	validator   *validation.Validator
@@ -43,9 +43,9 @@ func NewHandler(
 	config *config.Config,
 	auth *auth.JWTManager,
 	cache cache.CacheService,
-	builder *builder.BuildpacksBuilder,
+	builder *builder.Service,
 	k8sClient *k8s.Client,
-	controller *reconciler.Controller,
+	reconciler *reconciler.Controller,
 	metrics *monitoring.MetricsCollector,
 	logger logging.Logger,
 	validator *validation.Validator,
@@ -57,7 +57,7 @@ func NewHandler(
 		cache:      cache,
 		builder:    builder,
 		k8sClient:  k8sClient,
-		controller: controller,
+		reconciler: reconciler,
 		metrics:    metrics,
 		logger:     logger,
 		validator:  validator,
@@ -308,17 +308,51 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	// TODO: Clone repository and trigger build
-	// For MVP, we'll simulate the build process
-	time.Sleep(10 * time.Second) // Simulate build time
+	h.logger.Info(ctx, "Starting build process",
+		logging.String("service_id", service.ID),
+		logging.String("release_id", release.ID),
+		logging.String("git_sha", gitSHA))
 
-	// Update release status to ready (in real implementation, this would be based on actual build result)
+	// Execute the build
+	buildResult := h.builder.BuildFromGit(ctx, service, gitSHA)
+
+	if !buildResult.Success {
+		h.logger.Error(ctx, "Build failed",
+			logging.String("release_id", release.ID),
+			logging.Error("build_error", buildResult.Error))
+
+		// Update release status to failed
+		if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusFailed); err != nil {
+			h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
+		}
+
+		// Store build logs (in production, we'd save these to a logging service or database)
+		h.logger.Error(ctx, "Build logs", logging.String("logs", fmt.Sprintf("%v", buildResult.Logs)))
+		return
+	}
+
+	// Update release with image URI and mark as ready
+	release.ImageURI = buildResult.ImageURI
+
 	if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusReady); err != nil {
 		h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
 		h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusFailed)
+		return
 	}
 
-	h.logger.Info(ctx, "Build completed", logging.String("release_id", release.ID))
+	h.logger.Info(ctx, "Build completed successfully",
+		logging.String("release_id", release.ID),
+		logging.String("image_uri", buildResult.ImageURI),
+		logging.String("duration", buildResult.Duration.String()))
+
+	// Log build details for debugging
+	for _, log := range buildResult.Logs {
+		h.logger.Debug(ctx, "Build log", logging.String("line", log))
+	}
+
+	// Record metrics
+	h.metrics.RecordBuildDuration(buildResult.Duration)
+	h.metrics.RecordBuildSuccess(service.Name)
 }
 
 func (h *Handler) ListReleases(c *gin.Context) {
@@ -405,7 +439,7 @@ func (h *Handler) DeployService(c *gin.Context) {
 	}
 
 	// Schedule deployment with reconciler
-	h.controller.ScheduleReconciliation(deployment.ID, 1) // High priority
+	h.reconciler.ScheduleReconciliation(deployment.ID, 1) // High priority
 
 	// Record metrics
 	h.metrics.RecordDeployment(service.Name, release.Version)
