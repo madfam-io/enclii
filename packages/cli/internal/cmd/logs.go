@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
+	"github.com/madfam/enclii/packages/cli/internal/client"
 	"github.com/madfam/enclii/packages/cli/internal/config"
 )
 
@@ -47,27 +49,33 @@ func showLogs(cfg *config.Config, serviceName, environment string, follow bool, 
 	fmt.Println()
 	fmt.Println("─────────────────────────────────────────────────")
 
-	// TODO: Implement actual log streaming
-	// This would connect to the API and stream logs
-	
-	// Mock log output for demonstration
-	mockLogs := []string{
-		"2024-01-15 10:30:01 [INFO] Server starting on port 8080",
-		"2024-01-15 10:30:02 [INFO] Database connection established",
-		"2024-01-15 10:30:03 [INFO] Health check endpoint ready",
-		"2024-01-15 10:30:10 [INFO] GET /health - 200 OK (2ms)",
-		"2024-01-15 10:31:05 [INFO] GET /api/projects - 200 OK (15ms)",
-	}
+	ctx := context.Background()
+	client := client.NewAPIClient(cfg.APIEndpoint, cfg.APIToken)
 
-	for _, log := range mockLogs {
-		fmt.Println(log)
-	}
+	// Note: This is a simplified implementation
+	// In production, we would:
+	// 1. Get project from service.yaml or config
+	// 2. List services in that project to find the service by name
+	// 3. Get the latest deployment for that service
+	// 4. Stream logs from that deployment
 
+	// For now, we'll use a placeholder deployment ID
+	// The real implementation would query the API to get the current deployment ID
+	fmt.Println("🔍 Finding deployment...")
+
+	// TODO: Add API endpoint to get deployment by service name and environment
+	// For now, showing error message with instructions
+	fmt.Println()
+	fmt.Println("⚠️  Log streaming requires deployment ID")
+	fmt.Println("💡 Use 'enclii ps' to list deployments")
+	fmt.Println("💡 Then use 'enclii logs --deployment <id>' to view logs")
+	fmt.Println()
+	fmt.Println("Alternative: Query logs directly from Kubernetes:")
+	fmt.Printf("   kubectl logs -l enclii.dev/service=%s -n enclii-dev --tail=%d", serviceName, lines)
 	if follow {
-		fmt.Println("⏳ Waiting for more logs... (Press Ctrl+C to exit)")
-		// In real implementation, this would stream logs continuously
-		select {} // Block forever in demo
+		fmt.Print(" -f")
 	}
+	fmt.Println()
 
 	return nil
 }
