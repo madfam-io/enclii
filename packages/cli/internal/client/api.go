@@ -247,6 +247,37 @@ func (c *APIClient) ListReleases(ctx context.Context, serviceID string) ([]*type
 	return response.Releases, nil
 }
 
+// Deployments
+func (c *APIClient) GetLatestDeployment(ctx context.Context, serviceID string) (*DeploymentWithRelease, error) {
+	var response DeploymentWithRelease
+	if err := c.get(ctx, fmt.Sprintf("/v1/services/%s/deployments/latest", serviceID), &response); err != nil {
+		return nil, fmt.Errorf("failed to get latest deployment: %w", err)
+	}
+
+	return &response, nil
+}
+
+func (c *APIClient) GetDeployment(ctx context.Context, deploymentID string) (*types.Deployment, error) {
+	var deployment types.Deployment
+	if err := c.get(ctx, fmt.Sprintf("/v1/deployments/%s", deploymentID), &deployment); err != nil {
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	return &deployment, nil
+}
+
+func (c *APIClient) ListServiceDeployments(ctx context.Context, serviceID string) ([]*types.Deployment, error) {
+	var response struct {
+		Deployments []*types.Deployment `json:"deployments"`
+	}
+
+	if err := c.get(ctx, fmt.Sprintf("/v1/services/%s/deployments", serviceID), &response); err != nil {
+		return nil, fmt.Errorf("failed to list deployments: %w", err)
+	}
+
+	return response.Deployments, nil
+}
+
 // Logs
 func (c *APIClient) GetLogs(ctx context.Context, deploymentID string, opts LogOptions) ([]LogLine, error) {
 	params := url.Values{}
@@ -271,6 +302,35 @@ func (c *APIClient) GetLogs(ctx context.Context, deploymentID string, opts LogOp
 
 	if err := c.get(ctx, endpoint, &response); err != nil {
 		return nil, fmt.Errorf("failed to get logs: %w", err)
+	}
+
+	return response.Logs, nil
+}
+
+// GetLogsRaw returns logs as a string (for streaming)
+func (c *APIClient) GetLogsRaw(ctx context.Context, deploymentID string, opts LogOptions) (string, error) {
+	params := url.Values{}
+	if opts.Follow {
+		params.Set("follow", "true")
+	}
+	if opts.Lines > 0 {
+		params.Set("lines", fmt.Sprintf("%d", opts.Lines))
+	}
+	if opts.Since != nil {
+		params.Set("since", opts.Since.Format(time.RFC3339))
+	}
+
+	var response struct {
+		Logs string `json:"logs"`
+	}
+
+	endpoint := fmt.Sprintf("/v1/deployments/%s/logs", deploymentID)
+	if params.Encode() != "" {
+		endpoint += "?" + params.Encode()
+	}
+
+	if err := c.get(ctx, endpoint, &response); err != nil {
+		return "", fmt.Errorf("failed to get logs: %w", err)
 	}
 
 	return response.Logs, nil
@@ -329,6 +389,11 @@ type ServiceStatus struct {
 	Version     string                   `json:"version"`
 	Uptime      time.Duration            `json:"uptime"`
 	LastDeploy  time.Time                `json:"last_deploy"`
+}
+
+type DeploymentWithRelease struct {
+	Deployment *types.Deployment `json:"deployment"`
+	Release    *types.Release    `json:"release,omitempty"`
 }
 
 type HealthResponse struct {

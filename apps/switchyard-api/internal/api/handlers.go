@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -85,8 +87,11 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 		v1.GET("/services/:id/releases", h.ListReleases)
 		v1.POST("/services/:id/deploy", h.auth.RequireRole(types.RoleDeveloper), h.DeployService)
 
-		// Status
+		// Status & Deployments
 		v1.GET("/services/:id/status", h.GetServiceStatus)
+		v1.GET("/services/:id/deployments", h.ListServiceDeployments)
+		v1.GET("/services/:id/deployments/latest", h.GetLatestDeployment)
+		v1.GET("/deployments/:id", h.GetDeployment)
 		v1.GET("/deployments/:id/logs", h.GetLogs)
 		v1.POST("/deployments/:id/rollback", h.auth.RequireRole(types.RoleDeveloper), h.RollbackDeployment)
 	}
@@ -613,5 +618,102 @@ func (h *Handler) RollbackDeployment(c *gin.Context) {
 		"message":            "Deployment rolled back successfully",
 		"rolled_back_to":     previousDeployment,
 		"current_deployment": deployment,
+	})
+}
+
+// GetLatestDeployment returns the most recent deployment for a service
+func (h *Handler) GetLatestDeployment(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	serviceID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Get latest deployment for this service
+	deployment, err := h.repos.Deployment.GetLatestByService(ctx, serviceID.String())
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "No deployments found for this service"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get latest deployment", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve deployment"})
+		return
+	}
+
+	// Get release info for version
+	release, err := h.repos.Release.GetByID(deployment.ReleaseID)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"deployment": deployment,
+			"release":    release,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"deployment": deployment,
+	})
+}
+
+// GetDeployment returns a specific deployment by ID
+func (h *Handler) GetDeployment(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	deploymentID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid deployment ID"})
+		return
+	}
+
+	deployment, err := h.repos.Deployment.GetByID(ctx, deploymentID.String())
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Deployment not found"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get deployment", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve deployment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, deployment)
+}
+
+// ListServiceDeployments returns all deployments for a service
+func (h *Handler) ListServiceDeployments(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	serviceID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Get all releases for this service
+	releases, err := h.repos.Release.ListByService(serviceID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list releases", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve releases"})
+		return
+	}
+
+	// Get deployments for each release
+	var allDeployments []*types.Deployment
+	for _, release := range releases {
+		deployments, err := h.repos.Deployment.ListByRelease(ctx, release.ID)
+		if err != nil {
+			h.logger.Error(ctx, "Failed to list deployments", logging.Error("db_error", err))
+			continue
+		}
+		allDeployments = append(allDeployments, deployments...)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"service_id":  serviceID,
+		"deployments": allDeployments,
+		"count":       len(allDeployments),
 	})
 }
