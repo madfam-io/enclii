@@ -25,6 +25,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/topology"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
 )
 
@@ -146,6 +147,10 @@ func main() {
 		logrus.Info("   Set ENCLII_COMPLIANCE_WEBHOOKS_ENABLED=true to enable")
 	}
 
+	// Initialize topology builder
+	topologyBuilder := topology.NewGraphBuilder(repos, k8sClient, logrus.StandardLogger())
+	logrus.Info("✓ Topology graph builder initialized")
+
 	// Setup HTTP server
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -169,6 +174,7 @@ func main() {
 		validatorInstance,
 		provenanceChecker,
 		complianceExporter,
+		topologyBuilder,
 	)
 	api.SetupRoutes(router, apiHandler)
 

@@ -25,6 +25,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/topology"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
@@ -43,6 +44,7 @@ type Handler struct {
 	validator          *validation.Validator
 	provenanceChecker  *provenance.Checker
 	complianceExporter *compliance.Exporter
+	topologyBuilder    *topology.GraphBuilder
 }
 
 func NewHandler(
@@ -58,6 +60,7 @@ func NewHandler(
 	validator *validation.Validator,
 	provenanceChecker *provenance.Checker,
 	complianceExporter *compliance.Exporter,
+	topologyBuilder *topology.GraphBuilder,
 ) *Handler {
 	return &Handler{
 		repos:              repos,
@@ -73,6 +76,7 @@ func NewHandler(
 		validator:          validator,
 		provenanceChecker:  provenanceChecker,
 		complianceExporter: complianceExporter,
+		topologyBuilder:    topologyBuilder,
 	}
 }
 
@@ -119,6 +123,12 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/deployments/:id", h.GetDeployment)
 			protected.GET("/deployments/:id/logs", h.GetLogs)
 			protected.POST("/deployments/:id/rollback", h.auth.RequireRole(types.RoleDeveloper), h.RollbackDeployment)
+
+			// Topology
+			protected.GET("/topology", h.GetTopology)
+			protected.GET("/topology/services/:id/dependencies", h.GetServiceDependencies)
+			protected.GET("/topology/services/:id/impact", h.GetServiceImpact)
+			protected.GET("/topology/path", h.FindDependencyPath)
 		}
 	}
 }
@@ -988,4 +998,85 @@ func (h *Handler) sendComplianceWebhooks(
 
 	// Log results
 	h.complianceExporter.LogExportResults(results)
+}
+
+// Topology handlers
+
+// GetTopology returns the complete service topology graph
+func (h *Handler) GetTopology(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Optional environment filter
+	environment := c.DefaultQuery("environment", "all")
+
+	h.logger.Info(ctx, "Building topology graph", logging.String("environment", environment))
+
+	graph, err := h.topologyBuilder.BuildTopology(ctx, environment)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to build topology", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to build topology graph"})
+		return
+	}
+
+	c.JSON(http.StatusOK, graph)
+}
+
+// GetServiceDependencies returns upstream and downstream dependencies for a service
+func (h *Handler) GetServiceDependencies(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+
+	h.logger.Info(ctx, "Getting service dependencies", logging.String("service_id", idStr))
+
+	deps, err := h.topologyBuilder.GetServiceDependencies(ctx, idStr)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get dependencies", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get service dependencies"})
+		return
+	}
+
+	c.JSON(http.StatusOK, deps)
+}
+
+// GetServiceImpact returns impact analysis for a service
+func (h *Handler) GetServiceImpact(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+
+	h.logger.Info(ctx, "Analyzing service impact", logging.String("service_id", idStr))
+
+	impact, err := h.topologyBuilder.AnalyzeImpact(ctx, idStr)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to analyze impact", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to analyze service impact"})
+		return
+	}
+
+	c.JSON(http.StatusOK, impact)
+}
+
+// FindDependencyPath finds a path between two services
+func (h *Handler) FindDependencyPath(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	sourceID := c.Query("source")
+	targetID := c.Query("target")
+
+	if sourceID == "" || targetID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Both source and target query parameters are required"})
+		return
+	}
+
+	h.logger.Info(ctx, "Finding dependency path",
+		logging.String("source", sourceID),
+		logging.String("target", targetID))
+
+	path, err := h.topologyBuilder.FindPath(ctx, sourceID, targetID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to find path", logging.Error("error", err))
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, path)
 }

@@ -62,7 +62,7 @@ func (r *ProjectRepository) Create(project *types.Project) error {
 func (r *ProjectRepository) GetBySlug(slug string) (*types.Project, error) {
 	project := &types.Project{}
 	query := `SELECT id, name, slug, created_at, updated_at FROM projects WHERE slug = $1`
-	
+
 	err := r.db.QueryRow(query, slug).Scan(
 		&project.ID, &project.Name, &project.Slug,
 		&project.CreatedAt, &project.UpdatedAt,
@@ -70,13 +70,13 @@ func (r *ProjectRepository) GetBySlug(slug string) (*types.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return project, nil
 }
 
 func (r *ProjectRepository) List() ([]*types.Project, error) {
 	query := `SELECT id, name, slug, created_at, updated_at FROM projects ORDER BY created_at DESC`
-	
+
 	rows, err := r.db.Query(query)
 	if err != nil {
 		return nil, err
@@ -128,7 +128,7 @@ func (r *ServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 	var buildConfigJSON []byte
 
 	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services WHERE id = $1`
-	
+
 	err := r.db.QueryRow(query, id).Scan(
 		&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
 		&buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
@@ -140,13 +140,45 @@ func (r *ServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 	if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
 	}
-	
+
 	return service, nil
+}
+
+func (r *ServiceRepository) ListAll(ctx context.Context) ([]*types.Service, error) {
+	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var services []*types.Service
+	for rows.Next() {
+		service := &types.Service{}
+		var buildConfigJSON []byte
+
+		err := rows.Scan(
+			&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
+			&buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
+		}
+
+		services = append(services, service)
+	}
+
+	return services, nil
 }
 
 func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service, error) {
 	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services WHERE project_id = $1 ORDER BY created_at DESC`
-	
+
 	rows, err := r.db.Query(query, projectID)
 	if err != nil {
 		return nil, err
@@ -157,7 +189,7 @@ func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service
 	for rows.Next() {
 		service := &types.Service{}
 		var buildConfigJSON []byte
-		
+
 		err := rows.Scan(&service.ID, &service.ProjectID, &service.Name, &service.GitRepo, &buildConfigJSON, &service.CreatedAt, &service.UpdatedAt)
 		if err != nil {
 			return nil, err
@@ -198,7 +230,7 @@ func (r *EnvironmentRepository) Create(env *types.Environment) error {
 func (r *EnvironmentRepository) GetByProjectAndName(projectID uuid.UUID, name string) (*types.Environment, error) {
 	env := &types.Environment{}
 	query := `SELECT id, project_id, name, kube_namespace, created_at, updated_at FROM environments WHERE project_id = $1 AND name = $2`
-	
+
 	err := r.db.QueryRow(query, projectID, name).Scan(
 		&env.ID, &env.ProjectID, &env.Name, &env.KubeNamespace,
 		&env.CreatedAt, &env.UpdatedAt,
@@ -206,7 +238,7 @@ func (r *EnvironmentRepository) GetByProjectAndName(projectID uuid.UUID, name st
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return env, nil
 }
 
