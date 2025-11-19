@@ -53,16 +53,18 @@ const (
 
 // Release represents a built and immutable version of a service
 type Release struct {
-	ID       uuid.UUID     `json:"id" db:"id"`
-	ServiceID uuid.UUID    `json:"service_id" db:"service_id"`
-	Version   string       `json:"version" db:"version"`
-	ImageURI  string       `json:"image_uri" db:"image_uri"`
-	GitSHA    string       `json:"git_sha" db:"git_sha"`
-	Status    ReleaseStatus `json:"status" db:"status"`
-	SBOM      string       `json:"sbom,omitempty" db:"sbom"`           // Software Bill of Materials (JSON)
-	SBOMFormat string      `json:"sbom_format,omitempty" db:"sbom_format"` // e.g., "cyclonedx-json", "spdx-json"
-	CreatedAt time.Time     `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time     `json:"updated_at" db:"updated_at"`
+	ID                  uuid.UUID     `json:"id" db:"id"`
+	ServiceID           uuid.UUID     `json:"service_id" db:"service_id"`
+	Version             string        `json:"version" db:"version"`
+	ImageURI            string        `json:"image_uri" db:"image_uri"`
+	GitSHA              string        `json:"git_sha" db:"git_sha"`
+	Status              ReleaseStatus `json:"status" db:"status"`
+	SBOM                string        `json:"sbom,omitempty" db:"sbom"`                 // Software Bill of Materials (JSON)
+	SBOMFormat          string        `json:"sbom_format,omitempty" db:"sbom_format"`   // e.g., "cyclonedx-json", "spdx-json"
+	ImageSignature      string        `json:"image_signature,omitempty" db:"image_signature"` // Cosign signature
+	SignatureVerifiedAt *time.Time    `json:"signature_verified_at,omitempty" db:"signature_verified_at"`
+	CreatedAt           time.Time     `json:"created_at" db:"created_at"`
+	UpdatedAt           time.Time     `json:"updated_at" db:"updated_at"`
 }
 
 type ReleaseStatus string

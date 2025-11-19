@@ -7,19 +7,22 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/sbom"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/signing"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
-// Service orchestrates the complete build process: clone → build → SBOM → cleanup
+// Service orchestrates the complete build process: clone → build → SBOM → sign → cleanup
 type Service struct {
 	git          *GitService
 	builder      *BuildpacksBuilder
 	sbomGen      *sbom.Generator
+	signer       *signing.Signer
 	logger       *logrus.Logger
 	workDir      string
 	registry     string
 	timeout      time.Duration
 	generateSBOM bool // Enable/disable SBOM generation
+	signImages   bool // Enable/disable image signing
 }
 
 type Config struct {
@@ -28,6 +31,7 @@ type Config struct {
 	CacheDir     string
 	Timeout      time.Duration
 	GenerateSBOM bool // Enable SBOM generation (requires Syft)
+	SignImages   bool // Enable image signing (requires Cosign)
 }
 
 func NewService(cfg *Config, logger *logrus.Logger) *Service {
@@ -36,6 +40,7 @@ func NewService(cfg *Config, logger *logrus.Logger) *Service {
 	}
 
 	sbomGenerator := sbom.NewGenerator(5 * time.Minute)
+	imageSigner := signing.NewSigner(true, 2*time.Minute) // Keyless signing by default
 
 	// Check if Syft is available (non-fatal if missing)
 	generateSBOM := cfg.GenerateSBOM
@@ -49,29 +54,45 @@ func NewService(cfg *Config, logger *logrus.Logger) *Service {
 		}
 	}
 
+	// Check if Cosign is available (non-fatal if missing)
+	signImages := cfg.SignImages
+	if signImages {
+		if err := imageSigner.ValidateCosignInstalled(); err != nil {
+			logger.Warn("Image signing disabled: Cosign not installed")
+			logger.Warnf("  %v", err)
+			signImages = false
+		} else {
+			logger.Info("✓ Image signing enabled (Cosign installed)")
+		}
+	}
+
 	return &Service{
 		git:          NewGitService(cfg.WorkDir),
 		builder:      NewBuildpacksBuilder(cfg.Registry, cfg.CacheDir, cfg.Timeout),
 		sbomGen:      sbomGenerator,
+		signer:       imageSigner,
 		logger:       logger,
 		workDir:      cfg.WorkDir,
 		registry:     cfg.Registry,
 		timeout:      cfg.Timeout,
 		generateSBOM: generateSBOM,
+		signImages:   signImages,
 	}
 }
 
 type CompleteBuildResult struct {
-	ImageURI     string
-	GitSHA       string
-	Success      bool
-	Error        error
-	Logs         []string
-	Duration     time.Duration
-	ClonePath    string
-	SBOM         *sbom.SBOM // Software Bill of Materials
-	SBOMFormat   string     // e.g., "cyclonedx-json"
-	SBOMGenerated bool      // Whether SBOM was successfully generated
+	ImageURI       string
+	GitSHA         string
+	Success        bool
+	Error          error
+	Logs           []string
+	Duration       time.Duration
+	ClonePath      string
+	SBOM           *sbom.SBOM       // Software Bill of Materials
+	SBOMFormat     string           // e.g., "cyclonedx-json"
+	SBOMGenerated  bool             // Whether SBOM was successfully generated
+	Signature      *signing.SignResult // Image signature information
+	ImageSigned    bool             // Whether image was successfully signed
 }
 
 // BuildFromGit clones a repository and builds it
@@ -142,6 +163,23 @@ func (s *Service) BuildFromGit(ctx context.Context, service *types.Service, gitS
 		}
 	}
 
+	// Step 4: Sign image (if enabled)
+	if s.signImages {
+		result.Logs = append(result.Logs, "Signing image with Cosign...")
+		signResult, err := s.signer.SignImage(buildCtx, result.ImageURI)
+
+		if err != nil {
+			// Image signing failure is non-fatal - log warning and continue
+			s.logger.Warnf("Image signing failed (non-fatal): %v", err)
+			result.Logs = append(result.Logs, fmt.Sprintf("WARNING: Image signing failed: %v", err))
+			result.ImageSigned = false
+		} else {
+			result.Signature = signResult
+			result.ImageSigned = true
+			result.Logs = append(result.Logs, fmt.Sprintf("✓ Image signed (%s)", signResult.SigningMethod))
+		}
+	}
+
 	result.Duration = time.Since(start)
 
 	result.Logs = append(result.Logs, fmt.Sprintf("Build completed successfully in %v", result.Duration))
@@ -189,6 +227,17 @@ func (s *Service) GetBuildStatus() map[string]interface{} {
 			status["sbom_error"] = err.Error()
 		} else {
 			status["sbom_available"] = true
+		}
+	}
+
+	// Check if image signing is enabled and available
+	status["signing_enabled"] = s.signImages
+	if s.signImages {
+		if err := s.signer.ValidateCosignInstalled(); err != nil {
+			status["signing_available"] = false
+			status["signing_error"] = err.Error()
+		} else {
+			status["signing_available"] = true
 		}
 	}
 

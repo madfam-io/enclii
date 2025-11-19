@@ -244,14 +244,21 @@ func (r *ReleaseRepository) UpdateSBOM(ctx context.Context, id uuid.UUID, sbom, 
 	return err
 }
 
+func (r *ReleaseRepository) UpdateSignature(ctx context.Context, id uuid.UUID, signature string) error {
+	query := `UPDATE releases SET image_signature = $1, signature_verified_at = NOW(), updated_at = NOW() WHERE id = $2`
+	_, err := r.db.ExecContext(ctx, query, signature, id)
+	return err
+}
+
 func (r *ReleaseRepository) GetByID(id uuid.UUID) (*types.Release, error) {
 	release := &types.Release{}
-	query := `SELECT id, service_id, version, image_uri, git_sha, status, sbom, sbom_format, created_at, updated_at FROM releases WHERE id = $1`
+	query := `SELECT id, service_id, version, image_uri, git_sha, status, sbom, sbom_format, image_signature, signature_verified_at, created_at, updated_at FROM releases WHERE id = $1`
 
-	var sbom, sbomFormat sql.NullString
+	var sbom, sbomFormat, imageSignature sql.NullString
+	var signatureVerifiedAt sql.NullTime
 	err := r.db.QueryRow(query, id).Scan(
 		&release.ID, &release.ServiceID, &release.Version, &release.ImageURI,
-		&release.GitSHA, &release.Status, &sbom, &sbomFormat, &release.CreatedAt, &release.UpdatedAt,
+		&release.GitSHA, &release.Status, &sbom, &sbomFormat, &imageSignature, &signatureVerifiedAt, &release.CreatedAt, &release.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -265,11 +272,19 @@ func (r *ReleaseRepository) GetByID(id uuid.UUID) (*types.Release, error) {
 		release.SBOMFormat = sbomFormat.String
 	}
 
+	// Handle nullable signature fields
+	if imageSignature.Valid {
+		release.ImageSignature = imageSignature.String
+	}
+	if signatureVerifiedAt.Valid {
+		release.SignatureVerifiedAt = &signatureVerifiedAt.Time
+	}
+
 	return release, nil
 }
 
 func (r *ReleaseRepository) ListByService(serviceID uuid.UUID) ([]*types.Release, error) {
-	query := `SELECT id, service_id, version, image_uri, git_sha, status, sbom, sbom_format, created_at, updated_at FROM releases WHERE service_id = $1 ORDER BY created_at DESC`
+	query := `SELECT id, service_id, version, image_uri, git_sha, status, sbom, sbom_format, image_signature, signature_verified_at, created_at, updated_at FROM releases WHERE service_id = $1 ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(query, serviceID)
 	if err != nil {
@@ -280,9 +295,10 @@ func (r *ReleaseRepository) ListByService(serviceID uuid.UUID) ([]*types.Release
 	var releases []*types.Release
 	for rows.Next() {
 		release := &types.Release{}
-		var sbom, sbomFormat sql.NullString
+		var sbom, sbomFormat, imageSignature sql.NullString
+		var signatureVerifiedAt sql.NullTime
 
-		err := rows.Scan(&release.ID, &release.ServiceID, &release.Version, &release.ImageURI, &release.GitSHA, &release.Status, &sbom, &sbomFormat, &release.CreatedAt, &release.UpdatedAt)
+		err := rows.Scan(&release.ID, &release.ServiceID, &release.Version, &release.ImageURI, &release.GitSHA, &release.Status, &sbom, &sbomFormat, &imageSignature, &signatureVerifiedAt, &release.CreatedAt, &release.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -293,6 +309,14 @@ func (r *ReleaseRepository) ListByService(serviceID uuid.UUID) ([]*types.Release
 		}
 		if sbomFormat.Valid {
 			release.SBOMFormat = sbomFormat.String
+		}
+
+		// Handle nullable signature fields
+		if imageSignature.Valid {
+			release.ImageSignature = imageSignature.String
+		}
+		if signatureVerifiedAt.Valid {
+			release.SignatureVerifiedAt = &signatureVerifiedAt.Time
 		}
 
 		releases = append(releases, release)

@@ -93,6 +93,7 @@ func main() {
 		CacheDir:     cfg.BuildCacheDir,
 		Timeout:      time.Duration(cfg.BuildTimeout) * time.Second,
 		GenerateSBOM: true, // Enable SBOM generation with Syft
+		SignImages:   true, // Enable image signing with Cosign
 	}, logrus.StandardLogger())
 
 	// Ensure build directories exist
