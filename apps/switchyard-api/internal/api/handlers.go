@@ -22,23 +22,25 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
 type Handler struct {
-	repos          *db.Repositories
-	config         *config.Config
-	auth           *auth.JWTManager
+	repos           *db.Repositories
+	config          *config.Config
+	auth            *auth.JWTManager
 	auditMiddleware *audit.Middleware
-	cache          cache.CacheService
-	builder        *builder.Service
-	k8sClient      *k8s.Client
-	reconciler     *reconciler.Controller
-	metrics        *monitoring.MetricsCollector
-	logger         logging.Logger
-	validator      *validation.Validator
+	cache           cache.CacheService
+	builder         *builder.Service
+	k8sClient       *k8s.Client
+	reconciler      *reconciler.Controller
+	metrics         *monitoring.MetricsCollector
+	logger          logging.Logger
+	validator       *validation.Validator
+	provenanceChecker *provenance.Checker
 }
 
 func NewHandler(
@@ -52,19 +54,21 @@ func NewHandler(
 	metrics *monitoring.MetricsCollector,
 	logger logging.Logger,
 	validator *validation.Validator,
+	provenanceChecker *provenance.Checker,
 ) *Handler {
 	return &Handler{
-		repos:           repos,
-		config:          config,
-		auth:            auth,
-		auditMiddleware: audit.NewMiddleware(repos),
-		cache:           cache,
-		builder:         builder,
-		k8sClient:       k8sClient,
-		reconciler:      reconciler,
-		metrics:         metrics,
-		logger:          logger,
-		validator:       validator,
+		repos:             repos,
+		config:            config,
+		auth:              auth,
+		auditMiddleware:   audit.NewMiddleware(repos),
+		cache:             cache,
+		builder:           builder,
+		k8sClient:         k8sClient,
+		reconciler:        reconciler,
+		metrics:           metrics,
+		logger:            logger,
+		validator:         validator,
+		provenanceChecker: provenanceChecker,
 	}
 }
 
@@ -425,14 +429,21 @@ func (h *Handler) DeployService(c *gin.Context) {
 	}
 
 	var req struct {
-		ReleaseID   string            `json:"release_id" binding:"required"`
-		Environment map[string]string `json:"environment"`
-		Replicas    int               `json:"replicas,omitempty"`
+		ReleaseID       string            `json:"release_id" binding:"required"`
+		Environment     map[string]string `json:"environment"`
+		EnvironmentName string            `json:"environment_name"` // e.g., "production", "staging", "dev"
+		Replicas        int               `json:"replicas,omitempty"`
+		ChangeTicketURL string            `json:"change_ticket_url,omitempty"` // For production deployments
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Default environment name to "development" if not specified
+	if req.EnvironmentName == "" {
+		req.EnvironmentName = "development"
 	}
 
 	// Get service details
@@ -467,6 +478,72 @@ func (h *Handler) DeployService(c *gin.Context) {
 		Status:      types.DeploymentStatusPending,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
+	}
+
+	// Check PR approvals before deployment (if provenance checker is configured)
+	if h.provenanceChecker != nil {
+		approvalResult, err := h.provenanceChecker.CheckDeploymentApproval(
+			ctx,
+			deployment,
+			release,
+			service,
+			req.EnvironmentName,
+			req.ChangeTicketURL,
+		)
+
+		if err != nil {
+			h.logger.Error(ctx, "Failed to check deployment approval", logging.Error("provenance_error", err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to verify deployment approval",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		if !approvalResult.Approved {
+			h.logger.Warn(ctx, "Deployment blocked by approval policy",
+				logging.String("environment", req.EnvironmentName),
+				logging.String("service_id", serviceID.String()),
+				logging.String("violations", approvalResult.Violations.Error()))
+
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": "Deployment does not meet approval requirements",
+				"policy_violations": approvalResult.Violations,
+				"environment": req.EnvironmentName,
+				"help": "Ensure your PR has sufficient approvals and CI checks pass before deploying to this environment",
+			})
+			return
+		}
+
+		// Store approval record for audit trail
+		if approvalResult.Receipt != nil {
+			receiptJSON, err := approvalResult.Receipt.ToJSON()
+			if err != nil {
+				h.logger.Error(ctx, "Failed to serialize compliance receipt", logging.Error("receipt_error", err))
+			}
+
+			approvalRecord := &types.ApprovalRecord{
+				DeploymentID:      uuid.MustParse(deployment.ID),
+				PRURL:             approvalResult.PRURL,
+				PRNumber:          approvalResult.PRNumber,
+				ApproverEmail:     approvalResult.ApproverEmail,
+				ApproverName:      approvalResult.ApproverName,
+				ApprovedAt:        &approvalResult.ApprovedAt,
+				CIStatus:          approvalResult.CIStatus,
+				ChangeTicketURL:   req.ChangeTicketURL,
+				ComplianceReceipt: receiptJSON,
+			}
+
+			if err := h.repos.ApprovalRecords.Create(ctx, approvalRecord); err != nil {
+				// Log error but don't block deployment - approval record is for audit only
+				h.logger.Error(ctx, "Failed to store approval record", logging.Error("db_error", err))
+			} else {
+				h.logger.Info(ctx, "Approval record stored",
+					logging.String("deployment_id", deployment.ID),
+					logging.String("pr_url", approvalResult.PRURL),
+					logging.String("approver", approvalResult.ApproverEmail))
+			}
+		}
 	}
 
 	if deployment.Replicas <= 0 {

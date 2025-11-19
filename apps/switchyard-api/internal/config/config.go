@@ -31,6 +31,9 @@ type Config struct {
 	BuildTimeout    int
 	BuildWorkDir    string // Directory for cloning repositories during builds
 	BuildCacheDir   string // Directory for buildpack layer cache
+
+	// Provenance / PR Approval
+	GitHubToken string // GitHub API token for PR verification
 }
 
 func Load() (*Config, error) {
@@ -76,6 +79,7 @@ func Load() (*Config, error) {
 		BuildTimeout:    viper.GetInt("build-timeout"),
 		BuildWorkDir:    viper.GetString("build-work-dir"),
 		BuildCacheDir:   viper.GetString("build-cache-dir"),
+		GitHubToken:     viper.GetString("github-token"),
 	}
 
 	return config, nil

@@ -22,6 +22,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
 )
@@ -110,6 +111,16 @@ func main() {
 	// Initialize validator
 	validatorInstance := validation.NewValidator()
 
+	// Initialize provenance checker (PR approval verification)
+	var provenanceChecker *provenance.Checker
+	if cfg.GitHubToken != "" {
+		provenanceChecker = provenance.NewChecker(cfg.GitHubToken, nil) // nil = use default policy
+		logrus.Info("✓ PR approval checking enabled")
+	} else {
+		logrus.Warn("⚠ GitHub token not configured - PR approval checking disabled")
+		logrus.Warn("   Set ENCLII_GITHUB_TOKEN to enable deployment approval verification")
+	}
+
 	// Setup HTTP server
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -131,6 +142,7 @@ func main() {
 		metricsCollector,
 		logger,
 		validatorInstance,
+		provenanceChecker,
 	)
 	api.SetupRoutes(router, apiHandler)
 
