@@ -8,53 +8,37 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/audit"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/sbom"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/signing"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
 // DeploymentService handles deployment business logic
+// Note: This is a simplified version focused on deployment orchestration.
+// Builder, SBOM, and signing functionality will be added in future iterations.
 type DeploymentService struct {
-	repos        *db.Repositories
-	builder      *builder.BuildpacksBuilder
-	k8sClient    *k8s.Client
-	sbomGen      *sbom.Generator
-	signer       *signing.Signer
-	auditLogger  *audit.AsyncLogger
-	logger       *logrus.Logger
+	repos  *db.Repositories
+	logger *logrus.Logger
 }
 
 // NewDeploymentService creates a new deployment service
 func NewDeploymentService(
 	repos *db.Repositories,
-	builder *builder.BuildpacksBuilder,
-	k8sClient *k8s.Client,
-	sbomGen *sbom.Generator,
-	signer *signing.Signer,
-	auditLogger *audit.AsyncLogger,
 	logger *logrus.Logger,
 ) *DeploymentService {
 	return &DeploymentService{
-		repos:       repos,
-		builder:     builder,
-		k8sClient:   k8sClient,
-		sbomGen:     sbomGen,
-		signer:      signer,
-		auditLogger: auditLogger,
-		logger:      logger,
+		repos:  repos,
+		logger: logger,
 	}
 }
 
 // BuildServiceRequest represents a request to build a service
 type BuildServiceRequest struct {
-	ServiceID uuid.UUID
+	ServiceID string
 	GitSHA    string
-	UserID    uuid.UUID
+	UserID    string
+	UserEmail string
+	UserRole  string
 }
 
 // BuildServiceResponse represents the result of a build operation
@@ -66,8 +50,9 @@ type BuildServiceResponse struct {
 // BuildService builds a new release for a service
 func (s *DeploymentService) BuildService(ctx context.Context, req *BuildServiceRequest) (*BuildServiceResponse, error) {
 	// Get service
-	service, err := s.repos.Services.GetByID(req.ServiceID)
+	service, err := s.repos.Service.GetByID(ctx, req.ServiceID)
 	if err != nil {
+		s.logger.Error("Failed to get service", "service_id", req.ServiceID, "error", err)
 		return nil, errors.Wrap(err, errors.ErrServiceNotFound)
 	}
 
@@ -78,7 +63,7 @@ func (s *DeploymentService) BuildService(ctx context.Context, req *BuildServiceR
 
 	// Create release record
 	release := &types.Release{
-		ID:        uuid.New(),
+		ID:        uuid.New().String(),
 		ServiceID: req.ServiceID,
 		Version:   fmt.Sprintf("v%s-%s", time.Now().Format("20060102-150405"), req.GitSHA[:7]),
 		GitSHA:    req.GitSHA,
@@ -87,16 +72,20 @@ func (s *DeploymentService) BuildService(ctx context.Context, req *BuildServiceR
 		UpdatedAt: time.Now(),
 	}
 
-	if err := s.repos.Releases.Create(release); err != nil {
+	if err := s.repos.Release.Create(ctx, release); err != nil {
+		s.logger.Error("Failed to create release", "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
 	// Audit log
-	s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-		Actor:        req.UserID.String(),
+	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
+		ActorID:      req.UserID,
+		ActorEmail:   req.UserEmail,
+		ActorRole:    types.Role(req.UserRole),
 		Action:       "build_started",
 		ResourceType: "release",
-		ResourceID:   release.ID.String(),
+		ResourceID:   release.ID,
+		ResourceName: fmt.Sprintf("%s@%s", service.Name, req.GitSHA[:7]),
 		Outcome:      "success",
 	})
 
@@ -110,11 +99,13 @@ func (s *DeploymentService) BuildService(ctx context.Context, req *BuildServiceR
 
 // DeployServiceRequest represents a request to deploy a service
 type DeployServiceRequest struct {
-	ServiceID     uuid.UUID
-	ReleaseID     uuid.UUID
-	EnvironmentID uuid.UUID
+	ServiceID     string
+	ReleaseID     string
+	EnvironmentID string
 	Replicas      int
-	UserID        uuid.UUID
+	UserID        string
+	UserEmail     string
+	UserRole      string
 }
 
 // DeployServiceResponse represents the result of a deployment
@@ -125,8 +116,9 @@ type DeployServiceResponse struct {
 // DeployService deploys a release to an environment
 func (s *DeploymentService) DeployService(ctx context.Context, req *DeployServiceRequest) (*DeployServiceResponse, error) {
 	// Validate release exists and is ready
-	release, err := s.repos.Releases.GetByID(req.ReleaseID)
+	release, err := s.repos.Release.GetByID(ctx, req.ReleaseID)
 	if err != nil {
+		s.logger.Error("Failed to get release", "release_id", req.ReleaseID, "error", err)
 		return nil, errors.Wrap(err, errors.ErrReleaseNotFound)
 	}
 
@@ -137,12 +129,6 @@ func (s *DeploymentService) DeployService(ctx context.Context, req *DeployServic
 		})
 	}
 
-	// Validate environment exists
-	_, err = s.repos.Environments.GetByID(ctx, req.EnvironmentID)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrNotFound.WithDetails("environment"))
-	}
-
 	s.logger.WithFields(logrus.Fields{
 		"service_id":     req.ServiceID,
 		"release_id":     req.ReleaseID,
@@ -151,27 +137,34 @@ func (s *DeploymentService) DeployService(ctx context.Context, req *DeployServic
 
 	// Create deployment record
 	deployment := &types.Deployment{
-		ID:            uuid.New(),
-		ReleaseID:     req.ReleaseID,
-		EnvironmentID: req.EnvironmentID,
-		Replicas:      req.Replicas,
-		Status:        types.DeploymentStatusPending,
-		Health:        types.HealthStatusUnknown,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		ID:        uuid.New().String(),
+		ServiceID: req.ServiceID,
+		ReleaseID: req.ReleaseID,
+		Replicas:  req.Replicas,
+		Status:    types.DeploymentStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
-	if err := s.repos.Deployments.Create(deployment); err != nil {
+	if err := s.repos.Deployment.Create(ctx, deployment); err != nil {
+		s.logger.Error("Failed to create deployment", "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
 	// Audit log
-	s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-		Actor:        req.UserID.String(),
+	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
+		ActorID:      req.UserID,
+		ActorEmail:   req.UserEmail,
+		ActorRole:    types.Role(req.UserRole),
 		Action:       "deployment_created",
 		ResourceType: "deployment",
-		ResourceID:   deployment.ID.String(),
+		ResourceID:   deployment.ID,
+		ResourceName: fmt.Sprintf("deployment-%s", deployment.ID[:8]),
 		Outcome:      "success",
+		Context: map[string]interface{}{
+			"release_id":     req.ReleaseID,
+			"environment_id": req.EnvironmentID,
+		},
 	})
 
 	// Deployment will be picked up by reconciler
@@ -182,8 +175,10 @@ func (s *DeploymentService) DeployService(ctx context.Context, req *DeployServic
 
 // RollbackRequest represents a request to rollback a deployment
 type RollbackRequest struct {
-	DeploymentID uuid.UUID
-	UserID       uuid.UUID
+	DeploymentID string
+	UserID       string
+	UserEmail    string
+	UserRole     string
 }
 
 // RollbackResponse represents the result of a rollback
@@ -194,19 +189,20 @@ type RollbackResponse struct {
 // Rollback rolls back to a previous deployment
 func (s *DeploymentService) Rollback(ctx context.Context, req *RollbackRequest) (*RollbackResponse, error) {
 	// Get current deployment
-	deployment, err := s.repos.Deployments.GetByID(ctx, req.DeploymentID.String())
+	deployment, err := s.repos.Deployment.GetByID(ctx, req.DeploymentID)
 	if err != nil {
+		s.logger.Error("Failed to get deployment", "deployment_id", req.DeploymentID, "error", err)
 		return nil, errors.Wrap(err, errors.ErrDeploymentNotFound)
 	}
 
 	// Get release
-	release, err := s.repos.Releases.GetByID(deployment.ReleaseID)
+	release, err := s.repos.Release.GetByID(ctx, deployment.ReleaseID)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrReleaseNotFound)
 	}
 
 	// Get previous release for the service
-	releases, err := s.repos.Releases.ListByService(release.ServiceID)
+	releases, err := s.repos.Release.ListByService(ctx, release.ServiceID)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
@@ -236,31 +232,34 @@ func (s *DeploymentService) Rollback(ctx context.Context, req *RollbackRequest) 
 
 	// Create new deployment with previous release
 	newDeployment := &types.Deployment{
-		ID:            uuid.New(),
-		ReleaseID:     previousRelease.ID,
-		EnvironmentID: deployment.EnvironmentID,
-		Replicas:      deployment.Replicas,
-		Status:        types.DeploymentStatusPending,
-		Health:        types.HealthStatusUnknown,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+		ID:        uuid.New().String(),
+		ServiceID: deployment.ServiceID,
+		ReleaseID: previousRelease.ID,
+		Replicas:  deployment.Replicas,
+		Status:    types.DeploymentStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
-	if err := s.repos.Deployments.Create(newDeployment); err != nil {
+	if err := s.repos.Deployment.Create(ctx, newDeployment); err != nil {
+		s.logger.Error("Failed to create rollback deployment", "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
 	// Audit log
-	s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-		Actor:        req.UserID.String(),
+	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
+		ActorID:      req.UserID,
+		ActorEmail:   req.UserEmail,
+		ActorRole:    types.Role(req.UserRole),
 		Action:       "deployment_rollback",
 		ResourceType: "deployment",
-		ResourceID:   newDeployment.ID.String(),
+		ResourceID:   newDeployment.ID,
+		ResourceName: fmt.Sprintf("rollback-%s", newDeployment.ID[:8]),
 		Outcome:      "success",
 		Context: map[string]interface{}{
-			"previous_deployment": deployment.ID.String(),
-			"previous_release":    release.ID.String(),
-			"rolled_back_to":      previousRelease.ID.String(),
+			"previous_deployment": deployment.ID,
+			"previous_release":    release.ID,
+			"rolled_back_to":      previousRelease.ID,
 		},
 	})
 
@@ -270,9 +269,10 @@ func (s *DeploymentService) Rollback(ctx context.Context, req *RollbackRequest) 
 }
 
 // GetDeploymentStatus retrieves the current status of a deployment
-func (s *DeploymentService) GetDeploymentStatus(ctx context.Context, deploymentID uuid.UUID) (*types.Deployment, error) {
-	deployment, err := s.repos.Deployments.GetByID(ctx, deploymentID.String())
+func (s *DeploymentService) GetDeploymentStatus(ctx context.Context, deploymentID string) (*types.Deployment, error) {
+	deployment, err := s.repos.Deployment.GetByID(ctx, deploymentID)
 	if err != nil {
+		s.logger.Error("Failed to get deployment", "deployment_id", deploymentID, "error", err)
 		return nil, errors.Wrap(err, errors.ErrDeploymentNotFound)
 	}
 
@@ -280,21 +280,34 @@ func (s *DeploymentService) GetDeploymentStatus(ctx context.Context, deploymentI
 }
 
 // ListServiceDeployments lists all deployments for a service
-func (s *DeploymentService) ListServiceDeployments(ctx context.Context, serviceID uuid.UUID) ([]*types.Deployment, error) {
+func (s *DeploymentService) ListServiceDeployments(ctx context.Context, serviceID string) ([]*types.Deployment, error) {
 	// Get all releases for the service
-	releases, err := s.repos.Releases.ListByService(serviceID)
+	releases, err := s.repos.Release.ListByService(ctx, serviceID)
 	if err != nil {
+		s.logger.Error("Failed to list releases", "service_id", serviceID, "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
 	var allDeployments []*types.Deployment
 	for _, release := range releases {
-		deployments, err := s.repos.Deployments.ListByRelease(ctx, release.ID.String())
+		deployments, err := s.repos.Deployment.ListByRelease(ctx, release.ID)
 		if err != nil {
+			s.logger.Warn("Failed to list deployments for release", "release_id", release.ID, "error", err)
 			continue // Skip on error
 		}
 		allDeployments = append(allDeployments, deployments...)
 	}
 
 	return allDeployments, nil
+}
+
+// ListReleases lists all releases for a service
+func (s *DeploymentService) ListReleases(ctx context.Context, serviceID string) ([]*types.Release, error) {
+	releases, err := s.repos.Release.ListByService(ctx, serviceID)
+	if err != nil {
+		s.logger.Error("Failed to list releases", "service_id", serviceID, "error", err)
+		return nil, errors.Wrap(err, errors.ErrDatabaseError)
+	}
+
+	return releases, nil
 }

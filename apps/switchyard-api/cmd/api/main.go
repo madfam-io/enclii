@@ -175,8 +175,11 @@ func main() {
 	)
 	logrus.Info("✓ ProjectService initialized")
 
-	// DeploymentService not yet integrated - will be added in future refactoring
-	var deploymentService *services.DeploymentService = nil
+	deploymentService := services.NewDeploymentService(
+		repos,
+		logrus.StandardLogger(),
+	)
+	logrus.Info("✓ DeploymentService initialized")
 
 	// Setup HTTP server
 	if cfg.Environment == "production" {
