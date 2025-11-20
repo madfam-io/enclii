@@ -81,16 +81,22 @@ func main() {
 		cacheService = nil
 	}
 
-	// Initialize authentication with session revocation support
-	authManager, err := auth.NewJWTManager(
-		15*time.Minute, // Access token duration
-		7*24*time.Hour, // Refresh token duration (7 days)
-		repos,          // Database repositories for authorization
-		cacheService,   // Cache for session revocation (can be nil)
+	// Initialize authentication manager
+	// This will create either JWTManager (local mode) or OIDCManager (OIDC mode)
+	// based on the ENCLII_AUTH_MODE configuration
+	ctx := context.Background()
+	authManager, err := auth.NewAuthManager(
+		ctx,
+		cfg,
+		repos,
+		cacheService, // Cache for session revocation (can be nil)
 	)
 	if err != nil {
 		logrus.Fatal("Failed to initialize auth manager:", err)
 	}
+
+	// Log which authentication mode is active
+	logrus.WithField("auth_mode", cfg.AuthMode).Info("✓ Authentication manager initialized")
 
 	// Initialize Kubernetes client
 	k8sClient, err := k8s.NewClient(cfg.KubeConfig, cfg.KubeContext)

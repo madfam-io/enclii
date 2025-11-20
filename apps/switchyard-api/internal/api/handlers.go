@@ -33,7 +33,7 @@ type Handler struct {
 
 	// Infrastructure
 	config             *config.Config
-	auth               *auth.JWTManager
+	auth               auth.AuthManager // Interface supporting both JWTManager and OIDCManager
 	auditMiddleware    *audit.Middleware
 	cache              cache.CacheService
 	builder            *builder.Service
@@ -52,7 +52,7 @@ type Handler struct {
 func NewHandler(
 	repos *db.Repositories,
 	config *config.Config,
-	auth *auth.JWTManager,
+	auth auth.AuthManager, // Can be JWTManager or OIDCManager
 	cache cache.CacheService,
 	builder *builder.Service,
 	k8sClient *k8s.Client,
@@ -114,15 +114,36 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	// API v1 routes
 	v1 := router.Group("/v1")
 	{
-		// Auth routes (no authentication required, but audit login/register)
-		v1.POST("/auth/register", h.auditMiddleware.AuditMiddleware(), h.Register)
-		v1.POST("/auth/login", h.auditMiddleware.AuditMiddleware(), h.Login)
-		v1.POST("/auth/refresh", h.RefreshToken)
+		// Auth routes - Different endpoints based on auth mode
+		if h.config.AuthMode == "oidc" {
+			// ===== OIDC Mode (Production with Plinto) =====
+			// Redirect to OIDC provider for login
+			v1.GET("/auth/login", h.OIDCLogin)
 
-		// Logout requires authentication and audit
+			// OAuth callback from OIDC provider
+			v1.GET("/auth/callback", h.OIDCCallback)
+
+			// Registration is handled by OIDC provider (Plinto)
+			// POST /auth/register is not available in OIDC mode
+
+		} else {
+			// ===== Local Mode (Bootstrap) =====
+			// Local user registration
+			v1.POST("/auth/register", h.auditMiddleware.AuditMiddleware(), h.Register)
+
+			// Local login with email/password
+			v1.POST("/auth/login", h.auditMiddleware.AuditMiddleware(), h.Login)
+
+			// JWKS endpoint for external services to verify our tokens
+			v1.GET("/auth/jwks", h.JWKS)
+		}
+
+		// Common auth endpoints (both modes)
+		v1.POST("/auth/refresh", h.RefreshToken)
 		v1.POST("/auth/logout", h.auth.AuthMiddleware(), h.auditMiddleware.AuditMiddleware(), h.Logout)
 
 		// Protected routes (require authentication + audit)
+		// These work the same way in both local and OIDC modes
 		protected := v1.Group("")
 		protected.Use(h.auth.AuthMiddleware())
 		protected.Use(h.auditMiddleware.AuditMiddleware())
