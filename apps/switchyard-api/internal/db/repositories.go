@@ -22,6 +22,8 @@ type Repositories struct {
 	AuditLogs         *AuditLogRepository
 	ApprovalRecords   *ApprovalRecordRepository
 	RotationAuditLogs *RotationAuditLogRepository
+	CustomDomains     *CustomDomainRepository
+	Routes            *RouteRepository
 }
 
 func NewRepositories(db *sql.DB) *Repositories {
@@ -36,6 +38,8 @@ func NewRepositories(db *sql.DB) *Repositories {
 		AuditLogs:         NewAuditLogRepository(db),
 		ApprovalRecords:   NewApprovalRecordRepository(db),
 		RotationAuditLogs: NewRotationAuditLogRepository(db),
+		CustomDomains:     NewCustomDomainRepository(db),
+		Routes:            NewRouteRepository(db),
 	}
 }
 

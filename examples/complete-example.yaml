@@ -1,0 +1,131 @@
+# Example: Complete Production Service
+# This example combines all features: volumes, custom domains, and routes
+
+apiVersion: enclii.dev/v1
+kind: Service
+metadata:
+  name: cms-backend
+  project: content-platform
+
+spec:
+  build:
+    type: dockerfile
+    dockerfile: Dockerfile.prod
+
+  runtime:
+    port: 4000
+    replicas: 3
+    healthCheck: /api/health/ready
+
+  env:
+    - name: NODE_ENV
+      value: production
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: cms-secrets
+          key: database-url
+    - name: REDIS_URL
+      valueFrom:
+        secretKeyRef:
+          name: cms-secrets
+          key: redis-url
+    - name: STORAGE_PATH
+      value: /data/media
+    - name: LOG_LEVEL
+      value: info
+    - name: MAX_UPLOAD_SIZE
+      value: 100MB
+
+  # Persistent storage for media uploads
+  volumes:
+    - name: media-storage
+      mountPath: /data/media
+      size: 100Gi
+      storageClassName: regional-pd
+      accessMode: ReadWriteOnce
+
+    - name: cache
+      mountPath: /data/cache
+      size: 20Gi
+      storageClassName: fast-ssd
+      accessMode: ReadWriteOnce
+
+---
+# Complete Setup Instructions:
+
+# 1. Deploy the service:
+#    enclii deploy --service cms-backend --env production
+
+# 2. Add custom domains:
+#    POST /v1/services/{service_id}/domains
+#    {
+#      "domain": "cms.example.com",
+#      "environment": "production",
+#      "tls_enabled": true,
+#      "tls_issuer": "letsencrypt-prod"
+#    }
+
+#    {
+#      "domain": "api.cms.example.com",
+#      "environment": "production",
+#      "tls_enabled": true,
+#      "tls_issuer": "letsencrypt-prod"
+#    }
+
+# 3. Configure routes:
+#    POST /v1/services/{service_id}/routes
+#    {
+#      "path": "/api",
+#      "path_type": "Prefix",
+#      "port": 4000,
+#      "environment": "production"
+#    }
+
+#    {
+#      "path": "/admin",
+#      "path_type": "Prefix",
+#      "port": 4000,
+#      "environment": "production"
+#    }
+
+#    {
+#      "path": "/media",
+#      "path_type": "Prefix",
+#      "port": 4000,
+#      "environment": "production"
+#    }
+
+# 4. Configure DNS:
+#    cms.example.com     -> CNAME -> ingress.cluster.enclii.io
+#    api.cms.example.com -> CNAME -> ingress.cluster.enclii.io
+
+# 5. Verify TLS certificates:
+#    curl https://cms.example.com/api/health/ready
+#    # Should return 200 with valid HTTPS
+
+# Production Deployment Result:
+# - PersistentVolumeClaims created:
+#   - cms-backend-media-storage (100Gi, regional-pd)
+#   - cms-backend-cache (20Gi, fast-ssd)
+
+# - Kubernetes Deployment:
+#   - 3 replicas with rolling update strategy
+#   - Health probes on /api/health/ready
+#   - Resource limits configured
+
+# - Ingress with TLS:
+#   - https://cms.example.com/api/*     -> cms-backend:4000
+#   - https://cms.example.com/admin/*   -> cms-backend:4000
+#   - https://cms.example.com/media/*   -> cms-backend:4000
+#   - https://api.cms.example.com/api/* -> cms-backend:4000
+
+# - Certificates:
+#   - Let's Encrypt certificates auto-renewed every 90 days
+#   - Stored in secrets: cms-backend-cms-example-com-tls
+
+# Monitoring & Observability:
+# - Metrics: Prometheus scrapes /metrics endpoint
+# - Logs: Stream with `enclii logs cms-backend -f`
+# - Tracing: OpenTelemetry + Jaeger integration
+# - Audit: All deployments logged with PR approval evidence

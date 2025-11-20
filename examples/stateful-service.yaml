@@ -1,0 +1,58 @@
+# Example: Stateful Service with Persistent Volumes
+# This example shows how to deploy a service that requires persistent storage
+
+apiVersion: enclii.dev/v1
+kind: Service
+metadata:
+  name: file-processor
+  project: data-pipeline
+
+spec:
+  build:
+    type: dockerfile
+    dockerfile: Dockerfile
+
+  runtime:
+    port: 8080
+    replicas: 2
+    healthCheck: /health
+
+  env:
+    - name: STORAGE_PATH
+      value: /data/uploads
+    - name: CACHE_DIR
+      value: /data/cache
+    - name: LOG_LEVEL
+      value: info
+
+  # Persistent volumes for stateful data
+  volumes:
+    - name: uploads
+      mountPath: /data/uploads
+      size: 50Gi
+      storageClassName: standard
+      accessMode: ReadWriteOnce
+
+    - name: cache
+      mountPath: /data/cache
+      size: 10Gi
+      storageClassName: fast-ssd
+      accessMode: ReadWriteOnce
+
+---
+# How this works:
+# 1. Enclii creates PersistentVolumeClaims for each volume
+# 2. PVCs are named: {service}-{volume-name} (e.g., file-processor-uploads)
+# 3. Volumes are mounted at the specified paths in the container
+# 4. Data persists across pod restarts and deployments
+# 5. On service deletion, PVCs are automatically cleaned up
+
+# Storage Classes:
+# - standard: HDD-based persistent disks (default)
+# - fast-ssd: SSD-based persistent disks (higher IOPS)
+# - regional-pd: Regional persistent disks (multi-zone replication)
+
+# Access Modes:
+# - ReadWriteOnce (RWO): Single node can mount as read-write (default)
+# - ReadOnlyMany (ROX): Multiple nodes can mount as read-only
+# - ReadWriteMany (RWX): Multiple nodes can mount as read-write

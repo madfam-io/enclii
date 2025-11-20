@@ -1,0 +1,76 @@
+# Example: Service with Multiple Routes and Path-Based Routing
+# This example shows how to configure complex routing with custom paths
+
+apiVersion: enclii.dev/v1
+kind: Service
+metadata:
+  name: web-app
+  project: frontend
+
+spec:
+  build:
+    type: auto
+
+  runtime:
+    port: 8080
+    replicas: 2
+    healthCheck: /health
+
+  env:
+    - name: APP_NAME
+      value: web-app
+    - name: ENABLE_API_DOCS
+      value: "true"
+
+  # Routes configuration (managed via API)
+  # POST /v1/services/{service_id}/routes
+  # {
+  #   "path": "/api/v1",
+  #   "path_type": "Prefix",
+  #   "port": 8080,
+  #   "environment": "production"
+  # }
+
+---
+# Multi-Route Setup:
+
+# This service can be accessed via multiple custom domains with different paths:
+
+# 1. Add custom domains:
+#    POST /v1/services/{service_id}/domains
+#    - app.example.com (primary domain)
+#    - api.example.com (API-specific domain)
+
+# 2. Configure routes for path-based routing:
+#    POST /v1/services/{service_id}/routes
+#    Routes:
+#      - path: /api/v1
+#        path_type: Prefix
+#        port: 8080
+#        environment: production
+
+#      - path: /api/v2
+#        path_type: Prefix
+#        port: 8080
+#        environment: production
+
+#      - path: /docs
+#        path_type: Exact
+#        port: 8080
+#        environment: production
+
+# 3. Resulting Ingress configuration:
+#    https://app.example.com/api/v1/* -> web-app:8080
+#    https://app.example.com/api/v2/* -> web-app:8080
+#    https://app.example.com/docs     -> web-app:8080
+
+# Path Types:
+# - Prefix: Matches path prefix (e.g., /api/v1 matches /api/v1/users)
+# - Exact: Matches exact path only (e.g., /docs matches /docs but not /docs/index)
+# - ImplementationSpecific: Depends on Ingress controller implementation
+
+# Advanced Use Cases:
+# - Microservices: Different paths route to different services
+# - Versioning: /api/v1 and /api/v2 route to different versions
+# - Static assets: /static routes to CDN, /api routes to backend
+# - A/B testing: Different paths for feature flags

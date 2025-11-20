@@ -1,0 +1,65 @@
+# Example: Service with Custom Domain and TLS
+# This example shows how to configure custom domains with automatic HTTPS
+
+apiVersion: enclii.dev/v1
+kind: Service
+metadata:
+  name: api-gateway
+  project: production-api
+
+spec:
+  build:
+    type: buildpack
+    buildpack: paketo-buildpacks/nodejs
+
+  runtime:
+    port: 3000
+    replicas: 3
+    healthCheck: /api/health
+
+  env:
+    - name: NODE_ENV
+      value: production
+    - name: API_VERSION
+      value: v2
+
+  # Custom domains configuration (managed via API)
+  # To add a custom domain:
+  # POST /v1/services/{service_id}/domains
+  # {
+  #   "domain": "api.example.com",
+  #   "environment": "production",
+  #   "tls_enabled": true,
+  #   "tls_issuer": "letsencrypt-prod"
+  # }
+
+---
+# Custom Domain Setup Guide:
+
+# 1. Add the custom domain via API or CLI:
+#    enclii domains add --service api-gateway --domain api.example.com --env production
+
+# 2. Configure DNS:
+#    Create an A or CNAME record pointing to your cluster's ingress IP
+#    A Record:    api.example.com -> 203.0.113.45
+#    CNAME Record: api.example.com -> ingress.cluster.enclii.io
+
+# 3. Verify domain ownership (optional):
+#    Add TXT record: api.example.com -> enclii-verification={domain_id}
+#    enclii domains verify --domain-id {domain_id}
+
+# 4. cert-manager automatically provisions Let's Encrypt TLS certificate
+#    Certificate is stored in Kubernetes Secret: api-gateway-api-example-com-tls
+
+# 5. Ingress is automatically created with TLS termination:
+#    https://api.example.com -> api-gateway service (port 80 -> 3000)
+
+# TLS Issuers:
+# - letsencrypt-staging: For testing (generates untrusted certs)
+# - letsencrypt-prod: For production (generates trusted certs, rate limited)
+# - selfsigned-issuer: For development (self-signed certs)
+
+# Environment-specific defaults:
+# - production: letsencrypt-prod
+# - staging: letsencrypt-staging
+# - dev/preview: selfsigned-issuer
