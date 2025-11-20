@@ -1,0 +1,207 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'apps/switchyard-api/**'
+      - 'packages/sdk-go/**'
+      - 'infra/k8s/**'
+      - 'tests/integration/**'
+      - '.github/workflows/integration-tests.yml'
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run (all, pvc, volumes, domains, routes)'
+        required: false
+        default: 'all'
+
+env:
+  GO_VERSION: '1.21'
+  KIND_VERSION: 'v0.20.0'
+  KUBERNETES_VERSION: 'v1.28.0'
+
+jobs:
+  integration-tests:
+    name: Run Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install Kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/${{ env.KIND_VERSION }}/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Create Kind cluster
+        run: |
+          cat <<EOF | kind create cluster --config=-
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          name: enclii-test
+          nodes:
+            - role: control-plane
+              image: kindest/node:${{ env.KUBERNETES_VERSION }}
+              kubeadmConfigPatches:
+                - |
+                  kind: InitConfiguration
+                  nodeRegistration:
+                    kubeletExtraArgs:
+                      node-labels: "ingress-ready=true"
+              extraPortMappings:
+                - containerPort: 80
+                  hostPort: 80
+                  protocol: TCP
+                - containerPort: 443
+                  hostPort: 443
+                  protocol: TCP
+          EOF
+
+      - name: Install cert-manager
+        run: |
+          kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.2/cert-manager.yaml
+          echo "Waiting for cert-manager to be ready..."
+          kubectl wait --for=condition=Available --timeout=300s \
+            deployment/cert-manager \
+            deployment/cert-manager-webhook \
+            deployment/cert-manager-cainjector \
+            -n cert-manager
+
+      - name: Install nginx-ingress-controller
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+          echo "Waiting for ingress-nginx to be ready..."
+          kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=300s
+
+      - name: Install ClusterIssuers
+        run: |
+          kubectl apply -f infra/k8s/base/cert-manager.yaml
+          echo "Waiting for ClusterIssuers to be ready..."
+          sleep 10
+          kubectl get clusterissuer
+
+      - name: Install PostgreSQL and Redis
+        run: |
+          kubectl apply -f infra/k8s/base/postgres.yaml
+          kubectl apply -f infra/k8s/base/redis.yaml
+          echo "Waiting for PostgreSQL and Redis to be ready..."
+          kubectl wait --for=condition=ready pod -l app=postgres --timeout=300s
+          kubectl wait --for=condition=ready pod -l app=redis --timeout=300s
+
+      - name: Download Go dependencies
+        working-directory: tests/integration
+        run: |
+          go mod download
+          go mod tidy
+
+      - name: Run PVC Persistence Tests
+        if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'pvc' || github.event.inputs.test_suite == '' }}
+        working-directory: tests/integration
+        run: |
+          go test -v -timeout 30m -run "^Test.*Persistence" ./pvc_persistence_test.go ./helpers.go
+        env:
+          KUBECONFIG: /home/runner/.kube/config
+
+      - name: Run Service Volume Tests
+        if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'volumes' || github.event.inputs.test_suite == '' }}
+        working-directory: tests/integration
+        run: |
+          go test -v -timeout 30m -run "^TestService.*Volume" ./service_volumes_test.go ./helpers.go
+        env:
+          KUBECONFIG: /home/runner/.kube/config
+
+      - name: Run Custom Domain Tests
+        if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'domains' || github.event.inputs.test_suite == '' }}
+        working-directory: tests/integration
+        run: |
+          go test -v -timeout 30m -run "^Test.*Domain|^Test.*TLS|^Test.*Ingress|^Test.*HTTPS" ./custom_domain_test.go ./helpers.go
+        env:
+          KUBECONFIG: /home/runner/.kube/config
+
+      - name: Run Route Tests
+        if: ${{ github.event.inputs.test_suite == 'all' || github.event.inputs.test_suite == 'routes' || github.event.inputs.test_suite == '' }}
+        working-directory: tests/integration
+        run: |
+          go test -v -timeout 30m -run "^Test.*Route|^Test.*Path" ./routes_test.go ./helpers.go
+        env:
+          KUBECONFIG: /home/runner/.kube/config
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Cluster Info ==="
+          kubectl cluster-info dump --output-directory=/tmp/cluster-dump --namespaces=default,cert-manager,ingress-nginx
+
+          echo "=== PostgreSQL Logs ==="
+          kubectl logs -l app=postgres --tail=100 || true
+
+          echo "=== Redis Logs ==="
+          kubectl logs -l app=redis --tail=100 || true
+
+          echo "=== cert-manager Logs ==="
+          kubectl logs -n cert-manager -l app=cert-manager --tail=100 || true
+
+          echo "=== nginx-ingress Logs ==="
+          kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller --tail=100 || true
+
+          echo "=== Test Namespaces ==="
+          kubectl get namespaces -l test=integration || true
+
+          echo "=== All Pods ==="
+          kubectl get pods --all-namespaces || true
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: integration-test-logs
+          path: |
+            /tmp/enclii-test-*.log
+            /tmp/cluster-dump/
+          retention-days: 7
+
+      - name: Clean up test namespaces
+        if: always()
+        run: |
+          # Delete all test namespaces
+          kubectl delete namespaces -l test=integration --timeout=60s || true
+
+      - name: Delete Kind cluster
+        if: always()
+        run: |
+          kind delete cluster --name enclii-test
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.integration-tests.result }}" == "success" ]; then
+            echo "✅ All integration tests passed!"
+            exit 0
+          else
+            echo "❌ Integration tests failed or were cancelled"
+            exit 1
+          fi
