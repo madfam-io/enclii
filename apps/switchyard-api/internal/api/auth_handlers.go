@@ -149,7 +149,7 @@ func (h *Handler) Login(c *gin.Context) {
 	})
 }
 
-// Logout handles user logout by revoking the refresh token
+// Logout handles user logout by revoking the session
 func (h *Handler) Logout(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -160,20 +160,38 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	userEmail, _ := c.Get("email")
+	userEmail, _ := c.Get("user_email")
 
-	// TODO: Implement session revocation
-	// For now, we'll just log the logout event
-	// In a full implementation, we would:
-	// 1. Get refresh token from request
-	// 2. Mark session as revoked in database
-	// 3. Optionally add token to a blacklist/cache
+	// Extract token from Authorization header
+	authHeader := c.GetHeader("Authorization")
+	if authHeader == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Authorization header required"})
+		return
+	}
+
+	// Parse Bearer token
+	tokenString := ""
+	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenString = authHeader[7:]
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid authorization header format"})
+		return
+	}
+
+	// Revoke the session (invalidates both access and refresh tokens with same session ID)
+	if err := h.auth.RevokeSessionFromToken(ctx, tokenString); err != nil {
+		h.logger.Warn(ctx, "Failed to revoke session during logout",
+			"error", err,
+			"user_id", userID)
+		// Continue with logout even if revocation fails
+		// The token will still expire naturally
+	}
 
 	// Log logout event
 	h.repos.AuditLogs.Log(ctx, &types.AuditLog{
 		ActorID:      userID.(string),
 		ActorEmail:   userEmail.(string),
-		ActorRole:    types.Role(c.GetString("role")),
+		ActorRole:    types.Role(c.GetString("user_role")),
 		Action:       "logout",
 		ResourceType: "user",
 		ResourceID:   userID.(string),
@@ -181,6 +199,9 @@ func (h *Handler) Logout(c *gin.Context) {
 		IPAddress:    c.ClientIP(),
 		UserAgent:    c.Request.UserAgent(),
 		Outcome:      "success",
+		Context: map[string]interface{}{
+			"session_revoked": true,
+		},
 	})
 
 	c.JSON(http.StatusOK, gin.H{
@@ -196,73 +217,18 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	// Verify refresh token
-	claims, err := h.auth.VerifyToken(req.RefreshToken)
+	// Refresh token (validates token, checks revocation, and generates new token pair)
+	tokenPair, err := h.auth.RefreshToken(req.RefreshToken)
 	if err != nil {
+		h.logger.Warn(c.Request.Context(), "Token refresh failed",
+			"error", err,
+			"client_ip", c.ClientIP())
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired refresh token"})
 		return
 	}
 
-	// Check if token type is refresh
-	if claims.TokenType != "refresh" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token type"})
-		return
-	}
-
-	// TODO: Check if session is revoked in database
-
-	// Get user to verify they still exist and are active
-	user, err := h.repos.Users.GetByID(ctx, claims.UserID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
-			return
-		}
-		h.logger.Error(ctx, "Failed to get user by ID",
-			"error", err,
-			"user_id", claims.UserID)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
-	}
-
-	if !user.Active {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Account is disabled"})
-		return
-	}
-
-	// Generate new token pair
-	tokenPair, err := h.auth.GenerateTokenPair(&auth.User{
-		ID:         user.ID,
-		Email:      user.Email,
-		Name:       user.Name,
-		Role:       claims.Role,
-		ProjectIDs: claims.ProjectIDs,
-		CreatedAt:  user.CreatedAt,
-		Active:     user.Active,
-	})
-	if err != nil {
-		h.logger.Error(ctx, "Failed to generate token pair",
-			"error", err,
-			"user_id", user.ID)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate tokens"})
-		return
-	}
-
-	// Log token refresh
-	h.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      user.ID,
-		ActorEmail:   user.Email,
-		ActorRole:    types.Role(claims.Role),
-		Action:       "token_refresh",
-		ResourceType: "user",
-		ResourceID:   user.ID.String(),
-		ResourceName: user.Email,
-		IPAddress:    c.ClientIP(),
-		UserAgent:    c.Request.UserAgent(),
-		Outcome:      "success",
-	})
+	// Note: RefreshToken creates a NEW session ID, which invalidates the old session
+	// This provides automatic session rotation for security
 
 	c.JSON(http.StatusOK, RefreshResponse{
 		AccessToken: tokenPair.AccessToken,

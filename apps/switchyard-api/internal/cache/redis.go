@@ -79,7 +79,8 @@ const (
 	UserCacheKey          = "user:%s"
 	ProjectServicesCacheKey = "project:%s:services"
 	ServiceReleasesCacheKey = "service:%s:releases"
-	
+	SessionRevokedKey       = "session:revoked:%s" // For JWT session revocation
+
 	// Cache tags for invalidation
 	ProjectTag     = "project"
 	ServiceTag     = "service"
@@ -329,6 +330,41 @@ func (r *RedisCache) GetOrSet(ctx context.Context, key string, ttl time.Duration
 	}
 	
 	return data, nil
+}
+
+// SessionRevoker implementation for JWT session revocation
+// RevokeSession marks a session as revoked in Redis with the specified TTL.
+// The TTL should match the longest-lived token duration (typically refresh token duration).
+func (r *RedisCache) RevokeSession(ctx context.Context, sessionID string, ttl time.Duration) error {
+	key := fmt.Sprintf(SessionRevokedKey, sessionID)
+
+	// Set a marker in Redis with TTL matching token expiration
+	// Value doesn't matter, just the existence of the key
+	err := r.client.Set(ctx, key, "revoked", ttl).Err()
+	if err != nil {
+		return fmt.Errorf("failed to revoke session in Redis: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"session_id": sessionID,
+		"ttl":        ttl.String(),
+	}).Info("Session revoked in cache")
+
+	return nil
+}
+
+// IsSessionRevoked checks if a session has been revoked.
+// Returns true if the session is revoked, false otherwise.
+func (r *RedisCache) IsSessionRevoked(ctx context.Context, sessionID string) (bool, error) {
+	key := fmt.Sprintf(SessionRevokedKey, sessionID)
+
+	// Check if the key exists in Redis
+	exists, err := r.client.Exists(ctx, key).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check session revocation: %w", err)
+	}
+
+	return exists > 0, nil
 }
 
 // Close connection
