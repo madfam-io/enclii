@@ -8,6 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,9 +25,11 @@ type ServiceReconciler struct {
 }
 
 type ReconcileRequest struct {
-	Service    *types.Service
-	Release    *types.Release
-	Deployment *types.Deployment
+	Service       *types.Service
+	Release       *types.Release
+	Deployment    *types.Deployment
+	CustomDomains []types.CustomDomain
+	Routes        []types.Route
 }
 
 type ReconcileResult struct {
@@ -64,6 +67,28 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req *ReconcileRequest
 		}
 	}
 
+	// Create PVCs if volumes are specified
+	if len(req.Service.Volumes) > 0 {
+		pvcs, err := r.generatePVCs(req, namespace)
+		if err != nil {
+			return &ReconcileResult{
+				Success: false,
+				Message: "Failed to generate PVCs",
+				Error:   err,
+			}
+		}
+
+		for _, pvc := range pvcs {
+			if err := r.applyPVC(ctx, pvc); err != nil {
+				return &ReconcileResult{
+					Success: false,
+					Message: fmt.Sprintf("Failed to apply PVC %s", pvc.Name),
+					Error:   err,
+				}
+			}
+		}
+	}
+
 	// Generate Kubernetes manifests
 	deployment, service, err := r.generateManifests(req, namespace)
 	if err != nil {
@@ -92,6 +117,33 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req *ReconcileRequest
 		}
 	}
 
+	// Apply Ingress if custom domains are configured
+	k8sObjects := []string{
+		fmt.Sprintf("deployment/%s", deployment.Name),
+		fmt.Sprintf("service/%s", service.Name),
+	}
+
+	if len(req.CustomDomains) > 0 {
+		ingress, err := r.generateIngress(req, namespace)
+		if err != nil {
+			return &ReconcileResult{
+				Success: false,
+				Message: "Failed to generate ingress",
+				Error:   err,
+			}
+		}
+
+		if err := r.applyIngress(ctx, ingress); err != nil {
+			return &ReconcileResult{
+				Success: false,
+				Message: "Failed to apply ingress",
+				Error:   err,
+			}
+		}
+
+		k8sObjects = append(k8sObjects, fmt.Sprintf("ingress/%s", ingress.Name))
+	}
+
 	// Wait for deployment to be ready
 	ready, err := r.waitForDeploymentReady(ctx, deployment.Namespace, deployment.Name, 5*time.Minute)
 	if err != nil {
@@ -114,12 +166,9 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req *ReconcileRequest
 	logger.Info("Service reconciliation completed successfully")
 
 	return &ReconcileResult{
-		Success: true,
-		Message: "Service deployed successfully",
-		K8sObjects: []string{
-			fmt.Sprintf("deployment/%s", deployment.Name),
-			fmt.Sprintf("service/%s", service.Name),
-		},
+		Success:    true,
+		Message:    "Service deployed successfully",
+		K8sObjects: k8sObjects,
 	}
 }
 
@@ -248,8 +297,10 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 								PeriodSeconds:       5,
 								FailureThreshold:    2,
 							},
+							VolumeMounts: buildVolumeMounts(req.Service.Volumes),
 						},
 					},
+					Volumes:                       buildVolumes(req.Service.Volumes, req.Service.Name),
 					RestartPolicy:                 corev1.RestartPolicyAlways,
 					TerminationGracePeriodSeconds: &[]int64{30}[0],
 				},
@@ -413,6 +464,25 @@ func (r *ServiceReconciler) Delete(ctx context.Context, namespace, serviceName s
 		return fmt.Errorf("failed to delete service: %w", err)
 	}
 
+	// Delete PVCs associated with this service
+	pvcClient := r.k8sClient.Clientset.CoreV1().PersistentVolumeClaims(namespace)
+	listOptions := metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("enclii.dev/service=%s", serviceName),
+	}
+	pvcList, err := pvcClient.List(ctx, listOptions)
+	if err != nil && !errors.IsNotFound(err) {
+		r.logger.WithError(err).Warn("Failed to list PVCs for deletion")
+	} else if pvcList != nil {
+		for _, pvc := range pvcList.Items {
+			err = pvcClient.Delete(ctx, pvc.Name, metav1.DeleteOptions{})
+			if err != nil && !errors.IsNotFound(err) {
+				r.logger.WithFields(logrus.Fields{
+					"pvc": pvc.Name,
+				}).WithError(err).Warn("Failed to delete PVC")
+			}
+		}
+	}
+
 	r.logger.WithFields(logrus.Fields{
 		"namespace": namespace,
 		"service":   serviceName,
@@ -424,4 +494,291 @@ func (r *ServiceReconciler) Delete(ctx context.Context, namespace, serviceName s
 // Helper function to parse Kubernetes resource quantities
 func mustParseQuantity(s string) resource.Quantity {
 	return resource.MustParse(s)
+}
+
+// generatePVCs creates PersistentVolumeClaim manifests for service volumes
+func (r *ServiceReconciler) generatePVCs(req *ReconcileRequest, namespace string) ([]*corev1.PersistentVolumeClaim, error) {
+	var pvcs []*corev1.PersistentVolumeClaim
+
+	labels := map[string]string{
+		"app":                   req.Service.Name,
+		"enclii.dev/service":    req.Service.Name,
+		"enclii.dev/project":    req.Service.ProjectID.String(),
+		"enclii.dev/managed-by": "switchyard",
+	}
+
+	for _, vol := range req.Service.Volumes {
+		// Default values
+		storageClassName := vol.StorageClassName
+		if storageClassName == "" {
+			storageClassName = "standard"
+		}
+
+		accessMode := corev1.PersistentVolumeAccessMode(vol.AccessMode)
+		if accessMode == "" {
+			accessMode = corev1.ReadWriteOnce
+		}
+
+		// Parse storage size
+		storageSize, err := resource.ParseQuantity(vol.Size)
+		if err != nil {
+			return nil, fmt.Errorf("invalid storage size %s for volume %s: %w", vol.Size, vol.Name, err)
+		}
+
+		pvcName := fmt.Sprintf("%s-%s", req.Service.Name, vol.Name)
+
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pvcName,
+				Namespace: namespace,
+				Labels:    labels,
+				Annotations: map[string]string{
+					"enclii.dev/volume-name": vol.Name,
+					"enclii.dev/mount-path":  vol.MountPath,
+				},
+			},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{accessMode},
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: storageSize,
+					},
+				},
+				StorageClassName: &storageClassName,
+			},
+		}
+
+		pvcs = append(pvcs, pvc)
+	}
+
+	return pvcs, nil
+}
+
+// applyPVC creates or updates a PersistentVolumeClaim
+func (r *ServiceReconciler) applyPVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim) error {
+	pvcClient := r.k8sClient.Clientset.CoreV1().PersistentVolumeClaims(pvc.Namespace)
+
+	// Try to get existing PVC
+	existing, err := pvcClient.Get(ctx, pvc.Name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create new PVC
+			_, err = pvcClient.Create(ctx, pvc, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create PVC: %w", err)
+			}
+			r.logger.WithField("pvc", pvc.Name).Info("Created new PVC")
+			return nil
+		}
+		return fmt.Errorf("failed to get PVC: %w", err)
+	}
+
+	// PVC exists - PVCs are mostly immutable, only labels/annotations can be updated
+	existing.Labels = pvc.Labels
+	existing.Annotations = pvc.Annotations
+
+	_, err = pvcClient.Update(ctx, existing, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update PVC: %w", err)
+	}
+
+	r.logger.WithField("pvc", pvc.Name).Info("Updated existing PVC")
+	return nil
+}
+
+// buildVolumeMounts creates volumeMounts for the container
+func buildVolumeMounts(volumes []types.Volume) []corev1.VolumeMount {
+	if len(volumes) == 0 {
+		return nil
+	}
+
+	var volumeMounts []corev1.VolumeMount
+	for _, vol := range volumes {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      vol.Name,
+			MountPath: vol.MountPath,
+		})
+	}
+	return volumeMounts
+}
+
+// buildVolumes creates volume references for the pod spec
+func buildVolumes(volumes []types.Volume, serviceName string) []corev1.Volume {
+	if len(volumes) == 0 {
+		return nil
+	}
+
+	var podVolumes []corev1.Volume
+	for _, vol := range volumes {
+		pvcName := fmt.Sprintf("%s-%s", serviceName, vol.Name)
+		podVolumes = append(podVolumes, corev1.Volume{
+			Name: vol.Name,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+				},
+			},
+		})
+	}
+	return podVolumes
+}
+// generateIngress creates an Ingress manifest for custom domains
+func (r *ServiceReconciler) generateIngress(req *ReconcileRequest, namespace string) (*networkingv1.Ingress, error) {
+	labels := map[string]string{
+		"app":                   req.Service.Name,
+		"enclii.dev/service":    req.Service.Name,
+		"enclii.dev/project":    req.Service.ProjectID.String(),
+		"enclii.dev/managed-by": "switchyard",
+	}
+
+	// Build ingress rules
+	var rules []networkingv1.IngressRule
+	var tlsConfigs []networkingv1.IngressTLS
+
+	pathType := networkingv1.PathTypePrefix
+
+	for _, domain := range req.CustomDomains {
+		// Default path if no routes specified
+		paths := []networkingv1.HTTPIngressPath{
+			{
+				Path:     "/",
+				PathType: &pathType,
+				Backend: networkingv1.IngressBackend{
+					Service: &networkingv1.IngressServiceBackend{
+						Name: req.Service.Name,
+						Port: networkingv1.ServiceBackendPort{
+							Number: 80,
+						},
+					},
+				},
+			},
+		}
+
+		// Override with custom routes if specified
+		if len(req.Routes) > 0 {
+			paths = []networkingv1.HTTPIngressPath{}
+			for _, route := range req.Routes {
+				routePathType := networkingv1.PathTypePrefix
+				if route.PathType == "Exact" {
+					routePathType = networkingv1.PathTypeExact
+				} else if route.PathType == "ImplementationSpecific" {
+					routePathType = networkingv1.PathTypeImplementationSpecific
+				}
+
+				paths = append(paths, networkingv1.HTTPIngressPath{
+					Path:     route.Path,
+					PathType: &routePathType,
+					Backend: networkingv1.IngressBackend{
+						Service: &networkingv1.IngressServiceBackend{
+							Name: req.Service.Name,
+							Port: networkingv1.ServiceBackendPort{
+								Number: int32(route.Port),
+							},
+						},
+					},
+				})
+			}
+		}
+
+		rules = append(rules, networkingv1.IngressRule{
+			Host: domain.Domain,
+			IngressRuleValue: networkingv1.IngressRuleValue{
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: paths,
+				},
+			},
+		})
+
+		// Add TLS configuration if enabled
+		if domain.TLSEnabled {
+			tlsIssuer := domain.TLSIssuer
+			if tlsIssuer == "" {
+				tlsIssuer = "letsencrypt-prod"
+			}
+
+			tlsConfigs = append(tlsConfigs, networkingv1.IngressTLS{
+				Hosts:      []string{domain.Domain},
+				SecretName: fmt.Sprintf("%s-%s-tls", req.Service.Name, sanitizeDomainForSecret(domain.Domain)),
+			})
+		}
+	}
+
+	// Determine cert-manager issuer
+	tlsIssuer := "letsencrypt-prod"
+	if len(req.CustomDomains) > 0 && req.CustomDomains[0].TLSIssuer != "" {
+		tlsIssuer = req.CustomDomains[0].TLSIssuer
+	}
+
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      req.Service.Name,
+			Namespace: namespace,
+			Labels:    labels,
+			Annotations: map[string]string{
+				"kubernetes.io/ingress.class":                 "nginx",
+				"cert-manager.io/cluster-issuer":              tlsIssuer,
+				"nginx.ingress.kubernetes.io/ssl-redirect":    "true",
+				"nginx.ingress.kubernetes.io/force-ssl-redirect": "true",
+			},
+		},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: stringPtr("nginx"),
+			TLS:              tlsConfigs,
+			Rules:            rules,
+		},
+	}
+
+	return ingress, nil
+}
+
+// applyIngress creates or updates an Ingress
+func (r *ServiceReconciler) applyIngress(ctx context.Context, ingress *networkingv1.Ingress) error {
+	ingressClient := r.k8sClient.Clientset.NetworkingV1().Ingresses(ingress.Namespace)
+
+	// Try to get existing ingress
+	existing, err := ingressClient.Get(ctx, ingress.Name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create new ingress
+			_, err = ingressClient.Create(ctx, ingress, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create ingress: %w", err)
+			}
+			r.logger.WithField("ingress", ingress.Name).Info("Created new ingress")
+			return nil
+		}
+		return fmt.Errorf("failed to get ingress: %w", err)
+	}
+
+	// Update existing ingress
+	existing.Labels = ingress.Labels
+	existing.Annotations = ingress.Annotations
+	existing.Spec = ingress.Spec
+
+	_, err = ingressClient.Update(ctx, existing, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update ingress: %w", err)
+	}
+
+	r.logger.WithField("ingress", ingress.Name).Info("Updated existing ingress")
+	return nil
+}
+
+// sanitizeDomainForSecret converts a domain name to a valid Kubernetes secret name
+func sanitizeDomainForSecret(domain string) string {
+	// Replace dots with dashes for valid secret name
+	result := ""
+	for _, char := range domain {
+		if char == '.' {
+			result += "-"
+		} else {
+			result += string(char)
+		}
+	}
+	return result
+}
+
+// stringPtr returns a pointer to the given string
+func stringPtr(s string) *string {
+	return &s
 }
