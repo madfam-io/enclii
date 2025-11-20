@@ -1,0 +1,151 @@
+package db
+
+import (
+	"context"
+
+	"github.com/google/uuid"
+	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+)
+
+// Repository interfaces define standard CRUD operations for each entity
+
+// ProjectRepositoryInterface defines operations for projects
+type ProjectRepositoryInterface interface {
+	Create(project *types.Project) error
+	GetByID(ctx context.Context, id uuid.UUID) (*types.Project, error)
+	GetBySlug(slug string) (*types.Project, error)
+	List() ([]*types.Project, error)
+}
+
+// EnvironmentRepositoryInterface defines operations for environments
+type EnvironmentRepositoryInterface interface {
+	Create(env *types.Environment) error
+	GetByID(ctx context.Context, id uuid.UUID) (*types.Environment, error)
+	ListByProject(projectID uuid.UUID) ([]*types.Environment, error)
+}
+
+// ServiceRepositoryInterface defines operations for services
+type ServiceRepositoryInterface interface {
+	Create(service *types.Service) error
+	GetByID(id uuid.UUID) (*types.Service, error)
+	ListAll(ctx context.Context) ([]*types.Service, error)
+	ListByProject(projectID uuid.UUID) ([]*types.Service, error)
+}
+
+// ReleaseRepositoryInterface defines operations for releases
+type ReleaseRepositoryInterface interface {
+	Create(release *types.Release) error
+	GetByID(id uuid.UUID) (*types.Release, error)
+	UpdateStatus(id uuid.UUID, status types.ReleaseStatus) error
+	UpdateSBOM(ctx context.Context, id uuid.UUID, sbom, sbomFormat string) error
+	UpdateSignature(ctx context.Context, id uuid.UUID, signature string) error
+	ListByService(serviceID uuid.UUID) ([]*types.Release, error)
+}
+
+// DeploymentRepositoryInterface defines operations for deployments
+type DeploymentRepositoryInterface interface {
+	Create(deployment *types.Deployment) error
+	GetByID(ctx context.Context, id string) (*types.Deployment, error)
+	UpdateStatus(id uuid.UUID, status types.DeploymentStatus, health types.HealthStatus) error
+	ListByRelease(ctx context.Context, releaseID string) ([]*types.Deployment, error)
+	GetLatestByService(ctx context.Context, serviceID string) (*types.Deployment, error)
+	GetByStatus(ctx context.Context, status types.DeploymentStatus) ([]*types.Deployment, error)
+}
+
+// UserRepositoryInterface defines operations for users
+type UserRepositoryInterface interface {
+	Create(user *types.User) error
+	GetByID(id uuid.UUID) (*types.User, error)
+	GetByEmail(email string) (*types.User, error)
+	Update(user *types.User) error
+}
+
+// ProjectAccessRepositoryInterface defines operations for project access control
+type ProjectAccessRepositoryInterface interface {
+	Grant(access *ProjectAccess) error
+	Revoke(ctx context.Context, userID, projectID uuid.UUID, environmentID *uuid.UUID) error
+	GetByUserAndProject(ctx context.Context, userID, projectID uuid.UUID) ([]*ProjectAccess, error)
+	ListByUser(ctx context.Context, userID uuid.UUID) ([]*ProjectAccess, error)
+	HasAccess(ctx context.Context, userID, projectID uuid.UUID, environmentID *uuid.UUID, requiredRole types.Role) (bool, error)
+}
+
+// AuditLogRepositoryInterface defines operations for audit logs
+type AuditLogRepositoryInterface interface {
+	Create(ctx context.Context, log *AuditLog) error
+	ListByActor(ctx context.Context, actorID uuid.UUID, limit int) ([]*AuditLog, error)
+	ListByResource(ctx context.Context, resourceType, resourceID string, limit int) ([]*AuditLog, error)
+	ListRecent(ctx context.Context, limit int) ([]*AuditLog, error)
+}
+
+// ApprovalRecordRepositoryInterface defines operations for approval records
+type ApprovalRecordRepositoryInterface interface {
+	Create(ctx context.Context, record *ApprovalRecord) error
+	GetByDeployment(ctx context.Context, deploymentID uuid.UUID) (*ApprovalRecord, error)
+	ListByService(ctx context.Context, serviceID uuid.UUID, limit int) ([]*ApprovalRecord, error)
+}
+
+// RotationAuditLogRepositoryInterface defines operations for rotation audit logs
+type RotationAuditLogRepositoryInterface interface {
+	Create(ctx context.Context, log interface{}) error
+	GetByServiceID(ctx context.Context, serviceID uuid.UUID, limit int) ([]interface{}, error)
+	GetByEventID(ctx context.Context, eventID uuid.UUID) (interface{}, error)
+}
+
+// RepositoryProvider provides access to all repositories
+type RepositoryProvider interface {
+	Projects() ProjectRepositoryInterface
+	Environments() EnvironmentRepositoryInterface
+	Services() ServiceRepositoryInterface
+	Releases() ReleaseRepositoryInterface
+	Deployments() DeploymentRepositoryInterface
+	Users() UserRepositoryInterface
+	ProjectAccess() ProjectAccessRepositoryInterface
+	AuditLogs() AuditLogRepositoryInterface
+	ApprovalRecords() ApprovalRecordRepositoryInterface
+	RotationAuditLogs() RotationAuditLogRepositoryInterface
+}
+
+// Ensure Repositories implements RepositoryProvider
+var _ RepositoryProvider = (*Repositories)(nil)
+
+// Implementation of RepositoryProvider interface
+
+func (r *Repositories) Projects() ProjectRepositoryInterface {
+	return r.Projects
+}
+
+func (r *Repositories) Environments() EnvironmentRepositoryInterface {
+	return r.Environments
+}
+
+func (r *Repositories) Services() ServiceRepositoryInterface {
+	return r.Services
+}
+
+func (r *Repositories) Releases() ReleaseRepositoryInterface {
+	return r.Releases
+}
+
+func (r *Repositories) Deployments() DeploymentRepositoryInterface {
+	return r.Deployments
+}
+
+func (r *Repositories) Users() UserRepositoryInterface {
+	return r.Users
+}
+
+func (r *Repositories) ProjectAccess() ProjectAccessRepositoryInterface {
+	return r.ProjectAccess
+}
+
+func (r *Repositories) AuditLogs() AuditLogRepositoryInterface {
+	return r.AuditLogs
+}
+
+func (r *Repositories) ApprovalRecords() ApprovalRecordRepositoryInterface {
+	return r.ApprovalRecords
+}
+
+func (r *Repositories) RotationAuditLogs() RotationAuditLogRepositoryInterface {
+	return r.RotationAuditLogs
+}
