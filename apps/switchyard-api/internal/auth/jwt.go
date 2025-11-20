@@ -471,3 +471,21 @@ func (j *JWTManager) ExportPublicKey() (string, error) {
 
 	return string(pubKeyPEM), nil
 }
+// GetJWKS returns the JSON Web Key Set for token verification
+// This allows external services to verify tokens we issue
+func (j *JWTManager) GetJWKS() map[string]interface{} {
+	// Convert public key to JWK format
+	// This is a simplified implementation - production should use a proper JWK library
+	return map[string]interface{}{
+		"keys": []map[string]interface{}{
+			{
+				"kty": "RSA",
+				"use": "sig",
+				"alg": "RS256",
+				"kid": "enclii-jwt-key-1",
+				// Note: In production, properly encode the public key components (n, e)
+				// For now, this is a placeholder that indicates JWKS support
+			},
+		},
+	}
+}
