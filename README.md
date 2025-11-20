@@ -1,15 +1,15 @@
 # Enclii
 
-> **The Railway-style platform that deploys itself.**
-> *Production-grade Kubernetes orchestration with self-hosted authentication.*
+> **The Railway-style platform with $100/month production infrastructure.**
+> *Production-grade Kubernetes orchestration on Hetzner + Cloudflare.*
 
 [![Production Readiness](https://img.shields.io/badge/production%20ready-70%25-yellow)](./PRODUCTION_READINESS_AUDIT.md)
 [![Infrastructure](https://img.shields.io/badge/infrastructure-Hetzner%20%2B%20Cloudflare-blue)](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
-[![Auth](https://img.shields.io/badge/auth-Plinto%20(self--hosted)-green)](./DOGFOODING_GUIDE.md)
+[![Auth](https://img.shields.io/badge/auth-JWT%20(RS256)-orange)](./PRODUCTION_READINESS_AUDIT.md)
 [![Cost](https://img.shields.io/badge/monthly%20cost-%24100-success)](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
 **Status:** Alpha (70% production-ready) | [Production Roadmap →](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
-**Authentication:** [Plinto](https://github.com/madfam-io/plinto) (self-hosted OAuth/OIDC)
+**Authentication:** JWT (RS256) - Plinto integration planned for Weeks 3-4
 **Infrastructure:** Hetzner + Cloudflare + Ubicloud (~$100/month)
 
 ---
@@ -18,18 +18,19 @@
 
 Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
-### The Dogfooding Edge
+### The Dogfooding Strategy (Planned)
 
-> **"We run our entire platform on Enclii, authenticated by Plinto. We're our own most demanding customer."**
+> **Goal:** "We'll run our entire platform on Enclii, authenticated by Plinto. We'll be our own most demanding customer."
 
-- ✅ **Control Plane API** (`api.enclii.io`) → Deployed via Enclii
-- ✅ **Web Dashboard** (`app.enclii.io`) → Deployed via Enclii
-- ✅ **Authentication** (`auth.enclii.io`) → Plinto (from [separate repo](https://github.com/madfam-io/plinto))
-- ✅ **Landing Page** (`enclii.io`) → Deployed via Enclii
-- ✅ **Documentation** (`docs.enclii.io`) → Deployed via Enclii
-- ✅ **Status Page** (`status.enclii.io`) → Deployed via Enclii
+**Planned Services** (Weeks 5-6 of roadmap):
+- 🔲 **Control Plane API** (`api.enclii.io`) → Deploy via Enclii itself
+- 🔲 **Web Dashboard** (`app.enclii.io`) → Deploy via Enclii itself
+- 🔲 **Authentication** (`auth.enclii.io`) → Plinto (from [separate repo](https://github.com/madfam-io/plinto))
+- 🔲 **Landing Page** (`enclii.io`) → Deploy via Enclii itself
+- 🔲 **Documentation** (`docs.enclii.io`) → Deploy via Enclii itself
+- 🔲 **Status Page** (`status.enclii.io`) → Deploy via Enclii itself
 
-Every feature we ship is **battle-tested in our own production** before customers see it. [See dogfooding strategy →](./DOGFOODING_GUIDE.md)
+**Current Status:** Service specs ready in `dogfooding/` directory. Implementation scheduled for Weeks 5-6 after Plinto integration (Weeks 3-4). [See dogfooding plan →](./DOGFOODING_GUIDE.md)
 
 ---
 
@@ -52,23 +53,28 @@ Every feature we ship is **battle-tested in our own production** before customer
 
 [View infrastructure details →](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
-### 🔐 Self-Hosted Authentication (Plinto)
+### 🔐 Authentication & Security
 
-**No Auth0. No Clerk. No vendor lock-in.**
+**Current Implementation:**
+- **JWT Authentication** with RSA signing (RS256)
+- **RBAC** with admin/developer/viewer roles
+- **Secure session management** with Redis
+- **API key support** for CI/CD integration
 
-- **OAuth 2.0 / OIDC** provider (RS256 JWT)
-- **Multi-tenant** organization support
-- **Password + SSO** authentication
-- **Built from:** [github.com/madfam-io/plinto](https://github.com/madfam-io/plinto)
-- **Deployed via:** Enclii itself (dogfooding!)
+**Planned (Weeks 3-4): Plinto Integration**
+- Self-hosted OAuth 2.0 / OIDC provider
+- Multi-tenant organization support
+- Replace Auth0/Clerk dependency
+- Built from: [github.com/madfam-io/plinto](https://github.com/madfam-io/plinto)
+- Deploy via Enclii itself (dogfooding)
 
-```bash
-# Enclii authenticates via Plinto
-curl https://auth.enclii.io/.well-known/jwks.json
-# → Proves we use our own auth solution
-```
+**Why Plinto (when integrated):**
+- ✅ No Auth0/Clerk vendor lock-in
+- ✅ No per-MAU costs ($0 vs $220+/month)
+- ✅ Full control over auth flows
+- ✅ Multi-tenant ready out of the box
 
-[Learn about Plinto integration →](./DOGFOODING_GUIDE.md#authentication-flow)
+[View Plinto integration plan →](./PRODUCTION_READINESS_AUDIT.md)
 
 ### 🚀 Multi-Tenant SaaS Ready
 
@@ -90,7 +96,7 @@ curl https://auth.enclii.io/.well-known/jwks.json
 - Real-time log streaming
 
 **Security & Compliance:**
-- RS256 JWT authentication (Plinto)
+- RS256 JWT authentication with RSA signing
 - RBAC with admin/developer/viewer roles
 - Rate limiting (1,000-10,000 req/min)
 - Security headers (HSTS, CSP, X-Frame-Options)
@@ -432,18 +438,27 @@ Email: [security@enclii.dev](mailto:security@enclii.dev)
 
 ---
 
-## The Confidence Signal
+## The Vision: Dogfooding as Competitive Advantage
 
-When prospects ask **"Can Enclii handle production?"**, we answer:
+**Goal (Weeks 5-8):** Run our entire production infrastructure on Enclii, authenticated by Plinto.
 
-> "We run our entire production on Enclii. Here's our [status page](https://status.enclii.io) showing 99.95% uptime. We deploy 10-20 times per day with zero downtime using our own platform. Want to see our [deployment logs](https://github.com/madfam-io/enclii/commits/main)?"
+When we launch, prospects will ask **"Can Enclii handle production?"**
 
-**Verifiable Claims:**
-- Our API: https://api.enclii.io/health
-- Our Auth: https://auth.enclii.io/.well-known/jwks.json
-- Our Status: https://status.enclii.io
+We'll answer with verifiable proof:
+> "We run our entire production on Enclii. Here's our status page showing 99.95% uptime. We deploy 10-20 times per day with zero downtime using our own platform."
 
-We don't just **build** Enclii. We **run on** Enclii. [See dogfooding strategy →](./DOGFOODING_GUIDE.md)
+**What we're building (service specs ready in `dogfooding/`):**
+- Control Plane API at api.enclii.io
+- Web Dashboard at app.enclii.io
+- Plinto Auth at auth.enclii.io
+- Public status page at status.enclii.io
+
+**Why this matters:**
+- Customer confidence: "If they trust it, we can too"
+- Product quality: We'll find bugs before customers do
+- Sales credibility: Authentic production usage metrics
+
+[See complete dogfooding plan →](./DOGFOODING_GUIDE.md)
 
 ---
 

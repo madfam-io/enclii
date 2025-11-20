@@ -7,9 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
 **Current Status:** 70% production-ready ([audit](./PRODUCTION_READINESS_AUDIT.md))
-**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud ($100/month)
-**Authentication:** Plinto (self-hosted OAuth/OIDC from [separate repo](https://github.com/madfam-io/plinto))
-**Dogfooding:** Enclii deploys itself, authenticated by Plinto ([guide](./DOGFOODING_GUIDE.md))
+**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud ($100/month planned)
+**Authentication:** JWT (RS256) - Plinto integration planned for Weeks 3-4
+**Dogfooding:** Planned for Weeks 5-6 ([specs ready](./dogfooding/), [guide](./DOGFOODING_GUIDE.md))
 **Production Timeline:** 6-8 weeks to launch ([roadmap](./PRODUCTION_DEPLOYMENT_ROADMAP.md))
 
 ## Architecture
@@ -148,48 +148,57 @@ Enclii runs on cost-optimized infrastructure validated through independent resea
 
 See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./PRODUCTION_DEPLOYMENT_ROADMAP.md) for details.
 
-### Authentication (Plinto)
+### Authentication
 
-Enclii uses **Plinto** for authentication - a self-hosted OAuth/OIDC provider:
+**Current Implementation (Alpha):**
+- **JWT Authentication** with RSA signing (RS256)
+- **RBAC** with admin/developer/viewer roles
+- **Session Management** via Redis
+- **API Keys** for CI/CD integration
+
+**Planned Integration (Weeks 3-4): Plinto**
+
+Plinto is a self-hosted OAuth/OIDC provider that will replace standalone JWT:
 
 - **Repository:** [github.com/madfam-io/plinto](https://github.com/madfam-io/plinto)
-- **Deployment:** Via Enclii itself (dogfooding!) using `dogfooding/plinto.yaml`
+- **Deployment:** Will deploy via Enclii (dogfooding) using `dogfooding/plinto.yaml`
 - **Protocol:** OAuth 2.0 / OIDC with RS256 JWT
 - **Features:** Multi-tenant orgs, password + SSO, JWKS rotation
-- **Cost:** $0 (self-hosted on shared infrastructure)
+- **Implementation:** See [PRODUCTION_READINESS_AUDIT.md](./PRODUCTION_READINESS_AUDIT.md) for code examples
 
-**Why Plinto vs Auth0/Clerk:**
-- No vendor lock-in
-- No per-MAU costs
+**Why Plinto (when integrated):**
+- No Auth0/Clerk vendor lock-in
+- No per-MAU costs ($0 vs $220+/month)
 - Full control over auth flows
 - Multi-tenant ready out of the box
-- Deployed and managed via Enclii itself
+- Will be deployed and managed via Enclii itself
 
-### Dogfooding Strategy
+### Dogfooding Strategy (Planned for Weeks 5-6)
 
-> **"We run our entire platform on Enclii, authenticated by Plinto. We're our own most demanding customer."**
+**Goal:** Run our entire platform on Enclii, authenticated by Plinto.
 
-All Enclii components are deployed via Enclii itself:
+> **Future State:** "We'll run our entire production on Enclii. We'll be our own most demanding customer."
 
-**Production Services** (all managed via `enclii deploy`):
-- `switchyard-api` → api.enclii.io (control plane)
-- `switchyard-ui` → app.enclii.io (web dashboard)
-- `plinto` → auth.enclii.io (authentication, from separate repo!)
+**Planned Services** (service specs ready in `dogfooding/`):
+- `switchyard-api` → api.enclii.io (control plane, deployed via Enclii)
+- `switchyard-ui` → app.enclii.io (web dashboard, deployed via Enclii)
+- `plinto` → auth.enclii.io (authentication from [separate repo](https://github.com/madfam-io/plinto))
 - `landing-page` → enclii.io (marketing site)
 - `docs-site` → docs.enclii.io (documentation)
 - `status-page` → status.enclii.io (uptime monitoring)
 
-**Service Specs:**
-All dogfooding specs are in `dogfooding/` directory:
-- Uses multi-repo builds (Plinto from different GitHub repo)
-- Demonstrates auto-deploy on git push
-- Includes NetworkPolicies, autoscaling, custom domains
-- Production-ready configurations (not toy examples)
+**Current Status:**
+- ✅ Service specs created in `dogfooding/` directory
+- ✅ Multi-repo build strategy defined (Plinto from different GitHub repo)
+- ✅ NetworkPolicies, autoscaling, custom domains configured
+- ⚠️ Awaiting infrastructure setup (Weeks 1-2)
+- ⚠️ Awaiting Plinto integration (Weeks 3-4)
+- ❌ Implementation scheduled for Weeks 5-6
 
-See [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md) for complete implementation.
+See [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md) for complete implementation plan.
 
-**Why This Matters:**
+**Why This Will Matter:**
 - **Customer Confidence:** "If they trust it, we can too"
-- **Product Quality:** We find bugs before customers do
+- **Product Quality:** We'll find bugs before customers do
 - **Sales Credibility:** Authentic production usage metrics
-- **Team Alignment:** Everyone uses the platform daily
+- **Team Alignment:** Everyone will use the platform daily

@@ -1,16 +1,20 @@
 # Enclii Dogfooding Service Specs
 
+> ⚠️ **PLANNED IMPLEMENTATION** - These are service specifications for **future deployment** (Weeks 5-6).
+> **Current Status:** Specs are ready. Awaiting infrastructure (Weeks 1-2) and Plinto integration (Weeks 3-4).
+> **Not Yet Deployed:** These services are NOT yet running in production.
+
 This directory contains **production-ready service specifications** for deploying Enclii's own infrastructure using Enclii itself.
 
-## Why This Matters
+## Why This Will Matter
 
-> **"We run our entire platform on Enclii, authenticated by Plinto. We're our own most demanding customer."**
+> **Goal (Weeks 5-6):** "We'll run our entire platform on Enclii, authenticated by Plinto. We'll be our own most demanding customer."
 
-These service specs demonstrate:
-- ✅ Enclii deploys Enclii (self-hosting)
-- ✅ Plinto authenticates Enclii (eating our own auth solution)
-- ✅ Multi-repo support (Enclii + Plinto from separate GitHub repos)
-- ✅ Full production features (HA, autoscaling, monitoring, custom domains)
+These service specs will demonstrate:
+- 🔲 Enclii deploys Enclii (self-hosting) - PLANNED
+- 🔲 Plinto authenticates Enclii (eating our own auth solution) - PLANNED
+- ✅ Multi-repo support (Enclii + Plinto from separate GitHub repos) - SPECS READY
+- ✅ Full production features (HA, autoscaling, monitoring, custom domains) - SPECS READY
 
 ## Service Specs
 

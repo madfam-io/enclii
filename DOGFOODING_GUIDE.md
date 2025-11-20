@@ -1,8 +1,14 @@
 # Enclii + Plinto Dogfooding Strategy
 
-> **"We run our entire platform on Enclii, authenticated by Plinto. We're our own most demanding customer."**
+> ⚠️ **IMPLEMENTATION PLAN** - This document describes the **future state** (Weeks 5-6 of roadmap).
+> **Current Status:** Service specs created, awaiting infrastructure setup (Weeks 1-2) and Plinto integration (Weeks 3-4).
+> **Not Yet Implemented:** Enclii is NOT yet self-hosting. Plinto is NOT yet integrated.
 
-This document outlines how Enclii deploys **itself** using its own platform, and how we use **Plinto** (our own auth solution) to authenticate the Enclii control plane. This is critical for product quality, customer confidence, and sales credibility.
+---
+
+> **Goal (Weeks 5-6):** "We'll run our entire platform on Enclii, authenticated by Plinto. We'll be our own most demanding customer."
+
+This document outlines the **plan** for how Enclii will deploy **itself** using its own platform, and how we'll use **Plinto** (our own auth solution) to authenticate the Enclii control plane. This will be critical for product quality, customer confidence, and sales credibility.
 
 ---
 
