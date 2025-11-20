@@ -1,0 +1,12 @@
+# SECURITY: Never commit production secrets to Git
+# Use Sealed Secrets, External Secrets Operator, or Vault for production
+
+# Ignore all secrets except the development and template files
+secrets.yaml
+secrets.*.yaml
+!secrets.dev.yaml
+!secrets.yaml.TEMPLATE
+
+# Ignore any local overrides
+*.local.yaml
+kustomization.local.yaml

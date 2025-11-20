@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { apiGet, apiPost } from '@/lib/api';
 
 interface Project {
   id: string;
@@ -65,56 +66,33 @@ export default function ProjectDetailPage() {
   const fetchProjectData = async () => {
     try {
       // Fetch project details
-      const projectResponse = await fetch(`/api/v1/projects/${slug}`, {
-        headers: {
-          'Authorization': 'Bearer your-token-here',
-        },
-      });
-      
-      if (!projectResponse.ok) {
-        throw new Error('Failed to fetch project');
-      }
-      
-      const projectData = await projectResponse.json();
+      const projectData = await apiGet<Project>(`/api/v1/projects/${slug}`);
       setProject(projectData);
-      
+
       // Fetch services
-      const servicesResponse = await fetch(`/api/v1/projects/${slug}/services`, {
-        headers: {
-          'Authorization': 'Bearer your-token-here',
-        },
-      });
-      
-      if (servicesResponse.ok) {
-        const servicesData = await servicesResponse.json();
-        setServices(servicesData.services || []);
-        
-        // Fetch releases for each service
-        const releasesData: { [key: string]: Release[] } = {};
-        const deploymentsData: { [key: string]: Deployment[] } = {};
-        
-        for (const service of servicesData.services || []) {
-          // Fetch releases
-          try {
-            const releasesResponse = await fetch(`/api/v1/services/${service.id}/releases`, {
-              headers: {
-                'Authorization': 'Bearer your-token-here',
-              },
-            });
-            
-            if (releasesResponse.ok) {
-              const releasesResult = await releasesResponse.json();
-              releasesData[service.id] = releasesResult.releases || [];
-            }
-          } catch (err) {
-            console.error(`Failed to fetch releases for service ${service.name}:`, err);
-          }
+      const servicesData = await apiGet<{ services: Service[] }>(
+        `/api/v1/projects/${slug}/services`
+      );
+      setServices(servicesData.services || []);
+
+      // Fetch releases for each service
+      const releasesData: { [key: string]: Release[] } = {};
+      const deploymentsData: { [key: string]: Deployment[] } = {};
+
+      for (const service of servicesData.services || []) {
+        // Fetch releases
+        try {
+          const releasesResult = await apiGet<{ releases: Release[] }>(
+            `/api/v1/services/${service.id}/releases`
+          );
+          releasesData[service.id] = releasesResult.releases || [];
+        } catch (err) {
+          console.error(`Failed to fetch releases for service ${service.name}:`, err);
         }
-        
-        setReleases(releasesData);
-        setDeployments(deploymentsData);
       }
-      
+
+      setReleases(releasesData);
+      setDeployments(deploymentsData);
       setLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -124,21 +102,10 @@ export default function ProjectDetailPage() {
 
   const createService = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
-      const response = await fetch(`/api/v1/projects/${slug}/services`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer your-token-here',
-        },
-        body: JSON.stringify(newService),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to create service');
-      }
-      
+      await apiPost(`/api/v1/projects/${slug}/services`, newService);
+
       setNewService({ name: '', git_repo: '', build_config: {} });
       setShowCreateServiceForm(false);
       fetchProjectData(); // Refresh the data
@@ -149,19 +116,8 @@ export default function ProjectDetailPage() {
 
   const triggerBuild = async (serviceId: string, gitSha: string) => {
     try {
-      const response = await fetch(`/api/v1/services/${serviceId}/build`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer your-token-here',
-        },
-        body: JSON.stringify({ git_sha: gitSha }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to trigger build');
-      }
-      
+      await apiPost(`/api/v1/services/${serviceId}/build`, { git_sha: gitSha });
+
       fetchProjectData(); // Refresh to show new build
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to trigger build');
@@ -170,23 +126,12 @@ export default function ProjectDetailPage() {
 
   const deployRelease = async (serviceId: string, releaseId: string) => {
     try {
-      const response = await fetch(`/api/v1/services/${serviceId}/deploy`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer your-token-here',
-        },
-        body: JSON.stringify({ 
-          release_id: releaseId,
-          environment: {},
-          replicas: 1
-        }),
+      await apiPost(`/api/v1/services/${serviceId}/deploy`, {
+        release_id: releaseId,
+        environment: {},
+        replicas: 1
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to deploy release');
-      }
-      
+
       fetchProjectData(); // Refresh to show deployment
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to deploy release');

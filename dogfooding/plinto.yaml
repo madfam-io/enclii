@@ -1,0 +1,271 @@
+# Plinto Authentication Service - Self-Hosted on Enclii
+# This deploys Plinto (from separate repo) as Enclii's authentication provider
+# This is THE CRITICAL DOGFOODING PIECE - we authenticate Enclii with Plinto
+
+apiVersion: enclii.dev/v1
+kind: Service
+metadata:
+  name: plinto
+  project: enclii-platform
+  description: Self-hosted OAuth/OIDC provider (Plinto) - authenticates Enclii itself
+
+spec:
+  # Build from the SEPARATE Plinto repository
+  build:
+    type: dockerfile
+    dockerfile: Dockerfile
+    context: .
+    source:
+      git:
+        repository: https://github.com/madfam-io/plinto
+        branch: main
+        # Auto-deploy Plinto updates
+        autoDeploy: true
+
+  runtime:
+    port: 8000
+    replicas: 3  # HA for auth is critical
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "256Mi"
+
+    # Health checks
+    healthCheck: /health
+    readinessProbe:
+      path: /health/ready
+      initialDelaySeconds: 5
+      periodSeconds: 5
+    livenessProbe:
+      path: /health/live
+      initialDelaySeconds: 15
+      periodSeconds: 10
+
+  # Environment variables
+  env:
+    - name: PORT
+      value: "8000"
+    - name: LOG_LEVEL
+      value: info
+    - name: LOG_FORMAT
+      value: json
+
+    # Database connection (shared Ubicloud PostgreSQL)
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: plinto-secrets
+          key: database-url
+
+    # Redis for sessions (shared Redis Sentinel)
+    - name: REDIS_URL
+      valueFrom:
+        secretKeyRef:
+          name: plinto-secrets
+          key: redis-url
+
+    # Plinto configuration
+    - name: PLINTO_ISSUER
+      value: https://auth.enclii.io
+    - name: PLINTO_BASE_URL
+      value: https://auth.enclii.io
+
+    # JWT signing keys (RS256)
+    - name: PLINTO_JWT_PRIVATE_KEY_PATH
+      value: /secrets/jwt/private-key.pem
+    - name: PLINTO_JWT_PUBLIC_KEY_PATH
+      value: /secrets/jwt/public-key.pem
+    - name: PLINTO_JWT_ALGORITHM
+      value: RS256
+
+    # Session configuration
+    - name: PLINTO_SESSION_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: plinto-secrets
+          key: session-secret
+    - name: PLINTO_SESSION_DURATION
+      value: "86400"  # 24 hours
+
+    # Email configuration (for password resets, etc.)
+    - name: PLINTO_SMTP_HOST
+      valueFrom:
+        secretKeyRef:
+          name: plinto-secrets
+          key: smtp-host
+    - name: PLINTO_SMTP_PORT
+      valueFrom:
+        secretKeyRef:
+          name: plinto-secrets
+          key: smtp-port
+    - name: PLINTO_SMTP_USER
+      valueFrom:
+        secretKeyRef:
+          name: plinto-secrets
+          key: smtp-user
+    - name: PLINTO_SMTP_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: plinto-secrets
+          key: smtp-password
+    - name: PLINTO_FROM_EMAIL
+      value: noreply@enclii.io
+    - name: PLINTO_FROM_NAME
+      value: Enclii Platform
+
+    # CORS configuration
+    - name: PLINTO_CORS_ORIGINS
+      value: "https://app.enclii.io,https://api.enclii.io"
+
+    # Rate limiting
+    - name: PLINTO_RATE_LIMIT_ENABLED
+      value: "true"
+    - name: PLINTO_RATE_LIMIT_REQUESTS
+      value: "100"
+    - name: PLINTO_RATE_LIMIT_WINDOW
+      value: "60"  # 100 requests per minute
+
+  # Persistent storage for local caches
+  volumes:
+    - name: cache
+      mountPath: /var/cache/plinto
+      size: 5Gi
+      storageClassName: hetzner-ssd
+      accessMode: ReadWriteOnce
+
+  # Custom domain
+  domains:
+    - domain: auth.enclii.io
+      tls: true
+      tlsIssuer: cloudflare
+
+  # Autoscaling
+  autoscaling:
+    enabled: true
+    minReplicas: 3  # Never drop below 3 for auth
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+  # Service-level objectives (auth is CRITICAL)
+  slo:
+    availability: 99.99  # 99.99% uptime for auth
+    latencyP95: 100      # P95 latency < 100ms
+    errorRate: 0.1       # Error rate < 0.1%
+
+---
+# Network policy for Plinto
+# Allow traffic from:
+# - Switchyard API (for token verification)
+# - Switchyard UI (for OAuth redirects)
+# - Ingress controller (for user login flows)
+
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: plinto-netpol
+  namespace: enclii-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: plinto
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # From ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: cloudflare-tunnel
+      ports:
+        - protocol: TCP
+          port: 8000
+    # From Switchyard API
+    - from:
+        - podSelector:
+            matchLabels:
+              app: switchyard-api
+      ports:
+        - protocol: TCP
+          port: 8000
+    # From Switchyard UI
+    - from:
+        - podSelector:
+            matchLabels:
+              app: switchyard-ui
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    # To PostgreSQL
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    # To Redis
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Allow DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow HTTPS (for SMTP, webhooks, etc.)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 587  # SMTP TLS
+
+---
+# OAuth Client Configuration for Enclii Web UI
+# This would be created via Plinto's API or admin interface
+
+# POST /v1/clients
+# {
+#   "client_id": "enclii-web-ui",
+#   "client_name": "Enclii Web Dashboard",
+#   "redirect_uris": [
+#     "https://app.enclii.io/callback",
+#     "https://dashboard.enclii.io/callback",
+#     "http://localhost:3000/callback"  # For local dev
+#   ],
+#   "grant_types": ["authorization_code", "refresh_token"],
+#   "response_types": ["code"],
+#   "scope": "openid profile email",
+#   "token_endpoint_auth_method": "none",  # Public client
+#   "application_type": "web"
+# }
+
+---
+# OAuth Client Configuration for Enclii API
+# This is used for service-to-service auth
+
+# POST /v1/clients
+# {
+#   "client_id": "enclii-api",
+#   "client_name": "Enclii Control Plane API",
+#   "client_secret": "<generated-secret>",
+#   "redirect_uris": [],
+#   "grant_types": ["client_credentials"],
+#   "response_types": [],
+#   "scope": "api:read api:write",
+#   "token_endpoint_auth_method": "client_secret_basic",
+#   "application_type": "service"
+# }

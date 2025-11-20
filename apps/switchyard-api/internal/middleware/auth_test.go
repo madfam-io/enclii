@@ -1,0 +1,151 @@
+package middleware
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestAuthMiddleware_ValidToken(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	secret := []byte("test-secret-key")
+
+	// Create a valid token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":   "user123",
+		"email": "test@example.com",
+		"roles": []string{"admin"},
+		"exp":   time.Now().Add(time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString(secret)
+	assert.NoError(t, err)
+
+	// Create test router
+	router := gin.New()
+	auth := NewAuthMiddleware(secret)
+	router.Use(auth.Middleware())
+	router.GET("/test", func(c *gin.Context) {
+		userID := c.GetString("user_id")
+		c.JSON(http.StatusOK, gin.H{"user_id": userID})
+	})
+
+	// Test request with valid token
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "user123")
+}
+
+func TestAuthMiddleware_MissingToken(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	secret := []byte("test-secret-key")
+
+	// Create test router
+	router := gin.New()
+	auth := NewAuthMiddleware(secret)
+	router.Use(auth.Middleware())
+	router.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	// Test request without token
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestAuthMiddleware_InvalidToken(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	secret := []byte("test-secret-key")
+
+	// Create test router
+	router := gin.New()
+	auth := NewAuthMiddleware(secret)
+	router.Use(auth.Middleware())
+	router.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	// Test request with invalid token
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer invalid-token")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestAuthMiddleware_PublicPath(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	secret := []byte("test-secret-key")
+
+	// Create test router
+	router := gin.New()
+	auth := NewAuthMiddleware(secret)
+	auth.AddPublicPath("/public")
+	router.Use(auth.Middleware())
+	router.GET("/public", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	// Test request to public path without token
+	req := httptest.NewRequest("GET", "/public", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestAuthMiddleware_RoleRequirement(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	secret := []byte("test-secret-key")
+
+	// Create a token with user role
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":   "user123",
+		"email": "test@example.com",
+		"roles": []string{"user"},
+		"exp":   time.Now().Add(time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString(secret)
+	assert.NoError(t, err)
+
+	// Create test router
+	router := gin.New()
+	auth := NewAuthMiddleware(secret)
+	auth.AddRoleRequirement("/admin", []string{"admin"})
+	router.Use(auth.Middleware())
+	router.GET("/admin", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	// Test request with insufficient permissions
+	req := httptest.NewRequest("GET", "/admin", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+}

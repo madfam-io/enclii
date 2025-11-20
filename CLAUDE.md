@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Enclii is a Railway-style internal platform for building, deploying, scaling, and operating containerized services with guardrails. It runs on managed Kubernetes and managed databases, abstracting infrastructure complexity while maintaining operational safety.
+Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
+
+**Current Status:** 70% production-ready ([audit](./PRODUCTION_READINESS_AUDIT.md))
+**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud ($100/month planned)
+**Authentication:** JWT (RS256) - Plinto integration planned for Weeks 3-4
+**Dogfooding:** Planned for Weeks 5-6 ([specs ready](./dogfooding/), [guide](./DOGFOODING_GUIDE.md))
+**Production Timeline:** 6-8 weeks to launch ([roadmap](./PRODUCTION_DEPLOYMENT_ROADMAP.md))
 
 ## Architecture
 
@@ -117,3 +123,82 @@ Key vars for local development (set in `.env`):
 - Resource usage tracked per project/environment/service
 - Budget alerts at 80% threshold
 - Hard throttle at 100% for non-production environments
+
+## Production Infrastructure
+
+### Research-Validated Stack (~$100/month)
+
+Enclii runs on cost-optimized infrastructure validated through independent research:
+
+**Compute & Kubernetes:**
+- **Hetzner Cloud** (3x CPX31) - AMD EPYC, NVMe SSD - $45/month
+- **k3s** - Lightweight Kubernetes distribution
+- **Cloudflare Tunnel** - Replaces LoadBalancer (saves $108/year) - $0
+
+**Database & Caching:**
+- **Ubicloud PostgreSQL** - Managed DB on Hetzner infrastructure - $50/month
+- **Redis Sentinel** - Self-hosted HA (3 nodes, automatic failover) - $0
+
+**Storage & Networking:**
+- **Cloudflare R2** - Zero-egress object storage (SBOMs, artifacts) - $5/month
+- **Cloudflare for SaaS** - First 100 custom domains FREE - $0
+
+**vs Traditional SaaS Stack:** $2,220/month (Railway $2,000 + Auth0 $220)
+**5-Year Savings:** $127,200
+
+See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./PRODUCTION_DEPLOYMENT_ROADMAP.md) for details.
+
+### Authentication
+
+**Current Implementation (Alpha):**
+- **JWT Authentication** with RSA signing (RS256)
+- **RBAC** with admin/developer/viewer roles
+- **Session Management** via Redis
+- **API Keys** for CI/CD integration
+
+**Planned Integration (Weeks 3-4): Plinto**
+
+Plinto is a self-hosted OAuth/OIDC provider that will replace standalone JWT:
+
+- **Repository:** [github.com/madfam-io/plinto](https://github.com/madfam-io/plinto)
+- **Deployment:** Will deploy via Enclii (dogfooding) using `dogfooding/plinto.yaml`
+- **Protocol:** OAuth 2.0 / OIDC with RS256 JWT
+- **Features:** Multi-tenant orgs, password + SSO, JWKS rotation
+- **Implementation:** See [PRODUCTION_READINESS_AUDIT.md](./PRODUCTION_READINESS_AUDIT.md) for code examples
+
+**Why Plinto (when integrated):**
+- No Auth0/Clerk vendor lock-in
+- No per-MAU costs ($0 vs $220+/month)
+- Full control over auth flows
+- Multi-tenant ready out of the box
+- Will be deployed and managed via Enclii itself
+
+### Dogfooding Strategy (Planned for Weeks 5-6)
+
+**Goal:** Run our entire platform on Enclii, authenticated by Plinto.
+
+> **Future State:** "We'll run our entire production on Enclii. We'll be our own most demanding customer."
+
+**Planned Services** (service specs ready in `dogfooding/`):
+- `switchyard-api` → api.enclii.io (control plane, deployed via Enclii)
+- `switchyard-ui` → app.enclii.io (web dashboard, deployed via Enclii)
+- `plinto` → auth.enclii.io (authentication from [separate repo](https://github.com/madfam-io/plinto))
+- `landing-page` → enclii.io (marketing site)
+- `docs-site` → docs.enclii.io (documentation)
+- `status-page` → status.enclii.io (uptime monitoring)
+
+**Current Status:**
+- ✅ Service specs created in `dogfooding/` directory
+- ✅ Multi-repo build strategy defined (Plinto from different GitHub repo)
+- ✅ NetworkPolicies, autoscaling, custom domains configured
+- ⚠️ Awaiting infrastructure setup (Weeks 1-2)
+- ⚠️ Awaiting Plinto integration (Weeks 3-4)
+- ❌ Implementation scheduled for Weeks 5-6
+
+See [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md) for complete implementation plan.
+
+**Why This Will Matter:**
+- **Customer Confidence:** "If they trust it, we can too"
+- **Product Quality:** We'll find bugs before customers do
+- **Sales Credibility:** Authentic production usage metrics
+- **Team Alignment:** Everyone will use the platform daily

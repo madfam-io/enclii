@@ -39,7 +39,7 @@ logs/
 *.dylib
 *.test
 *.out
-go.sum
+# SECURITY FIX: go.sum files MUST be committed for dependency integrity and security
 
 # Node
 npm-debug.log*
