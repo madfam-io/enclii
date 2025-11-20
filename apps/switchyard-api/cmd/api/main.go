@@ -61,25 +61,34 @@ func main() {
 	// Initialize repositories
 	repos := db.NewRepositories(database)
 
-	// Initialize authentication
+	// Initialize cache service (needed for session revocation)
+	cacheService, err := cache.NewRedisCache(&cache.CacheConfig{
+		Host:         cfg.RedisHost,
+		Port:         cfg.RedisPort,
+		Password:     cfg.RedisPassword,
+		DB:           0,
+		MaxRetries:   3,
+		PoolSize:     10,
+		IdleTimeout:  5 * time.Minute,
+		ReadTimeout:  3 * time.Second,
+		WriteTimeout: 3 * time.Second,
+		DefaultTTL:   cache.MediumTTL,
+	})
+	if err != nil {
+		logrus.Warnf("Failed to initialize Redis cache: %v", err)
+		logrus.Warn("Session revocation will not be available")
+		cacheService = nil
+	}
+
+	// Initialize authentication with session revocation support
 	authManager, err := auth.NewJWTManager(
 		15*time.Minute, // Access token duration
 		7*24*time.Hour, // Refresh token duration (7 days)
 		repos,          // Database repositories for authorization
+		cacheService,   // Cache for session revocation (can be nil)
 	)
 	if err != nil {
 		logrus.Fatal("Failed to initialize auth manager:", err)
-	}
-
-	// Initialize cache service
-	cacheService, err := cache.NewRedisCache(&cache.RedisConfig{
-		Addr:     os.Getenv("REDIS_ADDR"),
-		Password: os.Getenv("REDIS_PASSWORD"),
-		DB:       0,
-	})
-	if err != nil {
-		logrus.Warnf("Failed to initialize Redis cache, using in-memory cache: %v", err)
-		cacheService = cache.NewInMemoryCache()
 	}
 
 	// Initialize Kubernetes client
@@ -211,6 +220,15 @@ func main() {
 
 	if err := server.Shutdown(ctx); err != nil {
 		logrus.Fatal("Server forced to shutdown:", err)
+	}
+
+	// Clean up resources
+	if cacheService != nil {
+		if err := cacheService.Close(); err != nil {
+			logrus.Warnf("Error closing cache connection: %v", err)
+		} else {
+			logrus.Info("Cache connection closed")
+		}
 	}
 
 	logrus.Info("Server exiting")

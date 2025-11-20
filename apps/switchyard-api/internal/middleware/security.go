@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -425,11 +426,41 @@ func DefaultSecurityConfig() *SecurityConfig {
 		MaxRequestSize:  10 << 20, // 10MB
 		ReadTimeout:     30 * time.Second,
 		WriteTimeout:    30 * time.Second,
-		AllowedOrigins:  []string{"*"}, // Configure appropriately for production
+		// SECURITY FIX: Restrict CORS origins (was: "*" - CWE-942 vulnerability)
+		// Production: Set via ENCLII_ALLOWED_ORIGINS environment variable (comma-separated)
+		// Development: Defaults to localhost origins only
+		AllowedOrigins:  getAllowedOrigins(),
 		AllowedMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:  []string{"Authorization", "Content-Type", "X-Requested-With"},
 		AllowCredentials: true,
 		MaxAge:          86400, // 24 hours
+	}
+}
+
+// getAllowedOrigins returns the allowed CORS origins based on environment configuration.
+// In production, this MUST be set via ENCLII_ALLOWED_ORIGINS environment variable.
+// In development, defaults to localhost origins only.
+func getAllowedOrigins() []string {
+	// Check environment variable first (production)
+	if origins := os.Getenv("ENCLII_ALLOWED_ORIGINS"); origins != "" {
+		// Trim whitespace from each origin
+		parts := strings.Split(origins, ",")
+		cleaned := make([]string, 0, len(parts))
+		for _, origin := range parts {
+			if trimmed := strings.TrimSpace(origin); trimmed != "" {
+				cleaned = append(cleaned, trimmed)
+			}
+		}
+		return cleaned
+	}
+
+	// Development defaults - only localhost
+	// This is safe for local development with kind/docker-compose
+	return []string{
+		"http://localhost:3000",  // Next.js dev server
+		"http://localhost:8080",  // API dev server
+		"http://127.0.0.1:3000",
+		"http://127.0.0.1:8080",
 	}
 }
 

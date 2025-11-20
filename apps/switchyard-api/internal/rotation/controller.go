@@ -264,8 +264,7 @@ func (c *Controller) processAuditLogs(ctx context.Context) {
 			return
 
 		case auditLog := <-c.auditQueue:
-			// In production, save to database
-			// For now, just log to stdout
+			// Log to stdout for debugging
 			c.logger.WithFields(logrus.Fields{
 				"event_id":       auditLog.EventID,
 				"service_id":     auditLog.ServiceID,
@@ -278,16 +277,83 @@ func (c *Controller) processAuditLogs(ctx context.Context) {
 				"pods_restarted": auditLog.PodsRestarted,
 			}).Info("Secret rotation audit log")
 
-			// TODO: Save to database using repos.RotationAuditLog.Create()
+			// Save to database
+			if err := c.repos.RotationAuditLogs.Create(context.Background(), auditLog); err != nil {
+				c.logger.Errorf("Failed to save rotation audit log to database: %v", err)
+				// Don't block on database failures - we've already logged to stdout
+			}
 		}
 	}
 }
 
 // GetRotationHistory returns recent rotation history for a service
 func (c *Controller) GetRotationHistory(ctx context.Context, serviceID string, limit int) ([]*lockbox.RotationAuditLog, error) {
-	// TODO: Implement database query
-	// For now, return empty slice
-	return []*lockbox.RotationAuditLog{}, nil
+	// Parse service ID as UUID
+	serviceUUID, err := uuid.Parse(serviceID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid service ID: %w", err)
+	}
+
+	// Query database
+	logs, err := c.repos.RotationAuditLogs.GetByServiceID(ctx, serviceUUID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query rotation history: %w", err)
+	}
+
+	// Convert interface{} to []*lockbox.RotationAuditLog
+	result := make([]*lockbox.RotationAuditLog, 0, len(logs))
+	for _, log := range logs {
+		// Type assertion to extract the struct
+		if logData, ok := log.(interface {
+			ID              uuid.UUID
+			EventID         uuid.UUID
+			ServiceID       uuid.UUID
+			ServiceName     string
+			Environment     string
+			SecretName      string
+			SecretPath      string
+			OldVersion      int
+			NewVersion      int
+			Status          string
+			StartedAt       time.Time
+			CompletedAt     *time.Time
+			DurationMs      *int64
+			RolloutStrategy string
+			PodsRestarted   int
+			Error           string
+			ChangedBy       string
+			TriggeredBy     string
+		}); ok {
+			// Convert to lockbox.RotationAuditLog
+			auditLog := &lockbox.RotationAuditLog{
+				ID:              logData.ID,
+				EventID:         logData.EventID,
+				ServiceID:       logData.ServiceID.String(),
+				ServiceName:     logData.ServiceName,
+				Environment:     logData.Environment,
+				SecretName:      logData.SecretName,
+				SecretPath:      logData.SecretPath,
+				OldVersion:      logData.OldVersion,
+				NewVersion:      logData.NewVersion,
+				Status:          lockbox.RotationStatus(logData.Status),
+				StartedAt:       logData.StartedAt,
+				CompletedAt:     logData.CompletedAt,
+				RolloutStrategy: logData.RolloutStrategy,
+				PodsRestarted:   logData.PodsRestarted,
+				Error:           logData.Error,
+				TriggeredBy:     logData.TriggeredBy,
+			}
+
+			// Convert duration from milliseconds
+			if logData.DurationMs != nil {
+				auditLog.Duration = time.Duration(*logData.DurationMs) * time.Millisecond
+			}
+
+			result = append(result, auditLog)
+		}
+	}
+
+	return result, nil
 }
 
 // IsEnabled returns whether secret rotation is enabled

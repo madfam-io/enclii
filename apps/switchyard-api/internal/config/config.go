@@ -46,6 +46,11 @@ type Config struct {
 	VaultToken            string
 	VaultNamespace        string
 	VaultPollInterval     int // Seconds
+
+	// Redis Cache (for session revocation)
+	RedisHost     string
+	RedisPort     int
+	RedisPassword string
 }
 
 func Load() (*Config, error) {
@@ -53,15 +58,17 @@ func Load() (*Config, error) {
 	viper.SetEnvPrefix("ENCLII")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 
-	// Set defaults
+	// Set defaults for development ONLY
+	// SECURITY WARNING: These defaults are for local development only.
+	// Production deployments MUST override these via environment variables.
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("port", "8080")
-	viper.SetDefault("database-url", "postgres://postgres:password@localhost:5432/enclii_dev?sslmode=disable")
+	viper.SetDefault("database-url", "postgres://postgres:postgres@localhost:5432/enclii_dev?sslmode=require")
 	viper.SetDefault("log-level", "info")
 	viper.SetDefault("registry", "ghcr.io/madfam")
 	viper.SetDefault("oidc-issuer", "http://localhost:5556")
 	viper.SetDefault("oidc-client-id", "enclii")
-	viper.SetDefault("oidc-client-secret", "enclii-secret")
+	viper.SetDefault("oidc-client-secret", "")
 	viper.SetDefault("kube-config", os.Getenv("HOME")+"/.kube/config")
 	viper.SetDefault("kube-context", "kind-enclii")
 	viper.SetDefault("buildkit-addr", "docker://")
@@ -71,6 +78,9 @@ func Load() (*Config, error) {
 	viper.SetDefault("compliance-webhooks-enabled", false)
 	viper.SetDefault("secret-rotation-enabled", false)
 	viper.SetDefault("vault-poll-interval", 60) // Poll every 60 seconds
+	viper.SetDefault("redis-host", "localhost")
+	viper.SetDefault("redis-port", 6379)
+	viper.SetDefault("redis-password", "")
 
 	// Parse log level
 	logLevelStr := viper.GetString("log-level")
@@ -103,6 +113,9 @@ func Load() (*Config, error) {
 		VaultToken:                viper.GetString("vault-token"),
 		VaultNamespace:            viper.GetString("vault-namespace"),
 		VaultPollInterval:         viper.GetInt("vault-poll-interval"),
+		RedisHost:                 viper.GetString("redis-host"),
+		RedisPort:                 viper.GetInt("redis-port"),
+		RedisPassword:             viper.GetString("redis-password"),
 	}
 
 	return config, nil

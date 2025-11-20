@@ -79,7 +79,8 @@ const (
 	UserCacheKey          = "user:%s"
 	ProjectServicesCacheKey = "project:%s:services"
 	ServiceReleasesCacheKey = "service:%s:releases"
-	
+	SessionRevokedKey       = "session:revoked:%s" // For JWT session revocation
+
 	// Cache tags for invalidation
 	ProjectTag     = "project"
 	ServiceTag     = "service"
@@ -96,14 +97,14 @@ const (
 
 func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:         fmt.Sprintf("%s:%d", config.Host, config.Port),
-		Password:     config.Password,
-		DB:           config.DB,
-		MaxRetries:   config.MaxRetries,
-		PoolSize:     config.PoolSize,
-		IdleTimeout:  config.IdleTimeout,
-		ReadTimeout:  config.ReadTimeout,
-		WriteTimeout: config.WriteTimeout,
+		Addr:            fmt.Sprintf("%s:%d", config.Host, config.Port),
+		Password:        config.Password,
+		DB:              config.DB,
+		MaxRetries:      config.MaxRetries,
+		PoolSize:        config.PoolSize,
+		ConnMaxIdleTime: config.IdleTimeout, // Renamed from IdleTimeout in redis v9
+		ReadTimeout:     config.ReadTimeout,
+		WriteTimeout:    config.WriteTimeout,
 	})
 
 	// Test connection
@@ -331,6 +332,41 @@ func (r *RedisCache) GetOrSet(ctx context.Context, key string, ttl time.Duration
 	return data, nil
 }
 
+// SessionRevoker implementation for JWT session revocation
+// RevokeSession marks a session as revoked in Redis with the specified TTL.
+// The TTL should match the longest-lived token duration (typically refresh token duration).
+func (r *RedisCache) RevokeSession(ctx context.Context, sessionID string, ttl time.Duration) error {
+	key := fmt.Sprintf(SessionRevokedKey, sessionID)
+
+	// Set a marker in Redis with TTL matching token expiration
+	// Value doesn't matter, just the existence of the key
+	err := r.client.Set(ctx, key, "revoked", ttl).Err()
+	if err != nil {
+		return fmt.Errorf("failed to revoke session in Redis: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"session_id": sessionID,
+		"ttl":        ttl.String(),
+	}).Info("Session revoked in cache")
+
+	return nil
+}
+
+// IsSessionRevoked checks if a session has been revoked.
+// Returns true if the session is revoked, false otherwise.
+func (r *RedisCache) IsSessionRevoked(ctx context.Context, sessionID string) (bool, error) {
+	key := fmt.Sprintf(SessionRevokedKey, sessionID)
+
+	// Check if the key exists in Redis
+	exists, err := r.client.Exists(ctx, key).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check session revocation: %w", err)
+	}
+
+	return exists > 0, nil
+}
+
 // Close connection
 func (r *RedisCache) Close() error {
 	return r.client.Close()
@@ -394,16 +430,17 @@ type CacheMetrics struct {
 }
 
 func (r *RedisCache) GetMetrics(ctx context.Context) (*CacheMetrics, error) {
-	info, err := r.client.Info(ctx, "stats").Result()
+	_, err := r.client.Info(ctx, "stats").Result()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Parse Redis info for cache metrics
 	// This is a simplified version - in production you'd parse the full stats
+	// TODO: Parse info string to extract actual hit/miss statistics
 	return &CacheMetrics{
-		Hits:   0, // Parse from info
-		Misses: 0, // Parse from info
-		Errors: 0, // Track in application
+		Hits:   0, // TODO: Parse from info
+		Misses: 0, // TODO: Parse from info
+		Errors: 0, // TODO: Track in application
 	}, nil
 }

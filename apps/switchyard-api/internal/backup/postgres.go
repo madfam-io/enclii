@@ -2,9 +2,9 @@ package backup
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -105,10 +105,9 @@ func (bm *BackupManager) CreateBackup(ctx context.Context, databaseName string) 
 	// Create context with timeout
 	backupCtx, cancel := context.WithTimeout(ctx, bm.config.BackupTimeout)
 	defer cancel()
-	
+
 	// Build pg_dump command
-	cmd := bm.buildPgDumpCommand(databaseName, backupPath)
-	cmd = cmd.WithContext(backupCtx)
+	cmd := bm.buildPgDumpCommand(backupCtx, databaseName, backupPath)
 	
 	// Execute backup
 	start := time.Now()
@@ -200,8 +199,7 @@ func (bm *BackupManager) RestoreBackup(ctx context.Context, options *RestoreOpti
 	}
 	
 	// Build pg_restore command
-	cmd := bm.buildPgRestoreCommand(options.DatabaseName, backupPath)
-	cmd = cmd.WithContext(ctx)
+	cmd := bm.buildPgRestoreCommand(ctx, options.DatabaseName, backupPath)
 	
 	// Execute restore
 	start := time.Now()
@@ -340,7 +338,7 @@ func (bm *BackupManager) VerifyBackup(backupFile string) error {
 }
 
 // Helper methods
-func (bm *BackupManager) buildPgDumpCommand(databaseName, outputPath string) *exec.Cmd {
+func (bm *BackupManager) buildPgDumpCommand(ctx context.Context, databaseName, outputPath string) *exec.Cmd {
 	args := []string{
 		"-h", bm.parseHost(),
 		"-p", bm.parsePort(),
@@ -352,14 +350,14 @@ func (bm *BackupManager) buildPgDumpCommand(databaseName, outputPath string) *ex
 		"--compress=9",
 		"--file=" + outputPath,
 	}
-	
-	cmd := exec.Command("pg_dump", args...)
+
+	cmd := exec.CommandContext(ctx, "pg_dump", args...)
 	cmd.Env = append(os.Environ(), "PGPASSWORD="+bm.parsePassword())
-	
+
 	return cmd
 }
 
-func (bm *BackupManager) buildPgRestoreCommand(databaseName, backupPath string) *exec.Cmd {
+func (bm *BackupManager) buildPgRestoreCommand(ctx context.Context, databaseName, backupPath string) *exec.Cmd {
 	args := []string{
 		"-h", bm.parseHost(),
 		"-p", bm.parsePort(),
@@ -371,29 +369,62 @@ func (bm *BackupManager) buildPgRestoreCommand(databaseName, backupPath string) 
 		"--if-exists",
 		backupPath,
 	}
-	
-	cmd := exec.Command("pg_restore", args...)
+
+	cmd := exec.CommandContext(ctx, "pg_restore", args...)
 	cmd.Env = append(os.Environ(), "PGPASSWORD="+bm.parsePassword())
-	
+
 	return cmd
 }
 
 func (bm *BackupManager) parseHost() string {
-	// Parse host from database URL
-	// Simplified parsing - in production, use proper URL parsing
-	return "localhost"
+	u, err := url.Parse(bm.config.DatabaseURL)
+	if err != nil {
+		logrus.Errorf("Failed to parse database URL: %v", err)
+		return "localhost"
+	}
+	host := u.Hostname()
+	if host == "" {
+		return "localhost"
+	}
+	return host
 }
 
 func (bm *BackupManager) parsePort() string {
-	return "5432"
+	u, err := url.Parse(bm.config.DatabaseURL)
+	if err != nil {
+		logrus.Errorf("Failed to parse database URL: %v", err)
+		return "5432"
+	}
+	port := u.Port()
+	if port == "" {
+		return "5432"
+	}
+	return port
 }
 
 func (bm *BackupManager) parseUsername() string {
-	return "postgres"
+	u, err := url.Parse(bm.config.DatabaseURL)
+	if err != nil {
+		logrus.Errorf("Failed to parse database URL: %v", err)
+		return "postgres"
+	}
+	if u.User == nil {
+		return "postgres"
+	}
+	return u.User.Username()
 }
 
 func (bm *BackupManager) parsePassword() string {
-	return "password"
+	u, err := url.Parse(bm.config.DatabaseURL)
+	if err != nil {
+		logrus.Errorf("Failed to parse database URL: %v", err)
+		return ""
+	}
+	if u.User == nil {
+		return ""
+	}
+	password, _ := u.User.Password()
+	return password
 }
 
 func (bm *BackupManager) dropDatabase(databaseName string) error {

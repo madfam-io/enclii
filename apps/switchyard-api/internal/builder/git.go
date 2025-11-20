@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/sirupsen/logrus"
 )
@@ -113,11 +114,11 @@ func (g *GitService) CloneShallow(ctx context.Context, repoURL, gitSHA string) *
 
 	// Shallow clone with depth 1
 	_, err := git.PlainCloneContext(ctx, cloneDir, false, &git.CloneOptions{
-		URL:           repoURL,
-		Depth:         1,
-		SingleBranch:  true,
-		ReferenceName: plumbing.NewHash(gitSHA).String(),
-		Progress:      nil,
+		URL:          repoURL,
+		Depth:        1,
+		SingleBranch: true,
+		// Clone and checkout specific SHA
+		Progress: nil,
 	})
 
 	if err != nil {
@@ -140,11 +141,14 @@ func (g *GitService) CloneShallow(ctx context.Context, repoURL, gitSHA string) *
 
 // ValidateRepository checks if a repository URL is accessible
 func (g *GitService) ValidateRepository(ctx context.Context, repoURL string) error {
-	// Try to list remote references
-	_, err := git.ListRemotes(&git.ListRemotesOptions{
-		URL: repoURL,
+	// Create an in-memory remote to test access
+	rem := git.NewRemote(nil, &config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{repoURL},
 	})
 
+	// List references to verify access
+	_, err := rem.List(&git.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("repository not accessible: %w", err)
 	}
