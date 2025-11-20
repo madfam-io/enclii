@@ -32,6 +32,7 @@ type Service struct {
 	Name        string      `json:"name" db:"name"`
 	GitRepo     string      `json:"git_repo" db:"git_repo"`
 	BuildConfig BuildConfig `json:"build_config" db:"build_config"`
+	Volumes     []Volume    `json:"volumes,omitempty" db:"volumes"`
 	CreatedAt   time.Time   `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at" db:"updated_at"`
 }
@@ -120,6 +121,7 @@ type ServiceSpecConfig struct {
 	Build   BuildSpec   `yaml:"build" json:"build"`
 	Runtime RuntimeSpec `yaml:"runtime" json:"runtime"`
 	Env     []EnvVar    `yaml:"env,omitempty" json:"env,omitempty"`
+	Volumes []Volume    `yaml:"volumes,omitempty" json:"volumes,omitempty"`
 }
 
 type BuildSpec struct {
@@ -136,6 +138,15 @@ type RuntimeSpec struct {
 type EnvVar struct {
 	Name  string `yaml:"name" json:"name"`
 	Value string `yaml:"value" json:"value"`
+}
+
+// Volume represents a persistent volume configuration for a service
+type Volume struct {
+	Name             string `yaml:"name" json:"name"`
+	MountPath        string `yaml:"mountPath" json:"mount_path"`
+	Size             string `yaml:"size" json:"size"`                                       // e.g., "10Gi", "100Mi"
+	StorageClassName string `yaml:"storageClassName,omitempty" json:"storage_class_name,omitempty"` // defaults to "standard"
+	AccessMode       string `yaml:"accessMode,omitempty" json:"access_mode,omitempty"`              // defaults to "ReadWriteOnce"
 }
 
 // Role represents a user's role in the system
@@ -214,4 +225,30 @@ type ApprovalRecord struct {
 	ChangeTicketURL   string     `json:"change_ticket_url,omitempty" db:"change_ticket_url"`
 	ComplianceReceipt string     `json:"compliance_receipt" db:"compliance_receipt"` // JSON receipt for auditors
 	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
+}
+
+// CustomDomain represents a custom domain mapping for a service
+type CustomDomain struct {
+	ID            uuid.UUID    `json:"id" db:"id"`
+	ServiceID     uuid.UUID    `json:"service_id" db:"service_id"`
+	EnvironmentID uuid.UUID    `json:"environment_id" db:"environment_id"`
+	Domain        string       `json:"domain" db:"domain"` // e.g., "api.example.com"
+	Verified      bool         `json:"verified" db:"verified"`
+	TLSEnabled    bool         `json:"tls_enabled" db:"tls_enabled"`
+	TLSIssuer     string       `json:"tls_issuer,omitempty" db:"tls_issuer"` // "letsencrypt-prod", "letsencrypt-staging", "selfsigned-issuer"
+	CreatedAt     time.Time    `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at" db:"updated_at"`
+	VerifiedAt    *time.Time   `json:"verified_at,omitempty" db:"verified_at"`
+}
+
+// Route represents an HTTP route configuration for a service
+type Route struct {
+	ID            uuid.UUID `json:"id" db:"id"`
+	ServiceID     uuid.UUID `json:"service_id" db:"service_id"`
+	EnvironmentID uuid.UUID `json:"environment_id" db:"environment_id"`
+	Path          string    `json:"path" db:"path"`           // e.g., "/api/v1"
+	PathType      string    `json:"path_type" db:"path_type"` // "Prefix", "Exact", "ImplementationSpecific"
+	Port          int       `json:"port" db:"port"`           // Target port
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
 }

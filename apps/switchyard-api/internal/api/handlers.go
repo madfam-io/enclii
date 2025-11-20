@@ -39,6 +39,7 @@ type Handler struct {
 	builder            *builder.Service
 	k8sClient          *k8s.Client
 	reconciler         *reconciler.Controller
+	serviceReconciler  *reconciler.ServiceReconciler
 	metrics            *monitoring.MetricsCollector
 	logger             logging.Logger
 	validator          *validation.Validator
@@ -56,6 +57,7 @@ func NewHandler(
 	builder *builder.Service,
 	k8sClient *k8s.Client,
 	reconciler *reconciler.Controller,
+	serviceReconciler *reconciler.ServiceReconciler,
 	metrics *monitoring.MetricsCollector,
 	logger logging.Logger,
 	validator *validation.Validator,
@@ -84,6 +86,7 @@ func NewHandler(
 		builder:            builder,
 		k8sClient:          k8sClient,
 		reconciler:         reconciler,
+		serviceReconciler:  serviceReconciler,
 		metrics:            metrics,
 		logger:             logger,
 		validator:          validator,
@@ -101,6 +104,7 @@ func NewHandler(
 // - services_handlers.go: Service CRUD operations
 // - build_handlers.go: Build and release management
 // - deployment_handlers.go: Deployment operations
+// - domain_handlers.go: Custom domain management
 // - topology_handlers.go: Service dependency graph
 func SetupRoutes(router *gin.Engine, h *Handler) {
 	// Health check (no auth required)
@@ -151,6 +155,14 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/topology/services/:id/dependencies", h.GetServiceDependencies)
 			protected.GET("/topology/services/:id/impact", h.GetServiceImpact)
 			protected.GET("/topology/path", h.FindDependencyPath)
+
+			// Custom Domains
+			protected.POST("/services/:service_id/domains", h.auth.RequireRole(types.RoleDeveloper), h.AddCustomDomain)
+			protected.GET("/services/:service_id/domains", h.ListCustomDomains)
+			protected.GET("/services/:service_id/domains/:domain_id", h.GetCustomDomain)
+			protected.PATCH("/services/:service_id/domains/:domain_id", h.auth.RequireRole(types.RoleDeveloper), h.UpdateCustomDomain)
+			protected.DELETE("/services/:service_id/domains/:domain_id", h.auth.RequireRole(types.RoleDeveloper), h.DeleteCustomDomain)
+			protected.POST("/services/:service_id/domains/:domain_id/verify", h.auth.RequireRole(types.RoleDeveloper), h.VerifyCustomDomain)
 		}
 	}
 }

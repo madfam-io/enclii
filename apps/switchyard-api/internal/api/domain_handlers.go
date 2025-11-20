@@ -1,0 +1,411 @@
+package api
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/sirupsen/logrus"
+)
+
+// AddCustomDomain adds a custom domain to a service
+// POST /api/v1/services/:service_id/domains
+func (h *Handler) AddCustomDomain(c *gin.Context) {
+	serviceID := c.Param("service_id")
+	if serviceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "service_id is required"})
+		return
+	}
+
+	var req struct {
+		Domain        string `json:"domain" binding:"required"`
+		Environment   string `json:"environment" binding:"required"`
+		TLSEnabled    bool   `json:"tls_enabled"`
+		TLSIssuer     string `json:"tls_issuer"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Validate service exists
+	serviceUUID, err := uuid.Parse(serviceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service_id"})
+		return
+	}
+
+	service, err := h.repos.Services.GetByID(serviceUUID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "service not found"})
+		return
+	}
+
+	// Get environment
+	env, err := h.repos.Environments.GetByProjectAndName(service.ProjectID, req.Environment)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "environment not found"})
+		return
+	}
+
+	// Validate domain format
+	if !isValidDomain(req.Domain) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid domain format"})
+		return
+	}
+
+	// Check if domain is already in use
+	exists, err := h.repos.CustomDomains.Exists(ctx, req.Domain)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to check domain existence")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	if exists {
+		c.JSON(http.StatusConflict, gin.H{"error": "domain already in use"})
+		return
+	}
+
+	// Default TLS issuer
+	tlsIssuer := req.TLSIssuer
+	if tlsIssuer == "" {
+		if req.Environment == "production" {
+			tlsIssuer = "letsencrypt-prod"
+		} else {
+			tlsIssuer = "letsencrypt-staging"
+		}
+	}
+
+	// Create custom domain
+	domain := &types.CustomDomain{
+		ServiceID:     serviceUUID,
+		EnvironmentID: env.ID,
+		Domain:        req.Domain,
+		Verified:      false,
+		TLSEnabled:    req.TLSEnabled,
+		TLSIssuer:     tlsIssuer,
+	}
+
+	if err := h.repos.CustomDomains.Create(ctx, domain); err != nil {
+		h.logger.WithError(err).Error("Failed to create custom domain")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create custom domain"})
+		return
+	}
+
+	// Trigger reconciliation to create Ingress
+	go h.triggerDomainReconciliation(ctx, serviceUUID, env.ID)
+
+	c.JSON(http.StatusCreated, gin.H{
+		"domain": domain,
+		"message": fmt.Sprintf("Custom domain %s added. Configure your DNS to point to the ingress controller.", req.Domain),
+	})
+}
+
+// ListCustomDomains lists all custom domains for a service
+// GET /api/v1/services/:service_id/domains
+func (h *Handler) ListCustomDomains(c *gin.Context) {
+	serviceID := c.Param("service_id")
+	if serviceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "service_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	domains, err := h.repos.CustomDomains.GetByServiceID(ctx, serviceID)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to list custom domains")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list custom domains"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"domains": domains})
+}
+
+// GetCustomDomain gets a specific custom domain
+// GET /api/v1/services/:service_id/domains/:domain_id
+func (h *Handler) GetCustomDomain(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	if domainID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "domain_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	domain, err := h.repos.CustomDomains.GetByID(ctx, domainID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "custom domain not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"domain": domain})
+}
+
+// UpdateCustomDomain updates a custom domain
+// PATCH /api/v1/services/:service_id/domains/:domain_id
+func (h *Handler) UpdateCustomDomain(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	if domainID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "domain_id is required"})
+		return
+	}
+
+	var req struct {
+		TLSEnabled *bool   `json:"tls_enabled,omitempty"`
+		TLSIssuer  *string `json:"tls_issuer,omitempty"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Get existing domain
+	domain, err := h.repos.CustomDomains.GetByID(ctx, domainID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "custom domain not found"})
+		return
+	}
+
+	// Update fields
+	if req.TLSEnabled != nil {
+		domain.TLSEnabled = *req.TLSEnabled
+	}
+	if req.TLSIssuer != nil {
+		domain.TLSIssuer = *req.TLSIssuer
+	}
+
+	if err := h.repos.CustomDomains.Update(ctx, domain); err != nil {
+		h.logger.WithError(err).Error("Failed to update custom domain")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update custom domain"})
+		return
+	}
+
+	// Trigger reconciliation to update Ingress
+	go h.triggerDomainReconciliation(ctx, domain.ServiceID, domain.EnvironmentID)
+
+	c.JSON(http.StatusOK, gin.H{"domain": domain})
+}
+
+// DeleteCustomDomain removes a custom domain
+// DELETE /api/v1/services/:service_id/domains/:domain_id
+func (h *Handler) DeleteCustomDomain(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	if domainID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "domain_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Get domain to check service ownership
+	domain, err := h.repos.CustomDomains.GetByID(ctx, domainID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "custom domain not found"})
+		return
+	}
+
+	// Delete domain
+	if err := h.repos.CustomDomains.Delete(ctx, domainID); err != nil {
+		h.logger.WithError(err).Error("Failed to delete custom domain")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete custom domain"})
+		return
+	}
+
+	// Trigger reconciliation to remove Ingress
+	go h.triggerDomainReconciliation(ctx, domain.ServiceID, domain.EnvironmentID)
+
+	c.JSON(http.StatusOK, gin.H{"message": "custom domain deleted"})
+}
+
+// VerifyCustomDomain verifies domain ownership via DNS TXT record
+// POST /api/v1/services/:service_id/domains/:domain_id/verify
+func (h *Handler) VerifyCustomDomain(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	if domainID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "domain_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Get domain
+	domain, err := h.repos.CustomDomains.GetByID(ctx, domainID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "custom domain not found"})
+		return
+	}
+
+	// Check DNS TXT record
+	expectedValue := fmt.Sprintf("enclii-verification=%s", domain.ID.String())
+	verified, err := verifyDNSTXTRecord(domain.Domain, expectedValue)
+	if err != nil {
+		h.logger.WithError(err).WithField("domain", domain.Domain).Error("Failed to verify DNS")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to verify DNS record",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	if !verified {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "domain not verified",
+			"message": fmt.Sprintf("Add a TXT record to %s with value: %s", domain.Domain, expectedValue),
+			"verification_value": expectedValue,
+		})
+		return
+	}
+
+	// Mark as verified
+	domain.Verified = true
+	verifiedAt := time.Now()
+	domain.VerifiedAt = &verifiedAt
+
+	if err := h.repos.CustomDomains.Update(ctx, domain); err != nil {
+		h.logger.WithError(err).Error("Failed to update domain verification status")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update domain"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "domain verified successfully",
+		"domain": domain,
+	})
+}
+
+// triggerDomainReconciliation triggers a reconciliation for a service with updated domains
+func (h *Handler) triggerDomainReconciliation(ctx context.Context, serviceID, environmentID uuid.UUID) {
+	// Get service
+	service, err := h.repos.Services.GetByID(serviceID)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get service for reconciliation")
+		return
+	}
+
+	// Get latest deployment
+	deployment, err := h.repos.Deployments.GetLatestByService(ctx, serviceID.String())
+	if err != nil {
+		h.logger.WithError(err).Warn("No deployment found for service, skipping domain reconciliation")
+		return
+	}
+
+	// Get release
+	release, err := h.repos.Releases.GetByID(deployment.ReleaseID)
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get release for reconciliation")
+		return
+	}
+
+	// Get custom domains and routes
+	domains, err := h.repos.CustomDomains.GetByServiceAndEnvironment(ctx, serviceID.String(), environmentID.String())
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get custom domains")
+		domains = []types.CustomDomain{} // Continue with empty domains
+	}
+
+	routes, err := h.repos.Routes.GetByServiceAndEnvironment(ctx, serviceID.String(), environmentID.String())
+	if err != nil {
+		h.logger.WithError(err).Error("Failed to get routes")
+		routes = []types.Route{} // Continue with empty routes
+	}
+
+	// Reconcile
+	reconcileReq := &reconciler.ReconcileRequest{
+		Service:       service,
+		Release:       release,
+		Deployment:    deployment,
+		CustomDomains: domains,
+		Routes:        routes,
+	}
+
+	result := h.serviceReconciler.Reconcile(ctx, reconcileReq)
+	if !result.Success {
+		h.logger.WithFields(logrus.Fields{
+			"service": service.Name,
+			"error":   result.Error,
+		}).Error("Failed to reconcile service with custom domains")
+	} else {
+		h.logger.WithField("service", service.Name).Info("Successfully reconciled service with custom domains")
+	}
+}
+
+// isValidDomain checks if a domain name is valid
+func isValidDomain(domain string) bool {
+	// Basic validation
+	if len(domain) == 0 || len(domain) > 253 {
+		return false
+	}
+
+	// Must not start or end with dot
+	if strings.HasPrefix(domain, ".") || strings.HasSuffix(domain, ".") {
+		return false
+	}
+
+	// Must contain at least one dot
+	if !strings.Contains(domain, ".") {
+		return false
+	}
+
+	// Each label must be valid
+	labels := strings.Split(domain, ".")
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 {
+			return false
+		}
+
+		// Must start and end with alphanumeric
+		if !isAlphanumeric(label[0]) || !isAlphanumeric(label[len(label)-1]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isAlphanumeric checks if a byte is alphanumeric
+func isAlphanumeric(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+}
+
+// verifyDNSTXTRecord checks if a DNS TXT record exists with the expected value
+func verifyDNSTXTRecord(domain, expectedValue string) (bool, error) {
+	// Query TXT records for the domain
+	txtRecords, err := net.LookupTXT(domain)
+	if err != nil {
+		// Domain may not have TXT records yet
+		if dnsErr, ok := err.(*net.DNSError); ok {
+			if dnsErr.IsNotFound || dnsErr.IsTemporary {
+				return false, nil
+			}
+		}
+		return false, fmt.Errorf("DNS lookup failed: %w", err)
+	}
+
+	// Check if any TXT record matches the expected value
+	for _, record := range txtRecords {
+		if record == expectedValue {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// Note: triggerDomainReconciliation uses the existing reconciler.Controller
+// which contains the ServiceReconciler needed for reconciling service changes
