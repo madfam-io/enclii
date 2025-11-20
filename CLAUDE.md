@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Enclii is a Railway-style internal platform for building, deploying, scaling, and operating containerized services with guardrails. It runs on managed Kubernetes and managed databases, abstracting infrastructure complexity while maintaining operational safety.
+Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
+
+**Current Status:** 70% production-ready ([audit](./PRODUCTION_READINESS_AUDIT.md))
+**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud ($100/month)
+**Authentication:** Plinto (self-hosted OAuth/OIDC from [separate repo](https://github.com/madfam-io/plinto))
+**Dogfooding:** Enclii deploys itself, authenticated by Plinto ([guide](./DOGFOODING_GUIDE.md))
+**Production Timeline:** 6-8 weeks to launch ([roadmap](./PRODUCTION_DEPLOYMENT_ROADMAP.md))
 
 ## Architecture
 
@@ -117,3 +123,73 @@ Key vars for local development (set in `.env`):
 - Resource usage tracked per project/environment/service
 - Budget alerts at 80% threshold
 - Hard throttle at 100% for non-production environments
+
+## Production Infrastructure
+
+### Research-Validated Stack (~$100/month)
+
+Enclii runs on cost-optimized infrastructure validated through independent research:
+
+**Compute & Kubernetes:**
+- **Hetzner Cloud** (3x CPX31) - AMD EPYC, NVMe SSD - $45/month
+- **k3s** - Lightweight Kubernetes distribution
+- **Cloudflare Tunnel** - Replaces LoadBalancer (saves $108/year) - $0
+
+**Database & Caching:**
+- **Ubicloud PostgreSQL** - Managed DB on Hetzner infrastructure - $50/month
+- **Redis Sentinel** - Self-hosted HA (3 nodes, automatic failover) - $0
+
+**Storage & Networking:**
+- **Cloudflare R2** - Zero-egress object storage (SBOMs, artifacts) - $5/month
+- **Cloudflare for SaaS** - First 100 custom domains FREE - $0
+
+**vs Traditional SaaS Stack:** $2,220/month (Railway $2,000 + Auth0 $220)
+**5-Year Savings:** $127,200
+
+See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./PRODUCTION_DEPLOYMENT_ROADMAP.md) for details.
+
+### Authentication (Plinto)
+
+Enclii uses **Plinto** for authentication - a self-hosted OAuth/OIDC provider:
+
+- **Repository:** [github.com/madfam-io/plinto](https://github.com/madfam-io/plinto)
+- **Deployment:** Via Enclii itself (dogfooding!) using `dogfooding/plinto.yaml`
+- **Protocol:** OAuth 2.0 / OIDC with RS256 JWT
+- **Features:** Multi-tenant orgs, password + SSO, JWKS rotation
+- **Cost:** $0 (self-hosted on shared infrastructure)
+
+**Why Plinto vs Auth0/Clerk:**
+- No vendor lock-in
+- No per-MAU costs
+- Full control over auth flows
+- Multi-tenant ready out of the box
+- Deployed and managed via Enclii itself
+
+### Dogfooding Strategy
+
+> **"We run our entire platform on Enclii, authenticated by Plinto. We're our own most demanding customer."**
+
+All Enclii components are deployed via Enclii itself:
+
+**Production Services** (all managed via `enclii deploy`):
+- `switchyard-api` → api.enclii.io (control plane)
+- `switchyard-ui` → app.enclii.io (web dashboard)
+- `plinto` → auth.enclii.io (authentication, from separate repo!)
+- `landing-page` → enclii.io (marketing site)
+- `docs-site` → docs.enclii.io (documentation)
+- `status-page` → status.enclii.io (uptime monitoring)
+
+**Service Specs:**
+All dogfooding specs are in `dogfooding/` directory:
+- Uses multi-repo builds (Plinto from different GitHub repo)
+- Demonstrates auto-deploy on git push
+- Includes NetworkPolicies, autoscaling, custom domains
+- Production-ready configurations (not toy examples)
+
+See [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md) for complete implementation.
+
+**Why This Matters:**
+- **Customer Confidence:** "If they trust it, we can too"
+- **Product Quality:** We find bugs before customers do
+- **Sales Credibility:** Authentic production usage metrics
+- **Team Alignment:** Everyone uses the platform daily
