@@ -1,0 +1,562 @@
+package api
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+
+	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
+	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+)
+
+// DeployService handles service deployment requests
+func (h *Handler) DeployService(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	serviceID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	var req struct {
+		ReleaseID       string            `json:"release_id" binding:"required"`
+		Environment     map[string]string `json:"environment"`
+		EnvironmentName string            `json:"environment_name"` // e.g., "production", "staging", "dev"
+		Replicas        int               `json:"replicas,omitempty"`
+		ChangeTicketURL string            `json:"change_ticket_url,omitempty"` // For production deployments
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Default environment name to "development" if not specified
+	if req.EnvironmentName == "" {
+		req.EnvironmentName = "development"
+	}
+
+	// Get service details
+	service, err := h.repos.Service.GetByID(ctx, serviceID.String())
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get service", logging.Error("db_error", err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		return
+	}
+
+	// Get release details
+	release, err := h.repos.Release.GetByID(ctx, req.ReleaseID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get release", logging.Error("db_error", err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "Release not found"})
+		return
+	}
+
+	// Verify release is ready
+	if release.Status != types.ReleaseStatusReady {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Release is not ready for deployment"})
+		return
+	}
+
+	// Create deployment record
+	deployment := &types.Deployment{
+		ID:          uuid.New().String(),
+		ServiceID:   serviceID.String(),
+		ReleaseID:   req.ReleaseID,
+		Environment: req.Environment,
+		Replicas:    req.Replicas,
+		Status:      types.DeploymentStatusPending,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Check PR approvals before deployment (if provenance checker is configured)
+	if h.provenanceChecker != nil {
+		approvalResult, err := h.provenanceChecker.CheckDeploymentApproval(
+			ctx,
+			deployment,
+			release,
+			service,
+			req.EnvironmentName,
+			req.ChangeTicketURL,
+		)
+
+		if err != nil {
+			h.logger.Error(ctx, "Failed to check deployment approval", logging.Error("provenance_error", err))
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Failed to verify deployment approval",
+				"details": err.Error(),
+			})
+			return
+		}
+
+		if !approvalResult.Approved {
+			h.logger.Warn(ctx, "Deployment blocked by approval policy",
+				logging.String("environment", req.EnvironmentName),
+				logging.String("service_id", serviceID.String()),
+				logging.String("violations", approvalResult.Violations.Error()))
+
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":             "Deployment does not meet approval requirements",
+				"policy_violations": approvalResult.Violations,
+				"environment":       req.EnvironmentName,
+				"help":              "Ensure your PR has sufficient approvals and CI checks pass before deploying to this environment",
+			})
+			return
+		}
+
+		// Store approval record for audit trail
+		if approvalResult.Receipt != nil {
+			receiptJSON, err := approvalResult.Receipt.ToJSON()
+			if err != nil {
+				h.logger.Error(ctx, "Failed to serialize compliance receipt", logging.Error("receipt_error", err))
+			}
+
+			approvalRecord := &types.ApprovalRecord{
+				DeploymentID:      uuid.MustParse(deployment.ID),
+				PRURL:             approvalResult.PRURL,
+				PRNumber:          approvalResult.PRNumber,
+				ApproverEmail:     approvalResult.ApproverEmail,
+				ApproverName:      approvalResult.ApproverName,
+				ApprovedAt:        &approvalResult.ApprovedAt,
+				CIStatus:          approvalResult.CIStatus,
+				ChangeTicketURL:   req.ChangeTicketURL,
+				ComplianceReceipt: receiptJSON,
+			}
+
+			if err := h.repos.ApprovalRecords.Create(ctx, approvalRecord); err != nil {
+				// Log error but don't block deployment - approval record is for audit only
+				h.logger.Error(ctx, "Failed to store approval record", logging.Error("db_error", err))
+			} else {
+				h.logger.Info(ctx, "Approval record stored",
+					logging.String("deployment_id", deployment.ID),
+					logging.String("pr_url", approvalResult.PRURL),
+					logging.String("approver", approvalResult.ApproverEmail))
+			}
+
+			// Send compliance evidence to Vanta/Drata (if enabled)
+			if h.complianceExporter != nil && h.complianceExporter.IsEnabled() {
+				go h.sendComplianceWebhooks(ctx, deployment, release, service, req.EnvironmentName, approvalResult, receiptJSON)
+			}
+		}
+	}
+
+	if deployment.Replicas <= 0 {
+		deployment.Replicas = 1 // Default to 1 replica
+	}
+
+	if err := h.repos.Deployment.Create(ctx, deployment); err != nil {
+		h.logger.Error(ctx, "Failed to create deployment", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create deployment"})
+		return
+	}
+
+	// Schedule deployment with reconciler
+	h.reconciler.ScheduleReconciliation(deployment.ID, 1) // High priority
+
+	// Record metrics
+	h.metrics.RecordDeployment(service.Name, release.Version)
+
+	h.logger.Info(ctx, "Deployment created",
+		logging.String("deployment_id", deployment.ID),
+		logging.String("service_id", serviceID.String()),
+		logging.String("release_id", req.ReleaseID))
+
+	c.JSON(http.StatusCreated, deployment)
+}
+
+// GetServiceStatus returns the current status of a service
+func (h *Handler) GetServiceStatus(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	serviceID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Check cache first
+	cacheKey := fmt.Sprintf("service:status:%s", serviceID.String())
+	if cached, err := h.cache.Get(ctx, cacheKey); err == nil && cached != nil {
+		c.Header("X-Cache", "hit")
+		c.Data(http.StatusOK, "application/json", cached)
+		return
+	}
+
+	// Get service
+	service, err := h.repos.Service.GetByID(ctx, serviceID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		return
+	}
+
+	// Get latest deployment
+	deployments, err := h.repos.Deployment.GetByServiceID(ctx, serviceID.String())
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get deployments", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get service status"})
+		return
+	}
+
+	status := gin.H{
+		"service":     service,
+		"deployments": deployments,
+		"status":      "unknown",
+	}
+
+	if len(deployments) > 0 {
+		latestDeployment := deployments[0]
+		status["status"] = string(latestDeployment.Status)
+		status["latest_deployment"] = latestDeployment
+
+		// Get Kubernetes status if deployment is active
+		if latestDeployment.Status == types.DeploymentStatusActive {
+			namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
+			if pods, err := h.k8sClient.ListPods(ctx, namespace, fmt.Sprintf("enclii.dev/service=%s", service.Name)); err == nil {
+				status["pods"] = pods.Items
+				status["running_pods"] = len(pods.Items)
+			}
+		}
+	}
+
+	// Cache for 30 seconds
+	if statusJSON, err := json.Marshal(status); err == nil {
+		h.cache.Set(ctx, cacheKey, statusJSON, 30*time.Second)
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
+// GetLogs retrieves logs for a deployment
+func (h *Handler) GetLogs(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	deploymentID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid deployment ID"})
+		return
+	}
+
+	// Get deployment
+	deployment, err := h.repos.Deployment.GetByID(ctx, deploymentID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Deployment not found"})
+		return
+	}
+
+	// Get service to determine namespace
+	service, err := h.repos.Service.GetByID(ctx, deployment.ServiceID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get service", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get service"})
+		return
+	}
+
+	// Get query parameters for log options
+	lines := c.DefaultQuery("lines", "100")
+	follow := c.Query("follow") == "true"
+
+	linesInt, err := strconv.Atoi(lines)
+	if err != nil {
+		linesInt = 100
+	}
+
+	namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
+	labelSelector := fmt.Sprintf("enclii.dev/service=%s", service.Name)
+
+	// Get logs from Kubernetes
+	logs, err := h.k8sClient.GetLogs(ctx, namespace, labelSelector, linesInt, follow)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get logs", logging.Error("k8s_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve logs"})
+		return
+	}
+
+	if follow {
+		// Stream logs via SSE
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("Access-Control-Allow-Origin", "*")
+
+		// Stream logs (simplified implementation)
+		c.String(http.StatusOK, logs)
+	} else {
+		// Return logs as JSON
+		c.JSON(http.StatusOK, gin.H{
+			"deployment_id": deployment.ID,
+			"service_name":  service.Name,
+			"logs":          logs,
+			"lines":         linesInt,
+		})
+	}
+}
+
+// RollbackDeployment rolls back a deployment to a previous version
+func (h *Handler) RollbackDeployment(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	deploymentID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid deployment ID"})
+		return
+	}
+
+	// Get deployment
+	deployment, err := h.repos.Deployment.GetByID(ctx, deploymentID.String())
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Deployment not found"})
+		return
+	}
+
+	// Get service
+	service, err := h.repos.Service.GetByID(ctx, deployment.ServiceID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get service", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get service"})
+		return
+	}
+
+	// Find previous successful deployment
+	deployments, err := h.repos.Deployment.GetByServiceID(ctx, deployment.ServiceID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get deployments", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to find previous deployment"})
+		return
+	}
+
+	var previousDeployment *types.Deployment
+	for _, d := range deployments {
+		if d.ID != deployment.ID && d.Status == types.DeploymentStatusActive {
+			previousDeployment = d
+			break
+		}
+	}
+
+	if previousDeployment == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No previous deployment found to rollback to"})
+		return
+	}
+
+	// Update current deployment status
+	if err := h.repos.Deployment.UpdateStatus(ctx, deployment.ID, types.DeploymentStatusRolledBack, "Rolled back by user"); err != nil {
+		h.logger.Error(ctx, "Failed to update deployment status", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update deployment status"})
+		return
+	}
+
+	// Trigger rollback in Kubernetes
+	namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
+	if err := h.reconciler.Rollback(ctx, namespace, service.Name); err != nil {
+		h.logger.Error(ctx, "Failed to rollback in Kubernetes", logging.Error("k8s_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rollback deployment"})
+		return
+	}
+
+	// Clear cache
+	h.cache.DelByTag(ctx, fmt.Sprintf("service:%s", service.ID))
+
+	// Record metrics
+	h.metrics.RecordRollback(service.Name)
+
+	h.logger.Info(ctx, "Deployment rolled back",
+		logging.String("deployment_id", deployment.ID),
+		logging.String("service_id", service.ID),
+		logging.String("previous_deployment_id", previousDeployment.ID))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":            "Deployment rolled back successfully",
+		"rolled_back_to":     previousDeployment,
+		"current_deployment": deployment,
+	})
+}
+
+// GetLatestDeployment returns the most recent deployment for a service
+func (h *Handler) GetLatestDeployment(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	serviceID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Get latest deployment for this service
+	deployment, err := h.repos.Deployment.GetLatestByService(ctx, serviceID.String())
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "No deployments found for this service"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get latest deployment", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve deployment"})
+		return
+	}
+
+	// Get release info for version
+	release, err := h.repos.Release.GetByID(deployment.ReleaseID)
+	if err == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"deployment": deployment,
+			"release":    release,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"deployment": deployment,
+	})
+}
+
+// GetDeployment returns a specific deployment by ID
+func (h *Handler) GetDeployment(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	deploymentID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid deployment ID"})
+		return
+	}
+
+	deployment, err := h.repos.Deployment.GetByID(ctx, deploymentID.String())
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Deployment not found"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get deployment", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve deployment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, deployment)
+}
+
+// ListServiceDeployments returns all deployments for a service
+func (h *Handler) ListServiceDeployments(c *gin.Context) {
+	ctx := c.Request.Context()
+	idStr := c.Param("id")
+	serviceID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Get all releases for this service
+	releases, err := h.repos.Release.ListByService(serviceID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list releases", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve releases"})
+		return
+	}
+
+	// Get deployments for each release
+	var allDeployments []*types.Deployment
+	for _, release := range releases {
+		deployments, err := h.repos.Deployment.ListByRelease(ctx, release.ID)
+		if err != nil {
+			h.logger.Error(ctx, "Failed to list deployments", logging.Error("db_error", err))
+			continue
+		}
+		allDeployments = append(allDeployments, deployments...)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"service_id":  serviceID,
+		"deployments": allDeployments,
+		"count":       len(allDeployments),
+	})
+}
+
+// sendComplianceWebhooks sends deployment evidence to Vanta/Drata
+func (h *Handler) sendComplianceWebhooks(
+	ctx context.Context,
+	deployment *types.Deployment,
+	release *types.Release,
+	service *types.Service,
+	environmentName string,
+	approvalResult *provenance.ApprovalResult,
+	receiptJSON string,
+) {
+	// Get project information
+	project, err := h.repos.Project.GetByID(ctx, service.ProjectID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get project for compliance webhook", logging.Error("db_error", err))
+		return
+	}
+
+	// Get user context (who is deploying)
+	userEmail := "system@enclii.dev" // Default
+	userName := "System"
+	if userCtx := ctx.Value("user"); userCtx != nil {
+		if user, ok := userCtx.(*types.User); ok {
+			userEmail = user.Email
+			userName = user.Name
+		}
+	}
+
+	// Construct deployment evidence
+	evidence := &compliance.DeploymentEvidence{
+		EventType:   "deployment",
+		EventID:     deployment.ID,
+		Timestamp:   time.Now().UTC(),
+		ServiceName: service.Name,
+		Environment: environmentName,
+		ProjectName: project.Name,
+
+		DeploymentID:   deployment.ID,
+		ReleaseVersion: release.Version,
+		ImageURI:       release.ImageURI,
+
+		GitSHA:  release.GitSHA,
+		GitRepo: service.GitRepo,
+
+		// Provenance from PR approval
+		PRURL:      approvalResult.PRURL,
+		PRNumber:   approvalResult.PRNumber,
+		ApprovedBy: approvalResult.ApproverEmail,
+		ApprovedAt: approvalResult.ApprovedAt,
+		CIStatus:   approvalResult.CIStatus,
+
+		// Deployer information
+		DeployedBy:      userName,
+		DeployedByEmail: userEmail,
+		DeployedAt:      time.Now().UTC(),
+
+		// Supply chain security
+		SBOM:              release.SBOM,
+		SBOMFormat:        release.SBOMFormat,
+		ImageSignature:    release.ImageSignature,
+		SignatureVerified: release.SignatureVerifiedAt != nil,
+
+		// Compliance receipt
+		ComplianceReceipt: receiptJSON,
+	}
+
+	h.logger.Info(ctx, "Sending compliance evidence webhooks",
+		logging.String("deployment_id", deployment.ID),
+		logging.String("service", service.Name),
+		logging.String("environment", environmentName))
+
+	// Send to configured webhooks
+	results := h.complianceExporter.ExportDeployment(
+		ctx,
+		evidence,
+		h.config.VantaWebhookURL,
+		h.config.DrataWebhookURL,
+	)
+
+	// Log results
+	h.complianceExporter.LogExportResults(results)
+}
