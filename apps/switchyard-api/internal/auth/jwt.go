@@ -343,7 +343,7 @@ func (j *JWTManager) RequireProjectAccess() gin.HandlerFunc {
 		}
 
 		// Get project by slug
-		project, err := j.repos.Projects.GetBySlug(ctx, projectSlug)
+		project, err := j.repos.Projects.GetBySlug(projectSlug)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})

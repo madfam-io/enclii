@@ -62,26 +62,26 @@ type UserRepositoryInterface interface {
 
 // ProjectAccessRepositoryInterface defines operations for project access control
 type ProjectAccessRepositoryInterface interface {
-	Grant(access *ProjectAccess) error
+	Grant(access *types.ProjectAccess) error
 	Revoke(ctx context.Context, userID, projectID uuid.UUID, environmentID *uuid.UUID) error
-	GetByUserAndProject(ctx context.Context, userID, projectID uuid.UUID) ([]*ProjectAccess, error)
-	ListByUser(ctx context.Context, userID uuid.UUID) ([]*ProjectAccess, error)
+	GetByUserAndProject(ctx context.Context, userID, projectID uuid.UUID) ([]*types.ProjectAccess, error)
+	ListByUser(ctx context.Context, userID uuid.UUID) ([]*types.ProjectAccess, error)
 	HasAccess(ctx context.Context, userID, projectID uuid.UUID, environmentID *uuid.UUID, requiredRole types.Role) (bool, error)
 }
 
 // AuditLogRepositoryInterface defines operations for audit logs
 type AuditLogRepositoryInterface interface {
-	Create(ctx context.Context, log *AuditLog) error
-	ListByActor(ctx context.Context, actorID uuid.UUID, limit int) ([]*AuditLog, error)
-	ListByResource(ctx context.Context, resourceType, resourceID string, limit int) ([]*AuditLog, error)
-	ListRecent(ctx context.Context, limit int) ([]*AuditLog, error)
+	Create(ctx context.Context, log *types.AuditLog) error
+	ListByActor(ctx context.Context, actorID uuid.UUID, limit int) ([]*types.AuditLog, error)
+	ListByResource(ctx context.Context, resourceType, resourceID string, limit int) ([]*types.AuditLog, error)
+	ListRecent(ctx context.Context, limit int) ([]*types.AuditLog, error)
 }
 
 // ApprovalRecordRepositoryInterface defines operations for approval records
 type ApprovalRecordRepositoryInterface interface {
-	Create(ctx context.Context, record *ApprovalRecord) error
-	GetByDeployment(ctx context.Context, deploymentID uuid.UUID) (*ApprovalRecord, error)
-	ListByService(ctx context.Context, serviceID uuid.UUID, limit int) ([]*ApprovalRecord, error)
+	Create(ctx context.Context, record *types.ApprovalRecord) error
+	GetByDeployment(ctx context.Context, deploymentID uuid.UUID) (*types.ApprovalRecord, error)
+	ListByService(ctx context.Context, serviceID uuid.UUID, limit int) ([]*types.ApprovalRecord, error)
 }
 
 // RotationAuditLogRepositoryInterface defines operations for rotation audit logs
@@ -105,47 +105,6 @@ type RepositoryProvider interface {
 	RotationAuditLogs() RotationAuditLogRepositoryInterface
 }
 
-// Ensure Repositories implements RepositoryProvider
-var _ RepositoryProvider = (*Repositories)(nil)
-
-// Implementation of RepositoryProvider interface
-
-func (r *Repositories) Projects() ProjectRepositoryInterface {
-	return r.Projects
-}
-
-func (r *Repositories) Environments() EnvironmentRepositoryInterface {
-	return r.Environments
-}
-
-func (r *Repositories) Services() ServiceRepositoryInterface {
-	return r.Services
-}
-
-func (r *Repositories) Releases() ReleaseRepositoryInterface {
-	return r.Releases
-}
-
-func (r *Repositories) Deployments() DeploymentRepositoryInterface {
-	return r.Deployments
-}
-
-func (r *Repositories) Users() UserRepositoryInterface {
-	return r.Users
-}
-
-func (r *Repositories) ProjectAccess() ProjectAccessRepositoryInterface {
-	return r.ProjectAccess
-}
-
-func (r *Repositories) AuditLogs() AuditLogRepositoryInterface {
-	return r.AuditLogs
-}
-
-func (r *Repositories) ApprovalRecords() ApprovalRecordRepositoryInterface {
-	return r.ApprovalRecords
-}
-
-func (r *Repositories) RotationAuditLogs() RotationAuditLogRepositoryInterface {
-	return r.RotationAuditLogs
-}
+// Note: RepositoryProvider interface exists for documentation and potential future use,
+// but Repositories struct already exposes all repositories as public fields, so no
+// accessor methods are needed (they would conflict with the field names anyway).

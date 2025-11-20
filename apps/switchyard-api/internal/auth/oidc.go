@@ -5,14 +5,13 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -148,7 +147,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 	Sub           string `json:"sub"`
 }, issuer string) (*User, error) {
 	// Try to find user by OIDC identity (issuer + subject)
-	user, err := o.repos.User.GetByOIDCIdentity(ctx, issuer, claims.Sub)
+	user, err := o.repos.Users.GetByOIDCIdentity(ctx, issuer, claims.Sub)
 	if err == nil {
 		// User found by OIDC identity
 		logrus.WithFields(logrus.Fields{
@@ -166,7 +165,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 	}
 
 	// Try to find user by email (migration from local auth)
-	user, err = o.repos.User.GetByEmail(ctx, claims.Email)
+	user, err = o.repos.Users.GetByEmail(ctx, claims.Email)
 	if err == nil {
 		// User exists from local auth - link to OIDC identity
 		logrus.WithFields(logrus.Fields{
@@ -178,7 +177,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 		// Update user with OIDC identity
 		user.OIDCSubject = &claims.Sub
 		user.OIDCIssuer = &issuer
-		if err := o.repos.User.Update(ctx, user); err != nil {
+		if err := o.repos.Users.Update(ctx, user); err != nil {
 			return nil, fmt.Errorf("failed to link OIDC identity: %w", err)
 		}
 
@@ -198,7 +197,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 		"oidc_subject": claims.Sub,
 	}).Info("Creating new user from OIDC")
 
-	newUser := &db.User{
+	newUser := &types.User{
 		ID:           uuid.New(),
 		Email:        claims.Email,
 		Name:         claims.Name,
@@ -211,7 +210,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 		UpdatedAt:    time.Now(),
 	}
 
-	if err := o.repos.User.Create(ctx, newUser); err != nil {
+	if err := o.repos.Users.Create(ctx, newUser); err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -258,5 +257,5 @@ func (o *OIDCManager) ValidateToken(tokenString string) (*Claims, error) {
 
 // RefreshToken refreshes an access token using a refresh token
 func (o *OIDCManager) RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error) {
-	return o.jwtManager.RefreshToken(ctx, refreshToken)
+	return o.jwtManager.RefreshToken(refreshToken)
 }
