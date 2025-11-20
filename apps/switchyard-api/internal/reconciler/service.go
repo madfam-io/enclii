@@ -147,36 +147,24 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 		"app":                    req.Service.Name,
 		"version":                req.Release.Version,
 		"enclii.dev/service":     req.Service.Name,
-		"enclii.dev/project":     req.Service.ProjectID,
-		"enclii.dev/release":     req.Release.ID,
-		"enclii.dev/deployment":  req.Deployment.ID,
+		"enclii.dev/project":     req.Service.ProjectID.String(),
+		"enclii.dev/release":     req.Release.ID.String(),
+		"enclii.dev/deployment":  req.Deployment.ID.String(),
 		"enclii.dev/managed-by":  "switchyard",
 	}
 
-	// Parse service configuration
-	config := req.Service.Config
+	// Default configuration
 	replicas := int32(1)
-	if config != nil {
-		if r, ok := config["replicas"].(float64); ok {
-			replicas = int32(r)
-		}
-	}
 
 	// Build environment variables
 	var envVars []corev1.EnvVar
-	for key, value := range req.Release.Environment {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  key,
-			Value: fmt.Sprintf("%v", value),
-		})
-	}
 
 	// Add standard environment variables
 	envVars = append(envVars, []corev1.EnvVar{
 		{Name: "ENCLII_SERVICE_NAME", Value: req.Service.Name},
-		{Name: "ENCLII_PROJECT_ID", Value: req.Service.ProjectID},
+		{Name: "ENCLII_PROJECT_ID", Value: req.Service.ProjectID.String()},
 		{Name: "ENCLII_RELEASE_VERSION", Value: req.Release.Version},
-		{Name: "ENCLII_DEPLOYMENT_ID", Value: req.Deployment.ID},
+		{Name: "ENCLII_DEPLOYMENT_ID", Value: req.Deployment.ID.String()},
 		{Name: "PORT", Value: "8080"}, // Default port
 	}...)
 
@@ -187,7 +175,7 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 			Namespace: namespace,
 			Labels:    labels,
 			Annotations: map[string]string{
-				"enclii.dev/build-id":        req.Release.BuildID,
+				"enclii.dev/git-sha":         req.Release.GitSHA,
 				"enclii.dev/deployment-time": req.Deployment.CreatedAt.Format(time.RFC3339),
 			},
 		},
@@ -210,14 +198,14 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
 					Annotations: map[string]string{
-						"enclii.dev/build-id": req.Release.BuildID,
+						"enclii.dev/git-sha": req.Release.GitSHA,
 					},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
 							Name:  req.Service.Name,
-							Image: req.Release.ImageURL,
+							Image: req.Release.ImageURI,
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "http",

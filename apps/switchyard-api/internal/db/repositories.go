@@ -61,6 +61,21 @@ func (r *ProjectRepository) Create(project *types.Project) error {
 	return err
 }
 
+func (r *ProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*types.Project, error) {
+	project := &types.Project{}
+	query := `SELECT id, name, slug, created_at, updated_at FROM projects WHERE id = $1`
+
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&project.ID, &project.Name, &project.Slug,
+		&project.CreatedAt, &project.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return project, nil
+}
+
 func (r *ProjectRepository) GetBySlug(slug string) (*types.Project, error) {
 	project := &types.Project{}
 	query := `SELECT id, name, slug, created_at, updated_at FROM projects WHERE slug = $1`
@@ -452,6 +467,33 @@ func (r *DeploymentRepository) GetLatestByService(ctx context.Context, serviceID
 	}
 
 	return deployment, nil
+}
+
+func (r *DeploymentRepository) GetByStatus(ctx context.Context, status types.DeploymentStatus) ([]*types.Deployment, error) {
+	query := `SELECT id, release_id, environment_id, replicas, status, health, created_at, updated_at
+	          FROM deployments WHERE status = $1 ORDER BY created_at ASC`
+
+	rows, err := r.db.QueryContext(ctx, query, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var deployments []*types.Deployment
+	for rows.Next() {
+		deployment := &types.Deployment{}
+		err := rows.Scan(
+			&deployment.ID, &deployment.ReleaseID, &deployment.EnvironmentID,
+			&deployment.Replicas, &deployment.Status, &deployment.Health,
+			&deployment.CreatedAt, &deployment.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		deployments = append(deployments, deployment)
+	}
+
+	return deployments, nil
 }
 
 // UserRepository handles user CRUD operations

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
@@ -164,7 +165,7 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 	start := time.Now()
 	
 	// Get deployment details from database
-	deployment, err := c.repositories.Deployment.GetByID(ctx, work.DeploymentID)
+	deployment, err := c.repositories.Deployments.GetByID(ctx, work.DeploymentID)
 	if err != nil {
 		logger.WithError(err).Error("Failed to get deployment")
 		return &ReconcileResult{
@@ -173,24 +174,25 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 			Error:   err,
 		}
 	}
-	
-	// Get associated service and release
-	service, err := c.repositories.Service.GetByID(ctx, deployment.ServiceID)
-	if err != nil {
-		logger.WithError(err).Error("Failed to get service")
-		return &ReconcileResult{
-			Success: false,
-			Message: "Failed to retrieve service",
-			Error:   err,
-		}
-	}
-	
-	release, err := c.repositories.Release.GetByID(ctx, deployment.ReleaseID)
+
+	// Get associated release first
+	release, err := c.repositories.Releases.GetByID(deployment.ReleaseID)
 	if err != nil {
 		logger.WithError(err).Error("Failed to get release")
 		return &ReconcileResult{
 			Success: false,
 			Message: "Failed to retrieve release",
+			Error:   err,
+		}
+	}
+
+	// Get service from release
+	service, err := c.repositories.Services.GetByID(release.ServiceID)
+	if err != nil {
+		logger.WithError(err).Error("Failed to get service")
+		return &ReconcileResult{
+			Success: false,
+			Message: "Failed to retrieve service",
 			Error:   err,
 		}
 	}
@@ -248,18 +250,18 @@ func (c *Controller) handleResult(ctx context.Context, workResult *ReconcileWork
 	
 	// Update deployment status in database
 	var status types.DeploymentStatus
-	var message string
-	
+	var health types.HealthStatus
+
 	if result.Success {
-		status = types.DeploymentStatusActive
-		message = result.Message
+		status = types.DeploymentStatusRunning
+		health = types.HealthStatusHealthy
 		logger.Info("Deployment reconciled successfully")
 	} else {
 		if result.NextCheck != nil {
 			// Retry later
 			status = types.DeploymentStatusPending
-			message = fmt.Sprintf("Retrying: %s", result.Message)
-			
+			health = types.HealthStatusUnknown
+
 			// Schedule retry
 			retryWork := &ReconcileWork{
 				DeploymentID: work.DeploymentID,
@@ -267,7 +269,7 @@ func (c *Controller) handleResult(ctx context.Context, workResult *ReconcileWork
 				Attempt:      work.Attempt + 1,
 				ScheduledAt:  *result.NextCheck,
 			}
-			
+
 			go func() {
 				time.Sleep(time.Until(*result.NextCheck))
 				select {
@@ -275,18 +277,23 @@ func (c *Controller) handleResult(ctx context.Context, workResult *ReconcileWork
 				case <-c.stopCh:
 				}
 			}()
-			
+
 			logger.WithField("next_check", result.NextCheck).Info("Scheduled reconciliation retry")
 		} else {
 			// Failed permanently
 			status = types.DeploymentStatusFailed
-			message = result.Message
+			health = types.HealthStatusUnhealthy
 			logger.WithError(result.Error).Error("Deployment reconciliation failed")
 		}
 	}
-	
+
 	// Update deployment in database
-	err := c.repositories.Deployment.UpdateStatus(ctx, work.DeploymentID, status, message)
+	deploymentUUID, err := uuid.Parse(work.DeploymentID)
+	if err != nil {
+		logger.WithError(err).Error("Failed to parse deployment ID")
+		return
+	}
+	err = c.repositories.Deployments.UpdateStatus(deploymentUUID, status, health)
 	if err != nil {
 		logger.WithError(err).Error("Failed to update deployment status")
 	}
@@ -319,7 +326,7 @@ func (c *Controller) workScheduler(ctx context.Context) {
 // schedulePendingWork finds and schedules pending deployments
 func (c *Controller) schedulePendingWork(ctx context.Context, logger *logrus.Entry) {
 	// Get pending deployments
-	deployments, err := c.repositories.Deployment.GetByStatus(ctx, types.DeploymentStatusPending)
+	deployments, err := c.repositories.Deployments.GetByStatus(ctx, types.DeploymentStatusPending)
 	if err != nil {
 		logger.WithError(err).Error("Failed to get pending deployments")
 		return
@@ -332,7 +339,7 @@ func (c *Controller) schedulePendingWork(ctx context.Context, logger *logrus.Ent
 		
 		select {
 		case c.workCh <- &ReconcileWork{
-			DeploymentID: deployment.ID,
+			DeploymentID: deployment.ID.String(),
 			Priority:     priority,
 			Attempt:      1,
 			ScheduledAt:  time.Now(),

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
@@ -34,7 +35,7 @@ func (b *GraphBuilder) BuildTopology(ctx context.Context, environment string) (*
 	b.logger.Infof("Building topology graph for environment: %s", environment)
 
 	// Fetch all services (we'll filter by environment later)
-	services, err := b.repos.Service.ListAll(ctx)
+	services, err := b.repos.Services.ListAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch services: %w", err)
 	}
@@ -45,7 +46,7 @@ func (b *GraphBuilder) BuildTopology(ctx context.Context, environment string) (*
 
 	for _, service := range services {
 		// Get latest deployment for health status
-		deployment, err := b.repos.Deployment.GetLatestByService(ctx, service.ID)
+		deployment, err := b.repos.Deployments.GetLatestByService(ctx, service.ID.String())
 		var healthStatus HealthStatus
 		var replicas, availableReplicas int
 		var version, imageURI string
@@ -53,7 +54,7 @@ func (b *GraphBuilder) BuildTopology(ctx context.Context, environment string) (*
 
 		if err == nil && deployment != nil {
 			// Get Kubernetes status
-			namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
+			namespace := fmt.Sprintf("enclii-%s", service.ProjectID.String())
 			k8sStatus, err := b.k8sClient.GetDeploymentStatusInfo(ctx, namespace, service.Name)
 
 			if err == nil {
@@ -73,7 +74,7 @@ func (b *GraphBuilder) BuildTopology(ctx context.Context, environment string) (*
 			}
 
 			// Get release info
-			release, err := b.repos.Release.GetByID(ctx, deployment.ReleaseID)
+			release, err := b.repos.Releases.GetByID(deployment.ReleaseID)
 			if err == nil {
 				version = release.Version
 				imageURI = release.ImageURI
@@ -85,16 +86,16 @@ func (b *GraphBuilder) BuildTopology(ctx context.Context, environment string) (*
 		}
 
 		// Get project name
-		project, err := b.repos.Project.GetByID(ctx, service.ProjectID)
-		projectName := service.ProjectID // Fallback to ID
+		project, err := b.repos.Projects.GetByID(ctx, service.ProjectID)
+		projectName := service.ProjectID.String() // Fallback to ID
 		if err == nil && project != nil {
 			projectName = project.Name
 		}
 
 		node := &ServiceNode{
-			ID:                service.ID,
+			ID:                service.ID.String(),
 			Name:              service.Name,
-			ProjectID:         service.ProjectID,
+			ProjectID:         service.ProjectID.String(),
 			ProjectName:       projectName,
 			Environment:       environment,
 			Type:              detectServiceType(service),
@@ -108,7 +109,7 @@ func (b *GraphBuilder) BuildTopology(ctx context.Context, environment string) (*
 		}
 
 		nodes = append(nodes, node)
-		nodeMap[service.ID] = node
+		nodeMap[service.ID.String()] = node
 	}
 
 	// Build dependency edges
@@ -189,9 +190,9 @@ func (b *GraphBuilder) detectDependencies(ctx context.Context, service *types.Se
 			(strings.Contains(targetName, "database") || strings.Contains(targetName, "postgres")) {
 
 			edge := &DependencyEdge{
-				ID:        fmt.Sprintf("%s-%s", service.ID, target.ID),
-				SourceID:  service.ID,
-				TargetID:  target.ID,
+				ID:        fmt.Sprintf("%s-%s", service.ID.String(), target.ID.String()),
+				SourceID:  service.ID.String(),
+				TargetID:  target.ID.String(),
 				Type:      DependencyTypeStorage,
 				Protocol:  "postgres",
 				Required:  true,
@@ -204,9 +205,9 @@ func (b *GraphBuilder) detectDependencies(ctx context.Context, service *types.Se
 		// API services often depend on cache
 		if strings.Contains(serviceName, "api") && strings.Contains(targetName, "cache") {
 			edge := &DependencyEdge{
-				ID:        fmt.Sprintf("%s-%s", service.ID, target.ID),
-				SourceID:  service.ID,
-				TargetID:  target.ID,
+				ID:        fmt.Sprintf("%s-%s", service.ID.String(), target.ID.String()),
+				SourceID:  service.ID.String(),
+				TargetID:  target.ID.String(),
 				Type:      DependencyTypeStorage,
 				Protocol:  "redis",
 				Required:  false,
@@ -273,8 +274,14 @@ func (b *GraphBuilder) calculateStats(nodes []*ServiceNode, edges []*DependencyE
 
 // GetServiceDependencies returns all dependencies for a specific service
 func (b *GraphBuilder) GetServiceDependencies(ctx context.Context, serviceID string) (*ServiceDependencies, error) {
+	// Parse service ID
+	serviceUUID, err := uuid.Parse(serviceID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid service ID: %w", err)
+	}
+
 	// Get service
-	service, err := b.repos.Service.GetByID(ctx, serviceID)
+	service, err := b.repos.Services.GetByID(serviceUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
@@ -312,8 +319,14 @@ func (b *GraphBuilder) GetServiceDependencies(ctx context.Context, serviceID str
 
 // AnalyzeImpact calculates the impact of a service failure
 func (b *GraphBuilder) AnalyzeImpact(ctx context.Context, serviceID string) (*ImpactAnalysis, error) {
+	// Parse service ID
+	serviceUUID, err := uuid.Parse(serviceID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid service ID: %w", err)
+	}
+
 	// Get service
-	service, err := b.repos.Service.GetByID(ctx, serviceID)
+	service, err := b.repos.Services.GetByID(serviceUUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get service: %w", err)
 	}
