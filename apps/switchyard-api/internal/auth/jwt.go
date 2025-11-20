@@ -25,6 +25,14 @@ type JWTManager struct {
 	tokenDuration   time.Duration
 	refreshDuration time.Duration
 	repos           *db.Repositories
+	cache           SessionRevoker // For session revocation
+}
+
+// SessionRevoker defines the interface for revoking sessions
+// This is typically implemented using Redis/cache for fast lookups
+type SessionRevoker interface {
+	RevokeSession(ctx context.Context, sessionID string, ttl time.Duration) error
+	IsSessionRevoked(ctx context.Context, sessionID string) (bool, error)
 }
 
 type Claims struct {
@@ -32,6 +40,7 @@ type Claims struct {
 	Email       string    `json:"email"`
 	Role        string    `json:"role"`
 	ProjectIDs  []string  `json:"project_ids,omitempty"`
+	SessionID   string    `json:"session_id"` // Unique session identifier for revocation
 	TokenType   string    `json:"token_type"` // "access" or "refresh"
 	jwt.RegisteredClaims
 }
@@ -53,7 +62,7 @@ type User struct {
 	Active     bool      `json:"active"`
 }
 
-func NewJWTManager(tokenDuration, refreshDuration time.Duration, repos *db.Repositories) (*JWTManager, error) {
+func NewJWTManager(tokenDuration, refreshDuration time.Duration, repos *db.Repositories, cache SessionRevoker) (*JWTManager, error) {
 	privateKey, err := generateRSAKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate RSA key: %w", err)
@@ -65,6 +74,7 @@ func NewJWTManager(tokenDuration, refreshDuration time.Duration, repos *db.Repos
 		tokenDuration:   tokenDuration,
 		refreshDuration: refreshDuration,
 		repos:           repos,
+		cache:           cache,
 	}, nil
 }
 
@@ -74,13 +84,18 @@ func generateRSAKey() (*rsa.PrivateKey, error) {
 
 func (j *JWTManager) GenerateTokenPair(user *User) (*TokenPair, error) {
 	now := time.Now()
-	
+
+	// Generate unique session ID for this token pair
+	// This allows us to revoke both access and refresh tokens together
+	sessionID := uuid.New().String()
+
 	// Generate access token
 	accessClaims := &Claims{
 		UserID:    user.ID,
 		Email:     user.Email,
 		Role:      user.Role,
 		ProjectIDs: user.ProjectIDs,
+		SessionID: sessionID,
 		TokenType: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
@@ -97,11 +112,12 @@ func (j *JWTManager) GenerateTokenPair(user *User) (*TokenPair, error) {
 		return nil, fmt.Errorf("failed to sign access token: %w", err)
 	}
 
-	// Generate refresh token
+	// Generate refresh token with same session ID
 	refreshClaims := &Claims{
 		UserID:    user.ID,
 		Email:     user.Email,
 		Role:      user.Role,
+		SessionID: sessionID,
 		TokenType: "refresh",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
@@ -150,6 +166,17 @@ func (j *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 	// Additional validation
 	if claims.TokenType != "access" {
 		return nil, fmt.Errorf("invalid token type")
+	}
+
+	// SECURITY FIX: Check if session has been revoked (logout, security event, etc.)
+	if j.cache != nil && claims.SessionID != "" {
+		revoked, err := j.cache.IsSessionRevoked(context.Background(), claims.SessionID)
+		if err != nil {
+			logrus.Warnf("Failed to check session revocation: %v", err)
+			// Don't fail validation on cache errors to prevent DoS, but log it
+		} else if revoked {
+			return nil, fmt.Errorf("session has been revoked")
+		}
 	}
 
 	return claims, nil
@@ -392,6 +419,42 @@ func GetClaimsFromContext(c *gin.Context) (*Claims, error) {
 	}
 
 	return claimsObj, nil
+}
+
+// RevokeSession revokes a session by session ID
+// The TTL should match the longest-lived token in the session (typically refresh token duration)
+func (j *JWTManager) RevokeSession(ctx context.Context, sessionID string) error {
+	if j.cache == nil {
+		return fmt.Errorf("session revocation not available: cache not configured")
+	}
+
+	// Revoke for the duration of the refresh token (longest-lived)
+	err := j.cache.RevokeSession(ctx, sessionID, j.refreshDuration)
+	if err != nil {
+		return fmt.Errorf("failed to revoke session: %w", err)
+	}
+
+	logrus.Infof("Session revoked: %s", sessionID)
+	return nil
+}
+
+// RevokeSessionFromToken extracts the session ID from a token and revokes it
+func (j *JWTManager) RevokeSessionFromToken(ctx context.Context, tokenString string) error {
+	// Parse token without full validation (we just need the session ID)
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return j.publicKey, nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to parse token: %w", err)
+	}
+
+	claims, ok := token.Claims.(*Claims)
+	if !ok || claims.SessionID == "" {
+		return fmt.Errorf("invalid token or missing session ID")
+	}
+
+	return j.RevokeSession(ctx, claims.SessionID)
 }
 
 // Export public key for verification by other services
