@@ -1,5 +1,6 @@
 # Build stage
-FROM golang:1.22-alpine AS builder
+# SECURITY FIX: Pin to specific Go version to ensure reproducible builds
+FROM golang:1.24.7-alpine3.20 AS builder
 
 WORKDIR /app
 
@@ -19,7 +20,8 @@ COPY packages/sdk-go/ ./packages/sdk-go/
 RUN cd apps/switchyard-api && CGO_ENABLED=0 GOOS=linux go build -o /app/switchyard-api ./cmd/api
 
 # Final stage
-FROM alpine:latest
+# SECURITY FIX: Pin to specific Alpine version to ensure reproducible builds and prevent supply chain attacks
+FROM alpine:3.20
 
 RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /root/

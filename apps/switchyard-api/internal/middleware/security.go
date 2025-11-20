@@ -17,9 +17,16 @@ import (
 
 // SecurityMiddleware provides various security-related middleware functions
 type SecurityMiddleware struct {
-	rateLimiters map[string]*rate.Limiter
+	rateLimiters map[string]*rateLimiterEntry
 	mutex        sync.RWMutex
 	config       *SecurityConfig
+	stopCleanup  chan struct{} // Channel to stop the cleanup goroutine
+}
+
+// rateLimiterEntry holds a rate limiter and its last access time
+type rateLimiterEntry struct {
+	limiter    *rate.Limiter
+	lastAccess time.Time
 }
 
 type SecurityConfig struct {
@@ -57,39 +64,61 @@ func NewSecurityMiddleware(config *SecurityConfig) *SecurityMiddleware {
 	if config == nil {
 		config = DefaultSecurityConfig()
 	}
-	
-	return &SecurityMiddleware{
-		rateLimiters: make(map[string]*rate.Limiter),
+
+	sm := &SecurityMiddleware{
+		rateLimiters: make(map[string]*rateLimiterEntry),
 		config:       config,
+		stopCleanup:  make(chan struct{}),
 	}
+
+	// Start cleanup goroutine
+	sm.startCleanupRoutine()
+
+	return sm
 }
 
-// Rate limiting middleware
+// Rate limiting middleware with bounded cache
 func (s *SecurityMiddleware) RateLimitMiddleware() gin.HandlerFunc {
+	const maxLimiters = 100000 // Maximum number of IP-based rate limiters to prevent memory exhaustion
+
 	return func(c *gin.Context) {
 		clientIP := s.getClientIP(c)
-		
+
 		s.mutex.RLock()
-		limiter, exists := s.rateLimiters[clientIP]
+		entry, exists := s.rateLimiters[clientIP]
 		s.mutex.RUnlock()
-		
+
 		if !exists {
 			s.mutex.Lock()
 			// Double-check after acquiring write lock
-			if limiter, exists = s.rateLimiters[clientIP]; !exists {
-				limiter = rate.NewLimiter(rate.Limit(s.config.RateLimit), s.config.RateBurst)
-				s.rateLimiters[clientIP] = limiter
+			if entry, exists = s.rateLimiters[clientIP]; !exists {
+				// SECURITY FIX: Prevent unbounded map growth
+				if len(s.rateLimiters) >= maxLimiters {
+					// Remove oldest entries (simple FIFO eviction)
+					s.evictOldestLimiters(maxLimiters / 10) // Remove 10% of entries
+				}
+
+				entry = &rateLimiterEntry{
+					limiter:    rate.NewLimiter(rate.Limit(s.config.RateLimit), s.config.RateBurst),
+					lastAccess: time.Now(),
+				}
+				s.rateLimiters[clientIP] = entry
 			}
 			s.mutex.Unlock()
+		} else {
+			// Update last access time
+			s.mutex.Lock()
+			entry.lastAccess = time.Now()
+			s.mutex.Unlock()
 		}
-		
-		if !limiter.Allow() {
+
+		if !entry.limiter.Allow() {
 			logrus.WithFields(logrus.Fields{
 				"client_ip": clientIP,
 				"path":      c.Request.URL.Path,
 				"method":    c.Request.Method,
 			}).Warn("Rate limit exceeded")
-			
+
 			c.JSON(http.StatusTooManyRequests, gin.H{
 				"error": "Rate limit exceeded",
 				"retry_after": "60",
@@ -98,7 +127,7 @@ func (s *SecurityMiddleware) RateLimitMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -395,21 +424,87 @@ func (s *SecurityMiddleware) getClientIP(c *gin.Context) string {
 	return ip
 }
 
-// Cleanup routine to remove old rate limiters
-func (s *SecurityMiddleware) CleanupRateLimiters() {
-	ticker := time.NewTicker(10 * time.Minute)
-	go func() {
-		for range ticker.C {
-			s.mutex.Lock()
-			// In a real implementation, you'd track last access time
-			// and remove limiters that haven't been used recently
-			if len(s.rateLimiters) > 10000 { // Prevent memory leak
-				s.rateLimiters = make(map[string]*rate.Limiter)
-				logrus.Info("Cleared rate limiter cache")
+// evictOldestLimiters removes the oldest rate limiters based on last access time
+// SECURITY FIX: Prevents unbounded memory growth by evicting least recently used entries
+func (s *SecurityMiddleware) evictOldestLimiters(count int) {
+	// Build a list of IP addresses sorted by last access time
+	type entry struct {
+		ip         string
+		lastAccess time.Time
+	}
+
+	entries := make([]entry, 0, len(s.rateLimiters))
+	for ip, limiterEntry := range s.rateLimiters {
+		entries = append(entries, entry{ip: ip, lastAccess: limiterEntry.lastAccess})
+	}
+
+	// Sort by last access time (oldest first)
+	for i := 0; i < len(entries)-1; i++ {
+		for j := i + 1; j < len(entries); j++ {
+			if entries[i].lastAccess.After(entries[j].lastAccess) {
+				entries[i], entries[j] = entries[j], entries[i]
 			}
-			s.mutex.Unlock()
+		}
+	}
+
+	// Remove the oldest entries
+	removed := 0
+	for i := 0; i < len(entries) && removed < count; i++ {
+		delete(s.rateLimiters, entries[i].ip)
+		removed++
+	}
+
+	if removed > 0 {
+		logrus.WithFields(logrus.Fields{
+			"evicted_count": removed,
+			"remaining":     len(s.rateLimiters),
+		}).Info("Evicted old rate limiters")
+	}
+}
+
+// startCleanupRoutine starts a goroutine that periodically cleans up old rate limiters
+// SECURITY FIX: Adds proper goroutine lifecycle management with cancellation
+func (s *SecurityMiddleware) startCleanupRoutine() {
+	ticker := time.NewTicker(15 * time.Minute) // Run cleanup every 15 minutes
+
+	go func() {
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				s.mutex.Lock()
+				// Remove rate limiters that haven't been accessed in the last hour
+				cutoff := time.Now().Add(-1 * time.Hour)
+				removed := 0
+
+				for ip, entry := range s.rateLimiters {
+					if entry.lastAccess.Before(cutoff) {
+						delete(s.rateLimiters, ip)
+						removed++
+					}
+				}
+
+				if removed > 0 {
+					logrus.WithFields(logrus.Fields{
+						"removed_count": removed,
+						"remaining":     len(s.rateLimiters),
+					}).Info("Cleaned up inactive rate limiters")
+				}
+				s.mutex.Unlock()
+
+			case <-s.stopCleanup:
+				logrus.Info("Stopping rate limiter cleanup routine")
+				return
+			}
 		}
 	}()
+}
+
+// Stop gracefully shuts down the cleanup routine
+// SECURITY FIX: Prevents goroutine leak by allowing graceful shutdown
+func (s *SecurityMiddleware) Stop() {
+	close(s.stopCleanup)
 }
 
 // Default security configuration

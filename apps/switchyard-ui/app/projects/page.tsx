@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { apiGet, apiPost } from '@/lib/api';
 
 interface Project {
   id: string;
@@ -36,38 +37,22 @@ export default function ProjectsPage() {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('/api/v1/projects', {
-        headers: {
-          'Authorization': 'Bearer your-token-here', // TODO: Implement proper auth
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch projects');
-      }
-      
-      const data = await response.json();
+      const data = await apiGet<{ projects: Project[] }>('/api/v1/projects');
       setProjects(data.projects || []);
-      
+
       // Fetch services for each project
       const servicesData: { [key: string]: Service[] } = {};
       for (const project of data.projects || []) {
         try {
-          const servicesResponse = await fetch(`/api/v1/projects/${project.slug}/services`, {
-            headers: {
-              'Authorization': 'Bearer your-token-here',
-            },
-          });
-          
-          if (servicesResponse.ok) {
-            const servicesResult = await servicesResponse.json();
-            servicesData[project.id] = servicesResult.services || [];
-          }
+          const servicesResult = await apiGet<{ services: Service[] }>(
+            `/api/v1/projects/${project.slug}/services`
+          );
+          servicesData[project.id] = servicesResult.services || [];
         } catch (err) {
           console.error(`Failed to fetch services for project ${project.slug}:`, err);
         }
       }
-      
+
       setServices(servicesData);
       setLoading(false);
     } catch (err) {
@@ -78,21 +63,10 @@ export default function ProjectsPage() {
 
   const createProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
-      const response = await fetch('/api/v1/projects', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer your-token-here',
-        },
-        body: JSON.stringify(newProject),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to create project');
-      }
-      
+      await apiPost('/api/v1/projects', newProject);
+
       setNewProject({ name: '', slug: '', description: '' });
       setShowCreateForm(false);
       fetchProjects(); // Refresh the list

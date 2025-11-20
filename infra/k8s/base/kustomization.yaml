@@ -2,7 +2,13 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - secrets.yaml
+  # SECURITY NOTE: Using development secrets for local testing only
+  # For production, create secrets.yaml from secrets.yaml.TEMPLATE and use:
+  #   - Sealed Secrets (recommended)
+  #   - External Secrets Operator
+  #   - HashiCorp Vault
+  # See ../SECRETS_MANAGEMENT.md for details
+  - secrets.dev.yaml
   - postgres.yaml
   - redis.yaml
   - rbac.yaml
