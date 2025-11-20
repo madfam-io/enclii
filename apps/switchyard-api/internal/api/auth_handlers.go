@@ -1,13 +1,12 @@
 package api
 
 import (
-	"database/sql"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
@@ -38,54 +37,6 @@ type RefreshResponse struct {
 	TokenType   string    `json:"token_type"`
 }
 
-// getUserRoleAndProjects retrieves the user's highest role and list of project IDs
-// from their project access records.
-func (h *Handler) getUserRoleAndProjects(ctx *gin.Context, userID uuid.UUID) (string, []string) {
-	// Query project access for this user
-	accesses, err := h.repos.ProjectAccess.ListByUser(ctx.Request.Context(), userID)
-	if err != nil {
-		h.logger.Warn(ctx.Request.Context(), "Failed to get user project access",
-			"error", err,
-			"user_id", userID)
-		// Return viewer role and empty projects on error
-		return string(types.RoleViewer), []string{}
-	}
-
-	// No project access - return viewer with no projects
-	if len(accesses) == 0 {
-		return string(types.RoleViewer), []string{}
-	}
-
-	// Collect unique project IDs and find highest role
-	projectIDMap := make(map[string]bool)
-	highestRole := types.RoleViewer // Start with lowest role
-
-	for _, access := range accesses {
-		// Add project ID to set
-		projectIDMap[access.ProjectID.String()] = true
-
-		// Determine highest role (admin > developer > viewer)
-		switch access.Role {
-		case types.RoleAdmin:
-			highestRole = types.RoleAdmin
-		case types.RoleDeveloper:
-			if highestRole != types.RoleAdmin {
-				highestRole = types.RoleDeveloper
-			}
-		case types.RoleViewer:
-			// Already the lowest, no change needed
-		}
-	}
-
-	// Convert map to slice
-	projectIDs := make([]string, 0, len(projectIDMap))
-	for projectID := range projectIDMap {
-		projectIDs = append(projectIDs, projectID)
-	}
-
-	return string(highestRole), projectIDs
-}
-
 // Login handles user authentication with email and password
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
@@ -96,102 +47,33 @@ func (h *Handler) Login(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Get user by email
-	user, err := h.repos.Users.GetByEmail(ctx, req.Email)
+	// Use service layer for authentication
+	loginReq := &services.LoginRequest{
+		Email:     req.Email,
+		Password:  req.Password,
+		IP:        c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}
+
+	resp, err := h.authService.Login(ctx, loginReq)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			// Don't reveal whether user exists or not
+		// Map service errors to HTTP status codes
+		if errors.Is(err, errors.ErrInvalidCredentials) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
-			return
+		} else if errors.Is(err, errors.ErrUnauthorized) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		}
-		h.logger.Error(ctx, "Failed to get user by email",
-			"error", err,
-			"email", req.Email)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
 		return
 	}
-
-	// Check if user is active
-	if !user.Active {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Account is disabled"})
-		return
-	}
-
-	// Compare password
-	if err := auth.ComparePassword(user.PasswordHash, req.Password); err != nil {
-		// Log failed login attempt
-		h.repos.AuditLogs.Log(ctx, &types.AuditLog{
-			ActorID:      user.ID,
-			ActorEmail:   user.Email,
-			ActorRole:    types.RoleViewer, // Unknown role at this point
-			Action:       "login_failed",
-			ResourceType: "user",
-			ResourceID:   user.ID.String(),
-			ResourceName: user.Email,
-			IPAddress:    c.ClientIP(),
-			UserAgent:    c.Request.UserAgent(),
-			Outcome:      "failure",
-			Context: map[string]interface{}{
-				"reason": "invalid_password",
-			},
-		})
-
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
-		return
-	}
-
-	// Get user's role and accessible projects from project_access table
-	userRole, projectIDs := h.getUserRoleAndProjects(c, user.ID)
-
-	// Generate token pair
-	tokenPair, err := h.auth.GenerateTokenPair(&auth.User{
-		ID:         user.ID,
-		Email:      user.Email,
-		Name:       user.Name,
-		Role:       userRole,
-		ProjectIDs: projectIDs,
-		CreatedAt:  user.CreatedAt,
-		Active:     user.Active,
-	})
-	if err != nil {
-		h.logger.Error(ctx, "Failed to generate token pair",
-			"error", err,
-			"user_id", user.ID)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate tokens"})
-		return
-	}
-
-	// Update last login timestamp
-	if err := h.repos.Users.UpdateLastLogin(ctx, user.ID); err != nil {
-		h.logger.Warn(ctx, "Failed to update last login time",
-			"error", err,
-			"user_id", user.ID)
-		// Non-fatal, continue
-	}
-
-	// Log successful login
-	h.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      user.ID,
-		ActorEmail:   user.Email,
-		ActorRole:    types.Role(userRole),
-		Action:       "login_success",
-		ResourceType: "user",
-		ResourceID:   user.ID.String(),
-		ResourceName: user.Email,
-		IPAddress:    c.ClientIP(),
-		UserAgent:    c.Request.UserAgent(),
-		Outcome:      "success",
-		Context: map[string]interface{}{
-			"method": "password",
-		},
-	})
 
 	// Return response
 	c.JSON(http.StatusOK, LoginResponse{
-		User:         user,
-		AccessToken:  tokenPair.AccessToken,
-		RefreshToken: tokenPair.RefreshToken,
-		ExpiresAt:    tokenPair.ExpiresAt,
+		User:         resp.User,
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+		ExpiresAt:    resp.ExpiresAt,
 		TokenType:    "Bearer",
 	})
 }
@@ -225,31 +107,21 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	// Revoke the session (invalidates both access and refresh tokens with same session ID)
-	if err := h.auth.RevokeSessionFromToken(ctx, tokenString); err != nil {
-		h.logger.Warn(ctx, "Failed to revoke session during logout",
-			"error", err,
-			"user_id", userID)
-		// Continue with logout even if revocation fails
-		// The token will still expire naturally
+	// Use service layer for logout
+	logoutReq := &services.LogoutRequest{
+		UserID:      userID.(string),
+		UserEmail:   userEmail.(string),
+		UserRole:    c.GetString("user_role"),
+		TokenString: tokenString,
+		IP:          c.ClientIP(),
+		UserAgent:   c.Request.UserAgent(),
 	}
 
-	// Log logout event
-	h.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      userID.(string),
-		ActorEmail:   userEmail.(string),
-		ActorRole:    types.Role(c.GetString("user_role")),
-		Action:       "logout",
-		ResourceType: "user",
-		ResourceID:   userID.(string),
-		ResourceName: userEmail.(string),
-		IPAddress:    c.ClientIP(),
-		UserAgent:    c.Request.UserAgent(),
-		Outcome:      "success",
-		Context: map[string]interface{}{
-			"session_revoked": true,
-		},
-	})
+	if err := h.authService.Logout(ctx, logoutReq); err != nil {
+		h.logger.Error("Logout failed", "error", err, "user_id", userID)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Logged out successfully",
@@ -264,22 +136,27 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	// Refresh token (validates token, checks revocation, and generates new token pair)
-	tokenPair, err := h.auth.RefreshToken(req.RefreshToken)
+	ctx := c.Request.Context()
+
+	// Use service layer for token refresh
+	refreshReq := &services.RefreshTokenRequest{
+		RefreshToken: req.RefreshToken,
+	}
+
+	resp, err := h.authService.RefreshToken(ctx, refreshReq)
 	if err != nil {
-		h.logger.Warn(c.Request.Context(), "Token refresh failed",
-			"error", err,
-			"client_ip", c.ClientIP())
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired refresh token"})
+		// Map service errors to HTTP status codes
+		if errors.Is(err, errors.ErrTokenInvalid) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired refresh token"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		}
 		return
 	}
 
-	// Note: RefreshToken creates a NEW session ID, which invalidates the old session
-	// This provides automatic session rotation for security
-
 	c.JSON(http.StatusOK, RefreshResponse{
-		AccessToken: tokenPair.AccessToken,
-		ExpiresAt:   tokenPair.ExpiresAt,
+		AccessToken: resp.AccessToken,
+		ExpiresAt:   resp.ExpiresAt,
 		TokenType:   "Bearer",
 	})
 }
@@ -300,95 +177,33 @@ func (h *Handler) Register(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	// Validate password strength
-	if err := auth.ValidatePasswordStrength(req.Password); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	// Use service layer for registration
+	registerReq := &services.RegisterRequest{
+		Email:     req.Email,
+		Password:  req.Password,
+		Name:      req.Name,
+		IP:        c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
 	}
 
-	// Check if user already exists
-	existingUser, err := h.repos.Users.GetByEmail(ctx, req.Email)
-	if err != nil && err != sql.ErrNoRows {
-		h.logger.Error(ctx, "Failed to check existing user",
-			"error", err,
-			"email", req.Email)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
-	}
-	if existingUser != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "User with this email already exists"})
-		return
-	}
-
-	// Hash password
-	hashedPassword, err := auth.HashPassword(req.Password)
+	resp, err := h.authService.Register(ctx, registerReq)
 	if err != nil {
-		h.logger.Error(ctx, "Failed to hash password", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
-		return
-	}
-
-	// Create user
-	user := &types.User{
-		Email:        req.Email,
-		PasswordHash: hashedPassword,
-		Name:         req.Name,
-		Active:       true,
-	}
-
-	if err := h.repos.Users.Create(ctx, user); err != nil {
-		h.logger.Error(ctx, "Failed to create user",
-			"error", err,
-			"email", req.Email)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
-		return
-	}
-
-	// Log registration
-	h.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      user.ID,
-		ActorEmail:   user.Email,
-		ActorRole:    types.RoleViewer,
-		Action:       "user_register",
-		ResourceType: "user",
-		ResourceID:   user.ID.String(),
-		ResourceName: user.Email,
-		IPAddress:    c.ClientIP(),
-		UserAgent:    c.Request.UserAgent(),
-		Outcome:      "success",
-	})
-
-	// Get user's role and accessible projects (will be viewer/empty for new users)
-	userRole, projectIDs := h.getUserRoleAndProjects(c, user.ID)
-
-	// Generate token pair for immediate login
-	tokenPair, err := h.auth.GenerateTokenPair(&auth.User{
-		ID:         user.ID,
-		Email:      user.Email,
-		Name:       user.Name,
-		Role:       userRole,
-		ProjectIDs: projectIDs,
-		CreatedAt:  user.CreatedAt,
-		Active:     user.Active,
-	})
-	if err != nil {
-		h.logger.Error(ctx, "Failed to generate token pair",
-			"error", err,
-			"user_id", user.ID)
-		// User created successfully, but token generation failed
-		// Return user info but no tokens
-		c.JSON(http.StatusCreated, gin.H{
-			"user":    user,
-			"message": "User created successfully. Please login.",
-		})
+		// Map service errors to HTTP status codes
+		if errors.Is(err, errors.ErrEmailAlreadyExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": "User with this email already exists"})
+		} else if errors.Is(err, errors.ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		}
 		return
 	}
 
 	c.JSON(http.StatusCreated, LoginResponse{
-		User:         user,
-		AccessToken:  tokenPair.AccessToken,
-		RefreshToken: tokenPair.RefreshToken,
-		ExpiresAt:    tokenPair.ExpiresAt,
+		User:         resp.User,
+		AccessToken:  resp.AccessToken,
+		RefreshToken: resp.RefreshToken,
+		ExpiresAt:    resp.ExpiresAt,
 		TokenType:    "Bearer",
 	})
 }

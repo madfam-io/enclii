@@ -1,0 +1,292 @@
+package errors
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+)
+
+// AppError represents a structured application error
+type AppError struct {
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	HTTPStatus int    `json:"-"`
+	Details    any    `json:"details,omitempty"`
+	Err        error  `json:"-"`
+}
+
+// Error implements the error interface
+func (e *AppError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Message, e.Err)
+	}
+	return e.Message
+}
+
+// Unwrap implements error unwrapping
+func (e *AppError) Unwrap() error {
+	return e.Err
+}
+
+// WithDetails adds details to the error
+func (e *AppError) WithDetails(details any) *AppError {
+	return &AppError{
+		Code:       e.Code,
+		Message:    e.Message,
+		HTTPStatus: e.HTTPStatus,
+		Details:    details,
+		Err:        e.Err,
+	}
+}
+
+// WithError wraps an underlying error
+func (e *AppError) WithError(err error) *AppError {
+	return &AppError{
+		Code:       e.Code,
+		Message:    e.Message,
+		HTTPStatus: e.HTTPStatus,
+		Details:    e.Details,
+		Err:        err,
+	}
+}
+
+// Common error definitions
+var (
+	// Resource errors (404)
+	ErrNotFound = &AppError{
+		Code:       "NOT_FOUND",
+		Message:    "Resource not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+	ErrProjectNotFound = &AppError{
+		Code:       "PROJECT_NOT_FOUND",
+		Message:    "Project not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+	ErrServiceNotFound = &AppError{
+		Code:       "SERVICE_NOT_FOUND",
+		Message:    "Service not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+	ErrReleaseNotFound = &AppError{
+		Code:       "RELEASE_NOT_FOUND",
+		Message:    "Release not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+	ErrDeploymentNotFound = &AppError{
+		Code:       "DEPLOYMENT_NOT_FOUND",
+		Message:    "Deployment not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+
+	// Authentication errors (401)
+	ErrUnauthorized = &AppError{
+		Code:       "UNAUTHORIZED",
+		Message:    "Authentication required",
+		HTTPStatus: http.StatusUnauthorized,
+	}
+	ErrInvalidCredentials = &AppError{
+		Code:       "INVALID_CREDENTIALS",
+		Message:    "Invalid email or password",
+		HTTPStatus: http.StatusUnauthorized,
+	}
+	ErrTokenExpired = &AppError{
+		Code:       "TOKEN_EXPIRED",
+		Message:    "Authentication token has expired",
+		HTTPStatus: http.StatusUnauthorized,
+	}
+	ErrTokenInvalid = &AppError{
+		Code:       "TOKEN_INVALID",
+		Message:    "Invalid authentication token",
+		HTTPStatus: http.StatusUnauthorized,
+	}
+	ErrSessionRevoked = &AppError{
+		Code:       "SESSION_REVOKED",
+		Message:    "Session has been revoked",
+		HTTPStatus: http.StatusUnauthorized,
+	}
+
+	// Authorization errors (403)
+	ErrForbidden = &AppError{
+		Code:       "FORBIDDEN",
+		Message:    "Access denied",
+		HTTPStatus: http.StatusForbidden,
+	}
+	ErrInsufficientPermissions = &AppError{
+		Code:       "INSUFFICIENT_PERMISSIONS",
+		Message:    "Insufficient permissions for this operation",
+		HTTPStatus: http.StatusForbidden,
+	}
+
+	// Validation errors (400)
+	ErrValidation = &AppError{
+		Code:       "VALIDATION_ERROR",
+		Message:    "Validation failed",
+		HTTPStatus: http.StatusBadRequest,
+	}
+	ErrInvalidInput = &AppError{
+		Code:       "INVALID_INPUT",
+		Message:    "Invalid input data",
+		HTTPStatus: http.StatusBadRequest,
+	}
+	ErrInvalidUUID = &AppError{
+		Code:       "INVALID_UUID",
+		Message:    "Invalid UUID format",
+		HTTPStatus: http.StatusBadRequest,
+	}
+	ErrMissingParameter = &AppError{
+		Code:       "MISSING_PARAMETER",
+		Message:    "Required parameter is missing",
+		HTTPStatus: http.StatusBadRequest,
+	}
+
+	// Conflict errors (409)
+	ErrConflict = &AppError{
+		Code:       "CONFLICT",
+		Message:    "Resource conflict",
+		HTTPStatus: http.StatusConflict,
+	}
+	ErrAlreadyExists = &AppError{
+		Code:       "ALREADY_EXISTS",
+		Message:    "Resource already exists",
+		HTTPStatus: http.StatusConflict,
+	}
+	ErrEmailAlreadyExists = &AppError{
+		Code:       "EMAIL_ALREADY_EXISTS",
+		Message:    "Email address already registered",
+		HTTPStatus: http.StatusConflict,
+	}
+	ErrSlugAlreadyExists = &AppError{
+		Code:       "SLUG_ALREADY_EXISTS",
+		Message:    "Slug already in use",
+		HTTPStatus: http.StatusConflict,
+	}
+
+	// Build errors (422)
+	ErrBuildFailed = &AppError{
+		Code:       "BUILD_FAILED",
+		Message:    "Build process failed",
+		HTTPStatus: http.StatusUnprocessableEntity,
+	}
+	ErrBuildTimeout = &AppError{
+		Code:       "BUILD_TIMEOUT",
+		Message:    "Build process timed out",
+		HTTPStatus: http.StatusUnprocessableEntity,
+	}
+	ErrInvalidBuildConfig = &AppError{
+		Code:       "INVALID_BUILD_CONFIG",
+		Message:    "Invalid build configuration",
+		HTTPStatus: http.StatusUnprocessableEntity,
+	}
+
+	// Deployment errors (422)
+	ErrDeploymentFailed = &AppError{
+		Code:       "DEPLOYMENT_FAILED",
+		Message:    "Deployment failed",
+		HTTPStatus: http.StatusUnprocessableEntity,
+	}
+	ErrDeploymentTimeout = &AppError{
+		Code:       "DEPLOYMENT_TIMEOUT",
+		Message:    "Deployment timed out",
+		HTTPStatus: http.StatusUnprocessableEntity,
+	}
+	ErrRollbackFailed = &AppError{
+		Code:       "ROLLBACK_FAILED",
+		Message:    "Rollback operation failed",
+		HTTPStatus: http.StatusUnprocessableEntity,
+	}
+
+	// Infrastructure errors (503)
+	ErrServiceUnavailable = &AppError{
+		Code:       "SERVICE_UNAVAILABLE",
+		Message:    "Service temporarily unavailable",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+	ErrDatabaseUnavailable = &AppError{
+		Code:       "DATABASE_UNAVAILABLE",
+		Message:    "Database connection unavailable",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+	ErrKubernetesUnavailable = &AppError{
+		Code:       "KUBERNETES_UNAVAILABLE",
+		Message:    "Kubernetes cluster unavailable",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
+
+	// Internal errors (500)
+	ErrInternal = &AppError{
+		Code:       "INTERNAL_ERROR",
+		Message:    "Internal server error",
+		HTTPStatus: http.StatusInternalServerError,
+	}
+	ErrDatabaseError = &AppError{
+		Code:       "DATABASE_ERROR",
+		Message:    "Database operation failed",
+		HTTPStatus: http.StatusInternalServerError,
+	}
+	ErrUnexpected = &AppError{
+		Code:       "UNEXPECTED_ERROR",
+		Message:    "An unexpected error occurred",
+		HTTPStatus: http.StatusInternalServerError,
+	}
+)
+
+// New creates a new AppError
+func New(code, message string, httpStatus int) *AppError {
+	return &AppError{
+		Code:       code,
+		Message:    message,
+		HTTPStatus: httpStatus,
+	}
+}
+
+// Wrap wraps an error with application error information
+func Wrap(err error, appErr *AppError) *AppError {
+	if err == nil {
+		return appErr
+	}
+	return appErr.WithError(err)
+}
+
+// Is checks if an error is a specific AppError
+func Is(err error, target *AppError) bool {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.Code == target.Code
+	}
+	return false
+}
+
+// GetHTTPStatus extracts HTTP status from error
+func GetHTTPStatus(err error) int {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.HTTPStatus
+	}
+	return http.StatusInternalServerError
+}
+
+// GetErrorResponse converts error to API response
+func GetErrorResponse(err error) map[string]any {
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		response := map[string]any{
+			"error": map[string]any{
+				"code":    appErr.Code,
+				"message": appErr.Message,
+			},
+		}
+		if appErr.Details != nil {
+			response["error"].(map[string]any)["details"] = appErr.Details
+		}
+		return response
+	}
+
+	// Generic error response
+	return map[string]any{
+		"error": map[string]any{
+			"code":    "INTERNAL_ERROR",
+			"message": "An unexpected error occurred",
+		},
+	}
+}

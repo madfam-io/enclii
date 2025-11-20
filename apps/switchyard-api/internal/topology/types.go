@@ -2,8 +2,6 @@ package topology
 
 import (
 	"time"
-
-	"github.com/google/uuid"
 )
 
 // ServiceNode represents a service in the topology graph

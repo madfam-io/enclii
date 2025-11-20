@@ -31,6 +31,28 @@ type Config struct {
 	Enabled       bool          // Enable secret rotation
 }
 
+// rotationLogData represents rotation audit log data from the database
+type rotationLogData struct {
+	ID              uuid.UUID
+	EventID         uuid.UUID
+	ServiceID       uuid.UUID
+	ServiceName     string
+	Environment     string
+	SecretName      string
+	SecretPath      string
+	OldVersion      int
+	NewVersion      int
+	Status          string
+	StartedAt       time.Time
+	CompletedAt     *time.Time
+	DurationMs      *int64
+	RolloutStrategy string
+	PodsRestarted   int
+	Error           string
+	ChangedBy       string
+	TriggeredBy     string
+}
+
 // NewController creates a new rotation controller
 func NewController(
 	k8sClient *k8s.Client,
@@ -157,8 +179,14 @@ func (c *Controller) worker(ctx context.Context, workerID int) {
 
 // performRotation executes the zero-downtime rotation
 func (c *Controller) performRotation(ctx context.Context, event *lockbox.SecretChangeEvent, auditLog *lockbox.RotationAuditLog) error {
+	// Parse service ID
+	serviceUUID, err := uuid.Parse(event.ServiceID)
+	if err != nil {
+		return fmt.Errorf("invalid service ID: %w", err)
+	}
+
 	// Get service information
-	service, err := c.repos.Service.GetByID(ctx, event.ServiceID)
+	service, err := c.repos.Services.GetByID(serviceUUID)
 	if err != nil {
 		return fmt.Errorf("failed to get service: %w", err)
 	}
@@ -304,26 +332,7 @@ func (c *Controller) GetRotationHistory(ctx context.Context, serviceID string, l
 	result := make([]*lockbox.RotationAuditLog, 0, len(logs))
 	for _, log := range logs {
 		// Type assertion to extract the struct
-		if logData, ok := log.(interface {
-			ID              uuid.UUID
-			EventID         uuid.UUID
-			ServiceID       uuid.UUID
-			ServiceName     string
-			Environment     string
-			SecretName      string
-			SecretPath      string
-			OldVersion      int
-			NewVersion      int
-			Status          string
-			StartedAt       time.Time
-			CompletedAt     *time.Time
-			DurationMs      *int64
-			RolloutStrategy string
-			PodsRestarted   int
-			Error           string
-			ChangedBy       string
-			TriggeredBy     string
-		}); ok {
+		if logData, ok := log.(*rotationLogData); ok {
 			// Convert to lockbox.RotationAuditLog
 			auditLog := &lockbox.RotationAuditLog{
 				ID:              logData.ID,
