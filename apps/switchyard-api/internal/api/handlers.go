@@ -15,6 +15,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/topology"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
@@ -22,7 +23,15 @@ import (
 
 // Handler contains all dependencies for HTTP handlers
 type Handler struct {
-	repos              *db.Repositories
+	// Repositories (legacy - prefer using services)
+	repos *db.Repositories
+
+	// Service Layer (business logic)
+	authService       *services.AuthService
+	projectService    *services.ProjectService
+	deploymentService *services.DeploymentService
+
+	// Infrastructure
 	config             *config.Config
 	auth               *auth.JWTManager
 	auditMiddleware    *audit.Middleware
@@ -53,9 +62,21 @@ func NewHandler(
 	provenanceChecker *provenance.Checker,
 	complianceExporter *compliance.Exporter,
 	topologyBuilder *topology.GraphBuilder,
+	// Service layer
+	authService *services.AuthService,
+	projectService *services.ProjectService,
+	deploymentService *services.DeploymentService,
 ) *Handler {
 	return &Handler{
-		repos:              repos,
+		// Repositories
+		repos: repos,
+
+		// Services
+		authService:       authService,
+		projectService:    projectService,
+		deploymentService: deploymentService,
+
+		// Infrastructure
 		config:             config,
 		auth:               auth,
 		auditMiddleware:    audit.NewMiddleware(repos),
