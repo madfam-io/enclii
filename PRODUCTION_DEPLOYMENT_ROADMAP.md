@@ -1043,6 +1043,21 @@ spec:
 - [ ] Chaos engineering validated
 - [ ] DR runbooks documented and tested
 
+### Dogfooding ⭐ CRITICAL
+
+- [ ] Service specs created for Enclii components (`dogfooding/`)
+- [ ] Enclii API deployed via Enclii itself
+- [ ] Enclii UI deployed via Enclii itself
+- [ ] Plinto deployed via Enclii (from separate repo)
+- [ ] Landing page, docs, status page deployed via Enclii
+- [ ] Continuous deployment enabled for all services
+- [ ] Plinto OAuth fully integrated (Enclii authenticates with Plinto)
+- [ ] Sales materials updated with dogfooding narrative
+- [ ] Public status page shows Enclii services
+- [ ] Team trained on deploying via `enclii deploy` command
+
+**Why Critical:** Dogfooding provides customer confidence, validates product quality, and enables authentic sales narratives. See [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md) for details.
+
 ---
 
 ## Part 8: Timeline
@@ -1063,19 +1078,19 @@ Week 3-4: Security Hardening
 ├─ Day 21-23: Audit logging + PgBouncer
 └─ Day 24-28: Secret rotation + testing
 
-Week 5-6: Operational Excellence
+Week 5-6: Operational Excellence & Dogfooding Setup
 ├─ Day 29-31: Auto-scaling + CI/CD
 ├─ Day 32-34: Blue-green + canary
 ├─ Day 35-37: DR runbooks + testing
-├─ Day 38-40: Staging environment
-└─ Day 41-42: Chaos engineering
+├─ Day 38-40: Staging environment + Dogfooding service specs
+└─ Day 41-42: Chaos engineering + Self-deployment migration
 
-Week 7-8: Testing & Validation
-├─ Day 43-46: Test coverage expansion
-├─ Day 47-49: Load testing
-├─ Day 50-52: Security audit
-├─ Day 53-55: SOC 2 documentation
-└─ Day 56:    🚀 PRODUCTION GO-LIVE
+Week 7-8: Testing, Validation & Dogfooding
+├─ Day 43-46: Test coverage expansion + Deploy Enclii via Enclii
+├─ Day 47-49: Load testing + Continuous deployment setup
+├─ Day 50-52: Security audit + Plinto OAuth integration testing
+├─ Day 53-55: SOC 2 documentation + Sales material update
+└─ Day 56:    🚀 PRODUCTION GO-LIVE (Fully Dogfooded)
 ```
 
 **Total Timeline:** 8 weeks (6 weeks with 2 engineers)
@@ -1154,6 +1169,7 @@ Week 7-8: Testing & Validation
 - [ ] Timeline: 8 weeks acceptable?
 - [ ] Plinto for auth (vs Auth0/Clerk)?
 - [ ] Security audit: $2,000 third-party test?
+- [ ] Dogfooding approach: Run Enclii on Enclii?
 
 ---
 
@@ -1169,8 +1185,11 @@ This **research-validated architecture** provides:
 6. ✅ **No Vendor Lock-In:** Portable infrastructure (Kubernetes standard)
 7. ✅ **Multi-Tenant Ready:** Built for SaaS from day one
 8. ✅ **Production Grade:** 99.95% uptime SLA, auto-scaling, HA
+9. ✅ **Fully Dogfooded:** Enclii runs on Enclii, authenticated by Plinto
 
 **5-Year Savings: $125,000+** (vs Railway + Auth0)
+
+**Confidence Signal:** "We run our entire platform on Enclii, authenticated by Plinto. We're our own most demanding customer." — See [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md)
 
 **Recommended Next Step:** Approve budget and start Week 1 infrastructure provisioning.
 
