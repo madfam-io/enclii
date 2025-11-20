@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 	"github.com/sirupsen/logrus"
@@ -120,7 +121,9 @@ func (h *Handler) Logout(c *gin.Context) {
 	}
 
 	if err := h.authService.Logout(ctx, logoutReq); err != nil {
-		h.logger.Error("Logout failed", "error", err, "user_id", userID)
+		h.logger.Error(ctx, "Logout failed",
+			logging.Error("error", err),
+			logging.String("user_id", userID.(string)))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to logout"})
 		return
 	}

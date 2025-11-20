@@ -297,6 +297,12 @@ type LogoutRequest struct {
 func (s *AuthService) Logout(ctx context.Context, req *LogoutRequest) error {
 	s.logger.WithField("user_id", req.UserID).Info("User logout")
 
+	// Parse user ID
+	userID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		return errors.Wrap(err, errors.ErrInvalidInput)
+	}
+
 	// Revoke the session (invalidates both access and refresh tokens with same session ID)
 	if err := s.jwtManager.RevokeSessionFromToken(ctx, req.TokenString); err != nil {
 		s.logger.Warn("Failed to revoke session during logout", "error", err, "user_id", req.UserID)
@@ -306,7 +312,7 @@ func (s *AuthService) Logout(ctx context.Context, req *LogoutRequest) error {
 
 	// Log logout event
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      req.UserID,
+		ActorID:      userID,
 		ActorEmail:   req.UserEmail,
 		ActorRole:    types.Role(req.UserRole),
 		Action:       "logout",

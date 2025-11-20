@@ -678,6 +678,24 @@ func (r *ProjectAccessRepository) UserHasAccess(ctx context.Context, userID uuid
 	return count > 0, nil
 }
 
+// HasAccess checks if a user has access to a project/environment with the required role
+func (r *ProjectAccessRepository) HasAccess(ctx context.Context, userID, projectID uuid.UUID, environmentID *uuid.UUID, requiredRole types.Role) (bool, error) {
+	userRole, err := r.GetUserRole(ctx, userID, projectID, environmentID)
+	if err != nil {
+		// If no access record found, return false
+		return false, nil
+	}
+
+	// Role hierarchy: admin > developer > viewer
+	roleLevel := map[types.Role]int{
+		types.RoleAdmin:     3,
+		types.RoleDeveloper: 2,
+		types.RoleViewer:    1,
+	}
+
+	return roleLevel[userRole] >= roleLevel[requiredRole], nil
+}
+
 func (r *ProjectAccessRepository) GetUserRole(ctx context.Context, userID, projectID uuid.UUID, environmentID *uuid.UUID) (types.Role, error) {
 	var role types.Role
 	query := `

@@ -35,7 +35,7 @@ func (h *Handler) BuildService(c *gin.Context) {
 	}
 
 	// Get service details
-	service, err := h.repos.Service.GetByID(ctx, serviceID.String())
+	service, err := h.repos.Services.GetByID(serviceID)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get service", logging.Error("db_error", err))
 		c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
@@ -44,17 +44,17 @@ func (h *Handler) BuildService(c *gin.Context) {
 
 	// Create release record
 	release := &types.Release{
-		ID:        uuid.New().String(),
-		ServiceID: serviceID.String(),
+		ID:        uuid.New(),
+		ServiceID: serviceID,
 		Version:   "v" + time.Now().Format("20060102-150405") + "-" + req.GitSHA[:7],
-		ImageURL:  h.config.Registry + "/" + service.Name + ":" + req.GitSHA[:7],
+		ImageURI:  h.config.Registry + "/" + service.Name + ":" + req.GitSHA[:7],
 		GitSHA:    req.GitSHA,
 		Status:    types.ReleaseStatusBuilding,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
 
-	if err := h.repos.Release.Create(ctx, release); err != nil {
+	if err := h.repos.Releases.Create(release); err != nil {
 		h.logger.Error(ctx, "Failed to create release", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create release"})
 		return
@@ -72,8 +72,8 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	defer cancel()
 
 	h.logger.Info(ctx, "Starting build process",
-		logging.String("service_id", service.ID),
-		logging.String("release_id", release.ID),
+		logging.String("service_id", service.ID.String()),
+		logging.String("release_id", release.ID.String()),
 		logging.String("git_sha", gitSHA))
 
 	// Execute the build
@@ -81,11 +81,11 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 
 	if !buildResult.Success {
 		h.logger.Error(ctx, "Build failed",
-			logging.String("release_id", release.ID),
+			logging.String("release_id", release.ID.String()),
 			logging.Error("build_error", buildResult.Error))
 
 		// Update release status to failed
-		if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusFailed); err != nil {
+		if err := h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed); err != nil {
 			h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
 		}
 
@@ -100,11 +100,11 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	// Store SBOM if generated
 	if buildResult.SBOMGenerated && buildResult.SBOM != nil {
 		h.logger.Info(ctx, "Storing SBOM",
-			logging.String("release_id", release.ID),
+			logging.String("release_id", release.ID.String()),
 			logging.String("format", buildResult.SBOMFormat),
 			logging.Int("package_count", buildResult.SBOM.PackageCount))
 
-		if err := h.repos.Release.UpdateSBOM(ctx, uuid.MustParse(release.ID), buildResult.SBOM.Content, buildResult.SBOMFormat); err != nil {
+		if err := h.repos.Releases.UpdateSBOM(ctx, release.ID, buildResult.SBOM.Content, buildResult.SBOMFormat); err != nil {
 			// SBOM storage failure is non-fatal - log warning and continue
 			h.logger.Error(ctx, "Failed to store SBOM (non-fatal)", logging.Error("db_error", err))
 		} else {
@@ -115,10 +115,10 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	// Store signature if generated
 	if buildResult.ImageSigned && buildResult.Signature != nil {
 		h.logger.Info(ctx, "Storing image signature",
-			logging.String("release_id", release.ID),
+			logging.String("release_id", release.ID.String()),
 			logging.String("signing_method", buildResult.Signature.SigningMethod))
 
-		if err := h.repos.Release.UpdateSignature(ctx, uuid.MustParse(release.ID), buildResult.Signature.Signature); err != nil {
+		if err := h.repos.Releases.UpdateSignature(ctx, release.ID, buildResult.Signature.Signature); err != nil {
 			// Signature storage failure is non-fatal - log warning and continue
 			h.logger.Error(ctx, "Failed to store signature (non-fatal)", logging.Error("db_error", err))
 		} else {
@@ -126,14 +126,14 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 		}
 	}
 
-	if err := h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusReady); err != nil {
+	if err := h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusReady); err != nil {
 		h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
-		h.repos.Release.UpdateStatus(ctx, release.ID, types.ReleaseStatusFailed)
+		h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
 		return
 	}
 
 	h.logger.Info(ctx, "Build completed successfully",
-		logging.String("release_id", release.ID),
+		logging.String("release_id", release.ID.String()),
 		logging.String("image_uri", buildResult.ImageURI),
 		logging.String("duration", buildResult.Duration.String()))
 
@@ -157,7 +157,7 @@ func (h *Handler) ListReleases(c *gin.Context) {
 		return
 	}
 
-	releases, err := h.repos.Release.ListByService(ctx, serviceID.String())
+	releases, err := h.repos.Releases.ListByService(ctx, serviceID.String())
 	if err != nil {
 		h.logger.Error(ctx, "Failed to list releases", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list releases"})
