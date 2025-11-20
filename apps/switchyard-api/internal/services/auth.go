@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"regexp"
 	"strings"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/audit"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
@@ -18,32 +18,31 @@ import (
 
 // AuthService handles authentication and authorization business logic
 type AuthService struct {
-	repos       *db.Repositories
-	jwtManager  *auth.JWTManager
-	auditLogger *audit.AsyncLogger
-	logger      *logrus.Logger
+	repos      *db.Repositories
+	jwtManager *auth.JWTManager
+	logger     *logrus.Logger
 }
 
 // NewAuthService creates a new authentication service
 func NewAuthService(
 	repos *db.Repositories,
 	jwtManager *auth.JWTManager,
-	auditLogger *audit.AsyncLogger,
 	logger *logrus.Logger,
 ) *AuthService {
 	return &AuthService{
-		repos:       repos,
-		jwtManager:  jwtManager,
-		auditLogger: auditLogger,
-		logger:      logger,
+		repos:      repos,
+		jwtManager: jwtManager,
+		logger:     logger,
 	}
 }
 
 // RegisterRequest represents a user registration request
 type RegisterRequest struct {
-	Email    string
-	Password string
-	Name     string
+	Email     string
+	Password  string
+	Name      string
+	IP        string
+	UserAgent string
 }
 
 // RegisterResponse represents the response from registration
@@ -51,6 +50,7 @@ type RegisterResponse struct {
 	User         *types.User
 	AccessToken  string
 	RefreshToken string
+	ExpiresAt    time.Time
 }
 
 // Register registers a new user
@@ -61,8 +61,12 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*Regi
 	}
 
 	// Check if email already exists
-	existing, _ := s.repos.Users.GetByEmail(req.Email)
-	if existing != nil {
+	existingUser, err := s.repos.Users.GetByEmail(ctx, req.Email)
+	if err != nil && err != sql.ErrNoRows {
+		s.logger.Error("Failed to check existing user", "error", err, "email", req.Email)
+		return nil, errors.Wrap(err, errors.ErrDatabaseError)
+	}
+	if existingUser != nil {
 		return nil, errors.ErrEmailAlreadyExists
 	}
 
@@ -71,44 +75,52 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*Regi
 	// Hash password
 	hashedPassword, err := auth.HashPassword(req.Password)
 	if err != nil {
+		s.logger.Error("Failed to hash password", "error", err)
 		return nil, errors.Wrap(err, errors.ErrInternal)
 	}
 
 	// Create user
 	user := &types.User{
-		ID:             uuid.New(),
-		Email:          strings.ToLower(req.Email),
-		PasswordHash:   hashedPassword,
-		Name:           req.Name,
-		OIDCProvider:   "",
-		OIDCSubject:    "",
-		EmailVerified:  false,
-		DefaultRole:    types.RoleDeveloper,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		Email:        req.Email,
+		PasswordHash: hashedPassword,
+		Name:         req.Name,
+		Active:       true,
 	}
 
-	if err := s.repos.Users.Create(user); err != nil {
+	if err := s.repos.Users.Create(ctx, user); err != nil {
+		s.logger.Error("Failed to create user", "error", err, "email", req.Email)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
-	// Generate tokens
-	accessToken, err := s.jwtManager.GenerateAccessToken(user.ID, user.Email, string(user.DefaultRole))
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrInternal)
-	}
+	// Get user's role and accessible projects from project_access table
+	userRole, projectIDs := s.getUserRoleAndProjects(ctx, user.ID)
 
-	refreshToken, err := s.jwtManager.GenerateRefreshToken(user.ID)
+	// Generate token pair
+	tokenPair, err := s.jwtManager.GenerateTokenPair(&auth.User{
+		ID:         user.ID,
+		Email:      user.Email,
+		Name:       user.Name,
+		Role:       userRole,
+		ProjectIDs: projectIDs,
+		CreatedAt:  user.CreatedAt,
+		Active:     user.Active,
+	})
 	if err != nil {
+		s.logger.Error("Failed to generate token pair", "error", err, "user_id", user.ID)
 		return nil, errors.Wrap(err, errors.ErrInternal)
 	}
 
 	// Audit log
-	s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-		Actor:        user.ID.String(),
-		Action:       "user_registered",
+	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
+		ActorID:      user.ID,
+		ActorEmail:   user.Email,
+		ActorRole:    types.RoleViewer,
+		Action:       "user_register",
 		ResourceType: "user",
 		ResourceID:   user.ID.String(),
+		ResourceName: user.Email,
+		IPAddress:    req.IP,
+		UserAgent:    req.UserAgent,
 		Outcome:      "success",
 	})
 
@@ -117,16 +129,17 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*Regi
 
 	return &RegisterResponse{
 		User:         user,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+		ExpiresAt:    tokenPair.ExpiresAt,
 	}, nil
 }
 
 // LoginRequest represents a login request
 type LoginRequest struct {
-	Email    string
-	Password string
-	IP       string
+	Email     string
+	Password  string
+	IP        string
 	UserAgent string
 }
 
@@ -135,6 +148,7 @@ type LoginResponse struct {
 	User         *types.User
 	AccessToken  string
 	RefreshToken string
+	ExpiresAt    time.Time
 }
 
 // Login authenticates a user
@@ -150,35 +164,37 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 	}).Info("User login attempt")
 
 	// Get user by email
-	user, err := s.repos.Users.GetByEmail(strings.ToLower(req.Email))
+	user, err := s.repos.Users.GetByEmail(ctx, req.Email)
 	if err != nil {
-		// Log failed attempt
-		s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-			Actor:        req.Email,
-			Action:       "login_failed",
-			ResourceType: "user",
-			ResourceID:   "",
-			Outcome:      "failure",
-			IPAddress:    req.IP,
-			UserAgent:    req.UserAgent,
-			Context: map[string]interface{}{
-				"reason": "user_not_found",
-			},
+		if err == sql.ErrNoRows {
+			// Don't reveal whether user exists or not
+			return nil, errors.ErrInvalidCredentials
+		}
+		s.logger.Error("Failed to get user by email", "error", err, "email", req.Email)
+		return nil, errors.Wrap(err, errors.ErrDatabaseError)
+	}
+
+	// Check if user is active
+	if !user.Active {
+		return nil, errors.ErrUnauthorized.WithDetails(map[string]any{
+			"reason": "Account is disabled",
 		})
-		return nil, errors.ErrInvalidCredentials
 	}
 
 	// Verify password
-	if !auth.CheckPasswordHash(req.Password, user.PasswordHash) {
-		// Log failed attempt
-		s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-			Actor:        user.ID.String(),
+	if err := auth.ComparePassword(user.PasswordHash, req.Password); err != nil {
+		// Log failed login attempt
+		s.repos.AuditLogs.Log(ctx, &types.AuditLog{
+			ActorID:      user.ID,
+			ActorEmail:   user.Email,
+			ActorRole:    types.RoleViewer, // Unknown role at this point
 			Action:       "login_failed",
 			ResourceType: "user",
 			ResourceID:   user.ID.String(),
-			Outcome:      "failure",
+			ResourceName: user.Email,
 			IPAddress:    req.IP,
 			UserAgent:    req.UserAgent,
+			Outcome:      "failure",
 			Context: map[string]interface{}{
 				"reason": "invalid_password",
 			},
@@ -186,26 +202,45 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 		return nil, errors.ErrInvalidCredentials
 	}
 
-	// Generate tokens
-	accessToken, err := s.jwtManager.GenerateAccessToken(user.ID, user.Email, string(user.DefaultRole))
+	// Get user's role and accessible projects from project_access table
+	userRole, projectIDs := s.getUserRoleAndProjects(ctx, user.ID)
+
+	// Generate token pair
+	tokenPair, err := s.jwtManager.GenerateTokenPair(&auth.User{
+		ID:         user.ID,
+		Email:      user.Email,
+		Name:       user.Name,
+		Role:       userRole,
+		ProjectIDs: projectIDs,
+		CreatedAt:  user.CreatedAt,
+		Active:     user.Active,
+	})
 	if err != nil {
+		s.logger.Error("Failed to generate token pair", "error", err, "user_id", user.ID)
 		return nil, errors.Wrap(err, errors.ErrInternal)
 	}
 
-	refreshToken, err := s.jwtManager.GenerateRefreshToken(user.ID)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrInternal)
+	// Update last login timestamp
+	if err := s.repos.Users.UpdateLastLogin(ctx, user.ID); err != nil {
+		s.logger.Warn("Failed to update last login time", "error", err, "user_id", user.ID)
+		// Non-fatal, continue
 	}
 
 	// Log successful login
-	s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-		Actor:        user.ID.String(),
+	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
+		ActorID:      user.ID,
+		ActorEmail:   user.Email,
+		ActorRole:    types.Role(userRole),
 		Action:       "login_success",
 		ResourceType: "user",
 		ResourceID:   user.ID.String(),
-		Outcome:      "success",
+		ResourceName: user.Email,
 		IPAddress:    req.IP,
 		UserAgent:    req.UserAgent,
+		Outcome:      "success",
+		Context: map[string]interface{}{
+			"method": "password",
+		},
 	})
 
 	// Clear password hash before returning
@@ -213,78 +248,126 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 
 	return &LoginResponse{
 		User:         user,
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken:  tokenPair.AccessToken,
+		RefreshToken: tokenPair.RefreshToken,
+		ExpiresAt:    tokenPair.ExpiresAt,
 	}, nil
 }
 
 // RefreshTokenRequest represents a token refresh request
 type RefreshTokenRequest struct {
 	RefreshToken string
-	UserID       uuid.UUID
 }
 
 // RefreshTokenResponse represents the response from token refresh
 type RefreshTokenResponse struct {
-	AccessToken  string
-	RefreshToken string
+	AccessToken string
+	ExpiresAt   time.Time
 }
 
 // RefreshToken generates new access and refresh tokens
 func (s *AuthService) RefreshToken(ctx context.Context, req *RefreshTokenRequest) (*RefreshTokenResponse, error) {
-	// Validate refresh token
-	claims, err := s.jwtManager.ValidateRefreshToken(req.RefreshToken)
+	// Refresh token (validates token, checks revocation, and generates new token pair)
+	tokenPair, err := s.jwtManager.RefreshToken(req.RefreshToken)
 	if err != nil {
+		s.logger.Warn("Token refresh failed", "error", err)
 		return nil, errors.ErrTokenInvalid
 	}
 
-	// Get user
-	user, err := s.repos.Users.GetByID(claims.UserID)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrUnauthorized)
-	}
-
-	// Generate new tokens
-	accessToken, err := s.jwtManager.GenerateAccessToken(user.ID, user.Email, string(user.DefaultRole))
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrInternal)
-	}
-
-	refreshToken, err := s.jwtManager.GenerateRefreshToken(user.ID)
-	if err != nil {
-		return nil, errors.Wrap(err, errors.ErrInternal)
-	}
+	// Note: RefreshToken creates a NEW session ID, which invalidates the old session
+	// This provides automatic session rotation for security
 
 	return &RefreshTokenResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
+		AccessToken: tokenPair.AccessToken,
+		ExpiresAt:   tokenPair.ExpiresAt,
 	}, nil
 }
 
 // LogoutRequest represents a logout request
 type LogoutRequest struct {
-	UserID uuid.UUID
-	IP     string
-	UserAgent string
+	UserID     string
+	UserEmail  string
+	UserRole   string
+	TokenString string
+	IP         string
+	UserAgent  string
 }
 
-// Logout logs out a user (revokes tokens in production)
+// Logout logs out a user (revokes session tokens)
 func (s *AuthService) Logout(ctx context.Context, req *LogoutRequest) error {
 	s.logger.WithField("user_id", req.UserID).Info("User logout")
 
-	// In production, this would revoke the session/tokens in Redis
-	// For now, just audit log
-	s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-		Actor:        req.UserID.String(),
+	// Revoke the session (invalidates both access and refresh tokens with same session ID)
+	if err := s.jwtManager.RevokeSessionFromToken(ctx, req.TokenString); err != nil {
+		s.logger.Warn("Failed to revoke session during logout", "error", err, "user_id", req.UserID)
+		// Continue with logout even if revocation fails
+		// The token will still expire naturally
+	}
+
+	// Log logout event
+	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
+		ActorID:      req.UserID,
+		ActorEmail:   req.UserEmail,
+		ActorRole:    types.Role(req.UserRole),
 		Action:       "logout",
 		ResourceType: "user",
-		ResourceID:   req.UserID.String(),
-		Outcome:      "success",
+		ResourceID:   req.UserID,
+		ResourceName: req.UserEmail,
 		IPAddress:    req.IP,
 		UserAgent:    req.UserAgent,
+		Outcome:      "success",
+		Context: map[string]interface{}{
+			"session_revoked": true,
+		},
 	})
 
 	return nil
+}
+
+// getUserRoleAndProjects retrieves the user's highest role and list of project IDs
+// from their project access records.
+func (s *AuthService) getUserRoleAndProjects(ctx context.Context, userID uuid.UUID) (string, []string) {
+	// Query project access for this user
+	accesses, err := s.repos.ProjectAccess.ListByUser(ctx, userID)
+	if err != nil {
+		s.logger.Warn("Failed to get user project access", "error", err, "user_id", userID)
+		// Return viewer role and empty projects on error
+		return string(types.RoleViewer), []string{}
+	}
+
+	// No project access - return viewer with no projects
+	if len(accesses) == 0 {
+		return string(types.RoleViewer), []string{}
+	}
+
+	// Collect unique project IDs and find highest role
+	projectIDMap := make(map[string]bool)
+	highestRole := types.RoleViewer // Start with lowest role
+
+	for _, access := range accesses {
+		// Add project ID to set
+		projectIDMap[access.ProjectID.String()] = true
+
+		// Determine highest role (admin > developer > viewer)
+		switch access.Role {
+		case types.RoleAdmin:
+			highestRole = types.RoleAdmin
+		case types.RoleDeveloper:
+			if highestRole != types.RoleAdmin {
+				highestRole = types.RoleDeveloper
+			}
+		case types.RoleViewer:
+			// Already the lowest, no change needed
+		}
+	}
+
+	// Convert map to slice
+	projectIDs := make([]string, 0, len(projectIDMap))
+	for projectID := range projectIDMap {
+		projectIDs = append(projectIDs, projectID)
+	}
+
+	return string(highestRole), projectIDs
 }
 
 // CheckAccess verifies if a user has access to a project/environment
@@ -319,11 +402,11 @@ func (s *AuthService) validateRegistrationInput(req *RegisterRequest) error {
 		})
 	}
 
-	// Validate password strength
-	if len(req.Password) < 8 {
+	// Validate password strength using auth package
+	if err := auth.ValidatePasswordStrength(req.Password); err != nil {
 		return errors.ErrValidation.WithDetails(map[string]any{
 			"field":  "password",
-			"reason": "Password must be at least 8 characters",
+			"reason": err.Error(),
 		})
 	}
 
