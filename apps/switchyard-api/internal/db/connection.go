@@ -95,15 +95,15 @@ func buildConnectionString(config *DatabaseConfig) string {
 	params["connect_timeout"] = fmt.Sprintf("%.0f", config.ConnTimeout.Seconds())
 
 	if config.StatementTimeout > 0 {
-		params["statement_timeout"] = fmt.Sprintf("%.0fms", config.StatementTimeout.Milliseconds())
+		params["statement_timeout"] = fmt.Sprintf("%dms", config.StatementTimeout.Milliseconds())
 	}
 
 	if config.LockTimeout > 0 {
-		params["lock_timeout"] = fmt.Sprintf("%.0fms", config.LockTimeout.Milliseconds())
+		params["lock_timeout"] = fmt.Sprintf("%dms", config.LockTimeout.Milliseconds())
 	}
 
 	if config.IdleInTransaction > 0 {
-		params["idle_in_transaction_session_timeout"] = fmt.Sprintf("%.0fms", config.IdleInTransaction.Milliseconds())
+		params["idle_in_transaction_session_timeout"] = fmt.Sprintf("%dms", config.IdleInTransaction.Milliseconds())
 	}
 
 	// Application name for monitoring

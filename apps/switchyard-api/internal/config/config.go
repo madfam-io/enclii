@@ -53,15 +53,17 @@ func Load() (*Config, error) {
 	viper.SetEnvPrefix("ENCLII")
 	viper.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
 
-	// Set defaults
+	// Set defaults for development ONLY
+	// SECURITY WARNING: These defaults are for local development only.
+	// Production deployments MUST override these via environment variables.
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("port", "8080")
-	viper.SetDefault("database-url", "postgres://postgres:password@localhost:5432/enclii_dev?sslmode=disable")
+	viper.SetDefault("database-url", "postgres://postgres:postgres@localhost:5432/enclii_dev?sslmode=require")
 	viper.SetDefault("log-level", "info")
 	viper.SetDefault("registry", "ghcr.io/madfam")
 	viper.SetDefault("oidc-issuer", "http://localhost:5556")
 	viper.SetDefault("oidc-client-id", "enclii")
-	viper.SetDefault("oidc-client-secret", "enclii-secret")
+	viper.SetDefault("oidc-client-secret", "")
 	viper.SetDefault("kube-config", os.Getenv("HOME")+"/.kube/config")
 	viper.SetDefault("kube-context", "kind-enclii")
 	viper.SetDefault("buildkit-addr", "docker://")

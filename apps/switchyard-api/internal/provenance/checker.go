@@ -123,7 +123,7 @@ func (c *Checker) CheckDeploymentApproval(
 	}
 
 	receipt, err := GenerateReceipt(
-		deployment.ID,
+		deployment.ID.String(),
 		service.Name,
 		environmentName,
 		release.Version,

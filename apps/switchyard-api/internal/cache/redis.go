@@ -96,14 +96,14 @@ const (
 
 func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:         fmt.Sprintf("%s:%d", config.Host, config.Port),
-		Password:     config.Password,
-		DB:           config.DB,
-		MaxRetries:   config.MaxRetries,
-		PoolSize:     config.PoolSize,
-		IdleTimeout:  config.IdleTimeout,
-		ReadTimeout:  config.ReadTimeout,
-		WriteTimeout: config.WriteTimeout,
+		Addr:            fmt.Sprintf("%s:%d", config.Host, config.Port),
+		Password:        config.Password,
+		DB:              config.DB,
+		MaxRetries:      config.MaxRetries,
+		PoolSize:        config.PoolSize,
+		ConnMaxIdleTime: config.IdleTimeout, // Renamed from IdleTimeout in redis v9
+		ReadTimeout:     config.ReadTimeout,
+		WriteTimeout:    config.WriteTimeout,
 	})
 
 	// Test connection
@@ -394,16 +394,17 @@ type CacheMetrics struct {
 }
 
 func (r *RedisCache) GetMetrics(ctx context.Context) (*CacheMetrics, error) {
-	info, err := r.client.Info(ctx, "stats").Result()
+	_, err := r.client.Info(ctx, "stats").Result()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Parse Redis info for cache metrics
 	// This is a simplified version - in production you'd parse the full stats
+	// TODO: Parse info string to extract actual hit/miss statistics
 	return &CacheMetrics{
-		Hits:   0, // Parse from info
-		Misses: 0, // Parse from info
-		Errors: 0, // Track in application
+		Hits:   0, // TODO: Parse from info
+		Misses: 0, // TODO: Parse from info
+		Errors: 0, // TODO: Track in application
 	}, nil
 }

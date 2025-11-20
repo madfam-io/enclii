@@ -4,9 +4,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
-	"strconv"
 	"strings"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -255,14 +254,10 @@ func (c *Client) RollbackDeployment(ctx context.Context, name, namespace string)
 		return fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	// Rollback to previous revision
-	rollbackConfig := &appsv1.DeploymentRollback{
-		Name: name,
-	}
-
-	// Note: DeploymentRollback API was deprecated, using kubectl rollout undo approach
-	// For MVP, we'll implement a simple approach by updating the deployment
-	deployment.Spec.Template.Spec.Containers[0].Image = "previous-image" // TODO: Track previous images
+	// Note: DeploymentRollback API was deprecated in Kubernetes 1.16+
+	// For now, we'll implement rollback by updating the deployment with previous image
+	// TODO: Track previous images in deployment metadata or database
+	deployment.Spec.Template.Spec.Containers[0].Image = "previous-image"
 
 	_, err = c.Clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
 	if err != nil {
