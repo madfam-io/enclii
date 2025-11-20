@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
@@ -35,6 +36,54 @@ type RefreshResponse struct {
 	AccessToken string    `json:"access_token"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	TokenType   string    `json:"token_type"`
+}
+
+// getUserRoleAndProjects retrieves the user's highest role and list of project IDs
+// from their project access records.
+func (h *Handler) getUserRoleAndProjects(ctx *gin.Context, userID uuid.UUID) (string, []string) {
+	// Query project access for this user
+	accesses, err := h.repos.ProjectAccess.ListByUser(ctx.Request.Context(), userID)
+	if err != nil {
+		h.logger.Warn(ctx.Request.Context(), "Failed to get user project access",
+			"error", err,
+			"user_id", userID)
+		// Return viewer role and empty projects on error
+		return string(types.RoleViewer), []string{}
+	}
+
+	// No project access - return viewer with no projects
+	if len(accesses) == 0 {
+		return string(types.RoleViewer), []string{}
+	}
+
+	// Collect unique project IDs and find highest role
+	projectIDMap := make(map[string]bool)
+	highestRole := types.RoleViewer // Start with lowest role
+
+	for _, access := range accesses {
+		// Add project ID to set
+		projectIDMap[access.ProjectID.String()] = true
+
+		// Determine highest role (admin > developer > viewer)
+		switch access.Role {
+		case types.RoleAdmin:
+			highestRole = types.RoleAdmin
+		case types.RoleDeveloper:
+			if highestRole != types.RoleAdmin {
+				highestRole = types.RoleDeveloper
+			}
+		case types.RoleViewer:
+			// Already the lowest, no change needed
+		}
+	}
+
+	// Convert map to slice
+	projectIDs := make([]string, 0, len(projectIDMap))
+	for projectID := range projectIDMap {
+		projectIDs = append(projectIDs, projectID)
+	}
+
+	return string(highestRole), projectIDs
 }
 
 // Login handles user authentication with email and password
@@ -91,10 +140,8 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	// Get user's default role (from first project access or default to viewer)
-	// For now, we'll use a simple default role
-	// TODO: Get actual role from project_access
-	userRole := string(types.RoleViewer)
+	// Get user's role and accessible projects from project_access table
+	userRole, projectIDs := h.getUserRoleAndProjects(c, user.ID)
 
 	// Generate token pair
 	tokenPair, err := h.auth.GenerateTokenPair(&auth.User{
@@ -102,7 +149,7 @@ func (h *Handler) Login(c *gin.Context) {
 		Email:      user.Email,
 		Name:       user.Name,
 		Role:       userRole,
-		ProjectIDs: []string{}, // TODO: Populate from project_access
+		ProjectIDs: projectIDs,
 		CreatedAt:  user.CreatedAt,
 		Active:     user.Active,
 	})
@@ -311,13 +358,16 @@ func (h *Handler) Register(c *gin.Context) {
 		Outcome:      "success",
 	})
 
+	// Get user's role and accessible projects (will be viewer/empty for new users)
+	userRole, projectIDs := h.getUserRoleAndProjects(c, user.ID)
+
 	// Generate token pair for immediate login
 	tokenPair, err := h.auth.GenerateTokenPair(&auth.User{
 		ID:         user.ID,
 		Email:      user.Email,
 		Name:       user.Name,
-		Role:       string(types.RoleViewer),
-		ProjectIDs: []string{},
+		Role:       userRole,
+		ProjectIDs: projectIDs,
 		CreatedAt:  user.CreatedAt,
 		Active:     user.Active,
 	})
