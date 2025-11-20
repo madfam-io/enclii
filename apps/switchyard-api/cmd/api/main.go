@@ -25,6 +25,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/topology"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
 )
@@ -160,6 +161,23 @@ func main() {
 	topologyBuilder := topology.NewGraphBuilder(repos, k8sClient, logrus.StandardLogger())
 	logrus.Info("✓ Topology graph builder initialized")
 
+	// Initialize service layer (business logic)
+	authService := services.NewAuthService(
+		repos,
+		authManager,
+		logrus.StandardLogger(),
+	)
+	logrus.Info("✓ AuthService initialized")
+
+	projectService := services.NewProjectService(
+		repos,
+		logrus.StandardLogger(),
+	)
+	logrus.Info("✓ ProjectService initialized")
+
+	// DeploymentService not yet integrated - will be added in future refactoring
+	var deploymentService *services.DeploymentService = nil
+
 	// Setup HTTP server
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -184,6 +202,10 @@ func main() {
 		provenanceChecker,
 		complianceExporter,
 		topologyBuilder,
+		// Service layer
+		authService,
+		projectService,
+		deploymentService,
 	)
 	api.SetupRoutes(router, apiHandler)
 
