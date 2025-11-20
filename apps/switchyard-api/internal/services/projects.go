@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/audit"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
@@ -18,29 +17,29 @@ import (
 
 // ProjectService handles project and service management business logic
 type ProjectService struct {
-	repos       *db.Repositories
-	auditLogger *audit.AsyncLogger
-	logger      *logrus.Logger
+	repos  *db.Repositories
+	logger *logrus.Logger
 }
 
 // NewProjectService creates a new project service
 func NewProjectService(
 	repos *db.Repositories,
-	auditLogger *audit.AsyncLogger,
 	logger *logrus.Logger,
 ) *ProjectService {
 	return &ProjectService{
-		repos:       repos,
-		auditLogger: auditLogger,
-		logger:      logger,
+		repos:  repos,
+		logger: logger,
 	}
 }
 
 // CreateProjectRequest represents a request to create a project
 type CreateProjectRequest struct {
-	Name   string
-	Slug   string
-	UserID uuid.UUID
+	Name        string
+	Slug        string
+	Description string
+	UserID      string
+	UserEmail   string
+	UserRole    string
 }
 
 // CreateProjectResponse represents the response from creating a project
@@ -56,7 +55,7 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *CreateProjectRe
 	}
 
 	// Check if slug already exists
-	existing, _ := s.repos.Projects.GetBySlug(req.Slug)
+	existing, _ := s.repos.Project.GetBySlug(ctx, req.Slug)
 	if existing != nil {
 		return nil, errors.ErrSlugAlreadyExists.WithDetails(map[string]any{
 			"slug": req.Slug,
@@ -70,23 +69,28 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *CreateProjectRe
 
 	// Create project
 	project := &types.Project{
-		ID:        uuid.New(),
-		Name:      req.Name,
-		Slug:      req.Slug,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:          uuid.New().String(),
+		Name:        req.Name,
+		Slug:        req.Slug,
+		Description: req.Description,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
-	if err := s.repos.Projects.Create(project); err != nil {
+	if err := s.repos.Project.Create(ctx, project); err != nil {
+		s.logger.Error("Failed to create project", "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
 	// Audit log
-	s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-		Actor:        req.UserID.String(),
+	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
+		ActorID:      req.UserID,
+		ActorEmail:   req.UserEmail,
+		ActorRole:    types.Role(req.UserRole),
 		Action:       "project_created",
 		ResourceType: "project",
-		ResourceID:   project.ID.String(),
+		ResourceID:   project.ID,
+		ResourceName: project.Name,
 		Outcome:      "success",
 	})
 
@@ -95,20 +99,11 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *CreateProjectRe
 	}, nil
 }
 
-// GetProject retrieves a project by ID or slug
-func (s *ProjectService) GetProject(ctx context.Context, identifier string) (*types.Project, error) {
-	// Try as UUID first
-	if id, err := uuid.Parse(identifier); err == nil {
-		project, err := s.repos.Projects.GetByID(ctx, id)
-		if err != nil {
-			return nil, errors.Wrap(err, errors.ErrProjectNotFound)
-		}
-		return project, nil
-	}
-
-	// Try as slug
-	project, err := s.repos.Projects.GetBySlug(identifier)
+// GetProject retrieves a project by slug
+func (s *ProjectService) GetProject(ctx context.Context, slug string) (*types.Project, error) {
+	project, err := s.repos.Project.GetBySlug(ctx, slug)
 	if err != nil {
+		s.logger.Error("Failed to get project", "slug", slug, "error", err)
 		return nil, errors.Wrap(err, errors.ErrProjectNotFound)
 	}
 
@@ -117,8 +112,9 @@ func (s *ProjectService) GetProject(ctx context.Context, identifier string) (*ty
 
 // ListProjects lists all projects
 func (s *ProjectService) ListProjects(ctx context.Context) ([]*types.Project, error) {
-	projects, err := s.repos.Projects.List()
+	projects, err := s.repos.Project.List(ctx)
 	if err != nil {
+		s.logger.Error("Failed to list projects", "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
@@ -127,11 +123,13 @@ func (s *ProjectService) ListProjects(ctx context.Context) ([]*types.Project, er
 
 // CreateServiceRequest represents a request to create a service
 type CreateServiceRequest struct {
-	ProjectID   uuid.UUID
+	ProjectID   string
 	Name        string
 	GitRepo     string
 	BuildConfig types.BuildConfig
-	UserID      uuid.UUID
+	UserID      string
+	UserEmail   string
+	UserRole    string
 }
 
 // CreateServiceResponse represents the response from creating a service
@@ -142,7 +140,7 @@ type CreateServiceResponse struct {
 // CreateService creates a new service in a project
 func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRequest) (*CreateServiceResponse, error) {
 	// Validate project exists
-	_, err := s.repos.Projects.GetByID(ctx, req.ProjectID)
+	_, err := s.repos.Project.GetByID(ctx, req.ProjectID)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrProjectNotFound)
 	}
@@ -160,7 +158,7 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 
 	// Create service
 	service := &types.Service{
-		ID:          uuid.New(),
+		ID:          uuid.New().String(),
 		ProjectID:   req.ProjectID,
 		Name:        req.Name,
 		GitRepo:     req.GitRepo,
@@ -169,19 +167,23 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 		UpdatedAt:   time.Now(),
 	}
 
-	if err := s.repos.Services.Create(service); err != nil {
+	if err := s.repos.Service.Create(ctx, service); err != nil {
+		s.logger.Error("Failed to create service", "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
 	// Audit log
-	s.auditLogger.LogAction(ctx, &audit.AuditLogEntry{
-		Actor:        req.UserID.String(),
+	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
+		ActorID:      req.UserID,
+		ActorEmail:   req.UserEmail,
+		ActorRole:    types.Role(req.UserRole),
 		Action:       "service_created",
 		ResourceType: "service",
-		ResourceID:   service.ID.String(),
+		ResourceID:   service.ID,
+		ResourceName: service.Name,
 		Outcome:      "success",
 		Context: map[string]interface{}{
-			"project_id": req.ProjectID.String(),
+			"project_id": req.ProjectID,
 		},
 	})
 
@@ -191,9 +193,10 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 }
 
 // GetService retrieves a service by ID
-func (s *ProjectService) GetService(ctx context.Context, serviceID uuid.UUID) (*types.Service, error) {
-	service, err := s.repos.Services.GetByID(serviceID)
+func (s *ProjectService) GetService(ctx context.Context, serviceID string) (*types.Service, error) {
+	service, err := s.repos.Service.GetByID(ctx, serviceID)
 	if err != nil {
+		s.logger.Error("Failed to get service", "service_id", serviceID, "error", err)
 		return nil, errors.Wrap(err, errors.ErrServiceNotFound)
 	}
 
@@ -201,15 +204,16 @@ func (s *ProjectService) GetService(ctx context.Context, serviceID uuid.UUID) (*
 }
 
 // ListServices lists all services for a project
-func (s *ProjectService) ListServices(ctx context.Context, projectID uuid.UUID) ([]*types.Service, error) {
+func (s *ProjectService) ListServices(ctx context.Context, projectSlug string) ([]*types.Service, error) {
 	// Validate project exists
-	_, err := s.repos.Projects.GetByID(ctx, projectID)
+	project, err := s.repos.Project.GetBySlug(ctx, projectSlug)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrProjectNotFound)
 	}
 
-	services, err := s.repos.Services.ListByProject(projectID)
+	services, err := s.repos.Service.ListByProject(ctx, project.ID)
 	if err != nil {
+		s.logger.Error("Failed to list services", "project_slug", projectSlug, "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 

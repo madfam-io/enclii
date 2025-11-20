@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
@@ -15,10 +15,14 @@ func (h *Handler) CreateService(c *gin.Context) {
 	ctx := c.Request.Context()
 	slug := c.Param("slug")
 
-	// Get project first
-	project, err := h.repos.Project.GetBySlug(ctx, slug)
+	// Get project first to get project ID
+	project, err := h.projectService.GetProject(ctx, slug)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		if errors.Is(err, errors.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get project"})
+		}
 		return
 	}
 
@@ -33,20 +37,31 @@ func (h *Handler) CreateService(c *gin.Context) {
 		return
 	}
 
-	service := &types.Service{
+	// Use service layer for service creation
+	createReq := &services.CreateServiceRequest{
 		ProjectID:   project.ID,
 		Name:        req.Name,
 		GitRepo:     req.GitRepo,
 		BuildConfig: req.BuildConfig,
+		UserID:      c.GetString("user_id"),
+		UserEmail:   c.GetString("user_email"),
+		UserRole:    c.GetString("user_role"),
 	}
 
-	if err := h.repos.Service.Create(ctx, service); err != nil {
-		h.logger.Error(ctx, "Failed to create service", logging.Error("db_error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create service"})
+	resp, err := h.projectService.CreateService(ctx, createReq)
+	if err != nil {
+		// Map service errors to HTTP status codes
+		if errors.Is(err, errors.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		} else if errors.Is(err, errors.ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create service"})
+		}
 		return
 	}
 
-	c.JSON(http.StatusCreated, service)
+	c.JSON(http.StatusCreated, resp.Service)
 }
 
 // ListServices returns all services in a project
@@ -54,36 +69,33 @@ func (h *Handler) ListServices(c *gin.Context) {
 	ctx := c.Request.Context()
 	slug := c.Param("slug")
 
-	project, err := h.repos.Project.GetBySlug(ctx, slug)
+	// Use service layer for listing services
+	svcList, err := h.projectService.ListServices(ctx, slug)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		if errors.Is(err, errors.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list services"})
+		}
 		return
 	}
 
-	services, err := h.repos.Service.ListByProject(ctx, project.ID)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to list services", logging.Error("db_error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list services"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"services": services})
+	c.JSON(http.StatusOK, gin.H{"services": svcList})
 }
 
 // GetService returns a service by ID
 func (h *Handler) GetService(c *gin.Context) {
 	ctx := c.Request.Context()
-	idStr := c.Param("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
-		return
-	}
+	serviceID := c.Param("id")
 
-	service, err := h.repos.Service.GetByID(ctx, id.String())
+	// Use service layer for getting service
+	service, err := h.projectService.GetService(ctx, serviceID)
 	if err != nil {
-		h.logger.Error(ctx, "Failed to get service", logging.String("service_id", id.String()), logging.Error("db_error", err))
-		c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		if errors.Is(err, errors.ErrServiceNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get service"})
+		}
 		return
 	}
 

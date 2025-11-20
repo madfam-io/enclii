@@ -2,12 +2,11 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
@@ -17,30 +16,36 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	var req types.CreateProjectRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error(ctx, "Invalid request body", logging.Error("bind_error", err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
 	// Validate request
 	if err := h.validator.Validate(&req); err != nil {
-		h.logger.Error(ctx, "Validation failed", logging.Error("validation_error", err))
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	project := &types.Project{
-		ID:          uuid.New().String(),
+	// Use service layer for project creation
+	createReq := &services.CreateProjectRequest{
 		Name:        req.Name,
 		Slug:        req.Slug,
 		Description: req.Description,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		UserID:      c.GetString("user_id"),
+		UserEmail:   c.GetString("user_email"),
+		UserRole:    c.GetString("user_role"),
 	}
 
-	if err := h.repos.Project.Create(ctx, project); err != nil {
-		h.logger.Error(ctx, "Failed to create project", logging.Error("db_error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project"})
+	resp, err := h.projectService.CreateProject(ctx, createReq)
+	if err != nil {
+		// Map service errors to HTTP status codes
+		if errors.Is(err, errors.ErrSlugAlreadyExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": "A project with this slug already exists"})
+		} else if errors.Is(err, errors.ErrValidation) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project"})
+		}
 		return
 	}
 
@@ -50,16 +55,16 @@ func (h *Handler) CreateProject(c *gin.Context) {
 	// Record metrics
 	h.metrics.RecordProjectCreated()
 
-	h.logger.Info(ctx, "Project created", logging.String("project_id", project.ID))
-	c.JSON(http.StatusCreated, project)
+	c.JSON(http.StatusCreated, resp.Project)
 }
 
 // ListProjects returns all projects
 func (h *Handler) ListProjects(c *gin.Context) {
 	ctx := c.Request.Context()
-	projects, err := h.repos.Project.List(ctx)
+
+	// Use service layer for listing projects
+	projects, err := h.projectService.ListProjects(ctx)
 	if err != nil {
-		h.logger.Error(ctx, "Failed to list projects", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list projects"})
 		return
 	}
@@ -72,10 +77,14 @@ func (h *Handler) GetProject(c *gin.Context) {
 	ctx := c.Request.Context()
 	slug := c.Param("slug")
 
-	project, err := h.repos.Project.GetBySlug(ctx, slug)
+	// Use service layer for getting project
+	project, err := h.projectService.GetProject(ctx, slug)
 	if err != nil {
-		h.logger.Error(ctx, "Failed to get project", logging.String("slug", slug), logging.Error("db_error", err))
-		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		if errors.Is(err, errors.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get project"})
+		}
 		return
 	}
 
