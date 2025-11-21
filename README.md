@@ -3,12 +3,12 @@
 > **The Railway-style platform with $100/month production infrastructure.**
 > *Production-grade Kubernetes orchestration on Hetzner + Cloudflare.*
 
-[![Production Readiness](https://img.shields.io/badge/production%20ready-70%25-yellow)](./PRODUCTION_READINESS_AUDIT.md)
-[![Infrastructure](https://img.shields.io/badge/infrastructure-Hetzner%20%2B%20Cloudflare-blue)](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
-[![Auth](https://img.shields.io/badge/auth-JWT%20(RS256)-orange)](./PRODUCTION_READINESS_AUDIT.md)
-[![Cost](https://img.shields.io/badge/monthly%20cost-%24100-success)](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
+[![Production Readiness](https://img.shields.io/badge/production%20ready-70%25-yellow)](./docs/production/PRODUCTION_READINESS_AUDIT.md)
+[![Infrastructure](https://img.shields.io/badge/infrastructure-Hetzner%20%2B%20Cloudflare-blue)](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
+[![Auth](https://img.shields.io/badge/auth-JWT%20(RS256)-orange)](./docs/production/PRODUCTION_READINESS_AUDIT.md)
+[![Cost](https://img.shields.io/badge/monthly%20cost-%24100-success)](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
-**Status:** Alpha (70% production-ready) | [Production Roadmap →](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
+**Status:** Alpha (70% production-ready) | [Production Roadmap →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 **Authentication:** JWT (RS256) - Plinto integration planned for Weeks 3-4
 **Infrastructure:** Hetzner + Cloudflare + Ubicloud (~$100/month)
 
@@ -30,7 +30,7 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 - 🔲 **Documentation** (`docs.enclii.io`) → Deploy via Enclii itself
 - 🔲 **Status Page** (`status.enclii.io`) → Deploy via Enclii itself
 
-**Current Status:** Service specs ready in `dogfooding/` directory. Implementation scheduled for Weeks 5-6 after Plinto integration (Weeks 3-4). [See dogfooding plan →](./DOGFOODING_GUIDE.md)
+**Current Status:** Service specs ready in `dogfooding/` directory. Implementation scheduled for Weeks 5-6 after Plinto integration (Weeks 3-4). [See dogfooding plan →](./docs/guides/DOGFOODING_GUIDE.md)
 
 ---
 
@@ -51,7 +51,7 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 - Auth0: $220+/month
 - **5-Year Savings: $127,200** 💰
 
-[View infrastructure details →](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
+[View infrastructure details →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
 ### 🔐 Authentication & Security
 
@@ -74,7 +74,7 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 - ✅ Full control over auth flows
 - ✅ Multi-tenant ready out of the box
 
-[View Plinto integration plan →](./PRODUCTION_READINESS_AUDIT.md)
+[View Plinto integration plan →](./docs/production/PRODUCTION_READINESS_AUDIT.md)
 
 ### 🚀 Multi-Tenant SaaS Ready
 
@@ -191,7 +191,7 @@ From [PRODUCTION_READINESS_AUDIT.md](./PRODUCTION_READINESS_AUDIT.md):
 **Week 5-6:** Plinto integration + Dogfooding setup
 **Week 7-8:** Load testing + Security audit + **GO LIVE** 🚀
 
-[View detailed roadmap →](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
+[View detailed roadmap →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
 ---
 
@@ -241,11 +241,11 @@ make build-cli
 ./bin/enclii logs api -f           # Tail logs
 ```
 
-[View detailed setup →](./docs/QUICKSTART.md)
+[View detailed setup →](./docs/getting-started/QUICKSTART.md)
 
 ### Production Deployment
 
-See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./PRODUCTION_DEPLOYMENT_ROADMAP.md) for the complete 8-week implementation plan.
+See [Production Deployment Roadmap](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md) for the complete 8-week implementation plan.
 
 **Bootstrap (Week 1-2):**
 ```bash
@@ -308,16 +308,22 @@ enclii scale --min 5 --max 10 --service api --env prod
 
 ## Documentation
 
+**📚 [Complete Documentation Index →](./docs/README.md)**
+
 **Getting Started:**
-- [Production Deployment Roadmap](./PRODUCTION_DEPLOYMENT_ROADMAP.md) - 8-week plan
-- [Production Readiness Audit](./PRODUCTION_READINESS_AUDIT.md) - Current state
-- [Dogfooding Guide](./DOGFOODING_GUIDE.md) - Self-hosting strategy
-- [Quick Start](./docs/QUICKSTART.md) - Local dev in 10 minutes
+- [Production Deployment Roadmap](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md) - 8-week plan
+- [Production Readiness Audit](./docs/production/PRODUCTION_READINESS_AUDIT.md) - Current state
+- [Dogfooding Guide](./docs/guides/DOGFOODING_GUIDE.md) - Self-hosting strategy
+- [Quick Start](./docs/getting-started/QUICKSTART.md) - Local dev in 10 minutes
 
 **Architecture:**
-- [Architecture Overview](./docs/ARCHITECTURE.md) - System design
-- [API Documentation](./docs/API.md) - REST API reference
-- [Development Guide](./docs/DEVELOPMENT.md) - Contributing guide
+- [Architecture Overview](./docs/architecture/ARCHITECTURE.md) - System design
+- [API Documentation](./docs/architecture/API.md) - REST API reference
+- [Development Guide](./docs/getting-started/DEVELOPMENT.md) - Contributing guide
+
+**Audits & Reports:**
+- [Audit Navigation](./docs/audits/README.md) - Browse all audit reports
+- [Master Audit Report](./docs/audits/MASTER_REPORT.md) - Comprehensive overview
 
 **Operations:**
 - [Deployment Guide](./infra/DEPLOYMENT.md) - Production ops
@@ -403,7 +409,7 @@ enclii scale --min 5 --max 10 --service api --env prod
 - Cron jobs and scheduled tasks
 - SOC 2 compliance documentation
 
-[View detailed roadmap →](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
+[View detailed roadmap →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
 ---
 
@@ -458,7 +464,7 @@ We'll answer with verifiable proof:
 - Product quality: We'll find bugs before customers do
 - Sales credibility: Authentic production usage metrics
 
-[See complete dogfooding plan →](./DOGFOODING_GUIDE.md)
+[See complete dogfooding plan →](./docs/guides/DOGFOODING_GUIDE.md)
 
 ---
 
@@ -474,11 +480,11 @@ All rights reserved.
 - **Documentation:** [docs.enclii.io](https://docs.enclii.io)
 - **Status Page:** [status.enclii.io](https://status.enclii.io)
 - **Plinto (Auth):** [github.com/madfam-io/plinto](https://github.com/madfam-io/plinto)
-- **Production Roadmap:** [PRODUCTION_DEPLOYMENT_ROADMAP.md](./PRODUCTION_DEPLOYMENT_ROADMAP.md)
-- **Dogfooding Guide:** [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md)
+- **Production Roadmap:** [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
+- **Dogfooding Guide:** [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md)
 
 ---
 
 **Questions?** Open an issue or contact the team at [engineering@enclii.io](mailto:engineering@enclii.io)
 
-**Ready to deploy?** Start with [PRODUCTION_DEPLOYMENT_ROADMAP.md](./PRODUCTION_DEPLOYMENT_ROADMAP.md) 🚀
+**Ready to deploy?** Start with [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md) 🚀
