@@ -6,8 +6,10 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"database/sql"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -474,8 +476,11 @@ func (j *JWTManager) ExportPublicKey() (string, error) {
 // GetJWKS returns the JSON Web Key Set for token verification
 // This allows external services to verify tokens we issue
 func (j *JWTManager) GetJWKS() map[string]interface{} {
-	// Convert public key to JWK format
-	// This is a simplified implementation - production should use a proper JWK library
+	// Convert RSA public key to JWK format
+	// The public key components: n (modulus) and e (exponent)
+	n := base64.RawURLEncoding.EncodeToString(j.publicKey.N.Bytes())
+	e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(j.publicKey.E)).Bytes())
+
 	return map[string]interface{}{
 		"keys": []map[string]interface{}{
 			{
@@ -483,8 +488,8 @@ func (j *JWTManager) GetJWKS() map[string]interface{} {
 				"use": "sig",
 				"alg": "RS256",
 				"kid": "enclii-jwt-key-1",
-				// Note: In production, properly encode the public key components (n, e)
-				// For now, this is a placeholder that indicates JWKS support
+				"n":   n, // RSA modulus
+				"e":   e, // RSA public exponent
 			},
 		},
 	}
