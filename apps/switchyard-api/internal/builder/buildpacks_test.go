@@ -81,7 +81,7 @@ func TestBuildpacksBuilder_detectBuildStrategy(t *testing.T) {
 			name:       "explicit buildpacks",
 			createFile: "",
 			config:     types.BuildConfig{Type: types.BuildTypeBuildpack},
-			expected:   "buildpacks",
+			expected:   "buildpack",
 		},
 		{
 			name:       "explicit dockerfile",
@@ -257,7 +257,7 @@ func TestBuildRequest_Structure(t *testing.T) {
 		SourcePath:  "/tmp/source",
 		GitSHA:      "abc123def456",
 		BuildConfig: types.BuildConfig{
-			Type: types.BuildTypeBuildpacks,
+			Type: types.BuildTypeBuildpack,
 		},
 		Env: map[string]string{
 			"NODE_ENV": "production",

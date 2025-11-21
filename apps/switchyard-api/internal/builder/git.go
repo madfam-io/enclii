@@ -22,6 +22,14 @@ func NewGitService(workDir string) *GitService {
 	}
 }
 
+// getShortSHA safely returns the first 7 characters of a SHA, or the full SHA if shorter
+func getShortSHA(sha string) string {
+	if len(sha) < 7 {
+		return sha
+	}
+	return sha[:7]
+}
+
 type CloneResult struct {
 	Path      string
 	GitSHA    string
@@ -37,7 +45,7 @@ func (g *GitService) CloneRepository(ctx context.Context, repoURL, gitSHA string
 	}
 
 	// Create a temporary directory for the clone
-	cloneDir := filepath.Join(g.workDir, fmt.Sprintf("build-%s", gitSHA[:7]))
+	cloneDir := filepath.Join(g.workDir, fmt.Sprintf("build-%s", getShortSHA(gitSHA)))
 
 	// Ensure work directory exists
 	if err := os.MkdirAll(g.workDir, 0755); err != nil {
@@ -45,7 +53,7 @@ func (g *GitService) CloneRepository(ctx context.Context, repoURL, gitSHA string
 		return result
 	}
 
-	logrus.Infof("Cloning repository %s at SHA %s", repoURL, gitSHA[:7])
+	logrus.Infof("Cloning repository %s at SHA %s", repoURL, getShortSHA(gitSHA))
 
 	// Clone the repository
 	repo, err := git.PlainCloneContext(ctx, cloneDir, false, &git.CloneOptions{
@@ -103,14 +111,14 @@ func (g *GitService) CloneShallow(ctx context.Context, repoURL, gitSHA string) *
 		GitSHA: gitSHA,
 	}
 
-	cloneDir := filepath.Join(g.workDir, fmt.Sprintf("build-%s", gitSHA[:7]))
+	cloneDir := filepath.Join(g.workDir, fmt.Sprintf("build-%s", getShortSHA(gitSHA)))
 
 	if err := os.MkdirAll(g.workDir, 0755); err != nil {
 		result.Error = fmt.Errorf("failed to create work directory: %w", err)
 		return result
 	}
 
-	logrus.Infof("Shallow cloning repository %s at SHA %s", repoURL, gitSHA[:7])
+	logrus.Infof("Shallow cloning repository %s at SHA %s", repoURL, getShortSHA(gitSHA))
 
 	// Shallow clone with depth 1
 	_, err := git.PlainCloneContext(ctx, cloneDir, false, &git.CloneOptions{
