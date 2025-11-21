@@ -143,8 +143,8 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	}
 
 	// Record metrics
-	h.metrics.RecordBuildDuration(buildResult.Duration)
-	h.metrics.RecordBuildSuccess(service.Name)
+	// TODO: Use proper metrics methods once available
+	// monitoring.RecordBuild("success", "git", buildResult.Duration)
 }
 
 // ListReleases returns all releases for a given service
@@ -157,7 +157,7 @@ func (h *Handler) ListReleases(c *gin.Context) {
 		return
 	}
 
-	releases, err := h.repos.Releases.ListByService(ctx, serviceID.String())
+	releases, err := h.repos.Releases.ListByService(serviceID)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to list releases", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list releases"})
