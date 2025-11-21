@@ -1,7 +1,6 @@
 package monitoring
 
 import (
-	"context"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sirupsen/logrus"
 )
 
 // Prometheus metrics
@@ -328,12 +326,12 @@ func (mc *MetricsCollector) collectSystemMetrics() {
 
 // Health check metrics
 func RecordHealthCheck(component string, success bool, duration time.Duration) {
-	status := "success"
+	statusCode := "200"
 	if !success {
-		status = "failure"
+		statusCode = "503"
 	}
-	
-	httpRequestsTotal.WithLabelValues("GET", "/health/"+component, "200").Inc()
+
+	httpRequestsTotal.WithLabelValues("GET", "/health/"+component, statusCode).Inc()
 	httpRequestDuration.WithLabelValues("GET", "/health/"+component).Observe(duration.Seconds())
 }
 
@@ -341,8 +339,8 @@ func RecordHealthCheck(component string, success bool, duration time.Duration) {
 type BusinessMetrics struct {
 	UsersActive      prometheus.Gauge
 	ProjectsCreated  prometheus.Counter
-	ServicesDeployed prometheus.CounterVec
-	ErrorRate        prometheus.GaugeVec
+	ServicesDeployed *prometheus.CounterVec
+	ErrorRate        *prometheus.GaugeVec
 }
 
 func NewBusinessMetrics() *BusinessMetrics {

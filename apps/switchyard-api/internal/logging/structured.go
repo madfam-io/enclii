@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -356,7 +355,7 @@ func TracingMiddleware() gin.HandlerFunc {
 		// Set response attributes
 		span.SetAttributes(
 			semconv.HTTPStatusCodeKey.Int(c.Writer.Status()),
-			semconv.HTTPResponseSizeKey.Int(c.Writer.Size()),
+			attribute.Int("http.response_content_length", c.Writer.Size()),
 		)
 		
 		// Set span status based on HTTP status

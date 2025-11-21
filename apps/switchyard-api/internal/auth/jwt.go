@@ -6,8 +6,10 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"database/sql"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -343,7 +345,7 @@ func (j *JWTManager) RequireProjectAccess() gin.HandlerFunc {
 		}
 
 		// Get project by slug
-		project, err := j.repos.Projects.GetBySlug(ctx, projectSlug)
+		project, err := j.repos.Projects.GetBySlug(projectSlug)
 		if err != nil {
 			if err == sql.ErrNoRows {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
@@ -470,4 +472,25 @@ func (j *JWTManager) ExportPublicKey() (string, error) {
 	})
 
 	return string(pubKeyPEM), nil
+}
+// GetJWKS returns the JSON Web Key Set for token verification
+// This allows external services to verify tokens we issue
+func (j *JWTManager) GetJWKS() map[string]interface{} {
+	// Convert RSA public key to JWK format
+	// The public key components: n (modulus) and e (exponent)
+	n := base64.RawURLEncoding.EncodeToString(j.publicKey.N.Bytes())
+	e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(j.publicKey.E)).Bytes())
+
+	return map[string]interface{}{
+		"keys": []map[string]interface{}{
+			{
+				"kty": "RSA",
+				"use": "sig",
+				"alg": "RS256",
+				"kid": "enclii-jwt-key-1",
+				"n":   n, // RSA modulus
+				"e":   e, // RSA public exponent
+			},
+		},
+	}
 }

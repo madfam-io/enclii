@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,25 +13,32 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// generateTestRSAKeys generates a RSA key pair for testing
+func generateTestRSAKeys(t *testing.T) (*rsa.PrivateKey, *rsa.PublicKey) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	assert.NoError(t, err)
+	return privateKey, &privateKey.PublicKey
+}
+
 func TestAuthMiddleware_ValidToken(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
-	secret := []byte("test-secret-key")
+	privateKey, publicKey := generateTestRSAKeys(t)
 
-	// Create a valid token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	// Create a valid token with RS256
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"sub":   "user123",
 		"email": "test@example.com",
 		"roles": []string{"admin"},
 		"exp":   time.Now().Add(time.Hour).Unix(),
 	})
 
-	tokenString, err := token.SignedString(secret)
+	tokenString, err := token.SignedString(privateKey)
 	assert.NoError(t, err)
 
 	// Create test router
 	router := gin.New()
-	auth := NewAuthMiddleware(secret)
+	auth := NewAuthMiddleware(publicKey)
 	router.Use(auth.Middleware())
 	router.GET("/test", func(c *gin.Context) {
 		userID := c.GetString("user_id")
@@ -50,11 +59,11 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 func TestAuthMiddleware_MissingToken(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
-	secret := []byte("test-secret-key")
+	_, publicKey := generateTestRSAKeys(t)
 
 	// Create test router
 	router := gin.New()
-	auth := NewAuthMiddleware(secret)
+	auth := NewAuthMiddleware(publicKey)
 	router.Use(auth.Middleware())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -72,11 +81,11 @@ func TestAuthMiddleware_MissingToken(t *testing.T) {
 func TestAuthMiddleware_InvalidToken(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
-	secret := []byte("test-secret-key")
+	_, publicKey := generateTestRSAKeys(t)
 
 	// Create test router
 	router := gin.New()
-	auth := NewAuthMiddleware(secret)
+	auth := NewAuthMiddleware(publicKey)
 	router.Use(auth.Middleware())
 	router.GET("/test", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -95,11 +104,11 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 func TestAuthMiddleware_PublicPath(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
-	secret := []byte("test-secret-key")
+	_, publicKey := generateTestRSAKeys(t)
 
 	// Create test router
 	router := gin.New()
-	auth := NewAuthMiddleware(secret)
+	auth := NewAuthMiddleware(publicKey)
 	auth.AddPublicPath("/public")
 	router.Use(auth.Middleware())
 	router.GET("/public", func(c *gin.Context) {
@@ -118,22 +127,22 @@ func TestAuthMiddleware_PublicPath(t *testing.T) {
 func TestAuthMiddleware_RoleRequirement(t *testing.T) {
 	// Setup
 	gin.SetMode(gin.TestMode)
-	secret := []byte("test-secret-key")
+	privateKey, publicKey := generateTestRSAKeys(t)
 
 	// Create a token with user role
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"sub":   "user123",
 		"email": "test@example.com",
 		"roles": []string{"user"},
 		"exp":   time.Now().Add(time.Hour).Unix(),
 	})
 
-	tokenString, err := token.SignedString(secret)
+	tokenString, err := token.SignedString(privateKey)
 	assert.NoError(t, err)
 
 	// Create test router
 	router := gin.New()
-	auth := NewAuthMiddleware(secret)
+	auth := NewAuthMiddleware(publicKey)
 	auth.AddRoleRequirement("/admin", []string{"admin"})
 	router.Use(auth.Middleware())
 	router.GET("/admin", func(c *gin.Context) {
@@ -148,4 +157,39 @@ func TestAuthMiddleware_RoleRequirement(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestAuthMiddleware_WrongSigningMethod(t *testing.T) {
+	// Setup
+	gin.SetMode(gin.TestMode)
+	_, publicKey := generateTestRSAKeys(t)
+
+	// Create a token with HMAC instead of RSA (should be rejected)
+	secret := []byte("test-secret")
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":   "user123",
+		"email": "test@example.com",
+		"roles": []string{"admin"},
+		"exp":   time.Now().Add(time.Hour).Unix(),
+	})
+
+	tokenString, err := token.SignedString(secret)
+	assert.NoError(t, err)
+
+	// Create test router
+	router := gin.New()
+	auth := NewAuthMiddleware(publicKey)
+	router.Use(auth.Middleware())
+	router.GET("/test", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	// Test request with HMAC token (should fail)
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenString)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }

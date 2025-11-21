@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto/rsa"
 	"net/http"
 	"strings"
 
@@ -11,15 +12,16 @@ import (
 
 // AuthMiddleware provides authentication middleware
 type AuthMiddleware struct {
-	jwtSecret     []byte
+	publicKey     *rsa.PublicKey
 	publicPaths   map[string]bool
 	requiredRoles map[string][]string // path -> required roles
 }
 
 // NewAuthMiddleware creates a new authentication middleware
-func NewAuthMiddleware(jwtSecret []byte) *AuthMiddleware {
+// publicKey is used to validate RS256 JWT tokens
+func NewAuthMiddleware(publicKey *rsa.PublicKey) *AuthMiddleware {
 	return &AuthMiddleware{
-		jwtSecret:     jwtSecret,
+		publicKey:     publicKey,
 		publicPaths:   make(map[string]bool),
 		requiredRoles: make(map[string][]string),
 	}
@@ -88,11 +90,11 @@ func (a *AuthMiddleware) Middleware() gin.HandlerFunc {
 
 		// Parse and validate JWT token
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			// Validate signing method
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			// Validate signing method - tokens are signed with RS256
+			if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
-			return a.jwtSecret, nil
+			return a.publicKey, nil
 		})
 
 		if err != nil {
@@ -194,13 +196,14 @@ func hasRequiredRole(userRoles, requiredRoles []string) bool {
 }
 
 // RequireAuth is a convenience middleware to enforce authentication
-func RequireAuth(jwtSecret []byte) gin.HandlerFunc {
-	auth := NewAuthMiddleware(jwtSecret)
+func RequireAuth(publicKey *rsa.PublicKey) gin.HandlerFunc {
+	auth := NewAuthMiddleware(publicKey)
 	return auth.Middleware()
 }
 
 // RequireRole creates a middleware that requires specific roles
-func RequireRole(jwtSecret []byte, roles ...string) gin.HandlerFunc {
+// Note: This should be chained after RequireAuth to ensure user_roles are set
+func RequireRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userRoles := c.GetStringSlice("user_roles")
 		if !hasRequiredRole(userRoles, roles) {

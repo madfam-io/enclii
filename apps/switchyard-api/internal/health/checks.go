@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
 
 	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"

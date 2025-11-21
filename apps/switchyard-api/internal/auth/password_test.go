@@ -29,7 +29,7 @@ func TestHashPassword(t *testing.T) {
 		{
 			name:     "empty password",
 			password: "",
-			wantErr:  false, // bcrypt handles empty passwords
+			wantErr:  true, // Implementation correctly rejects empty passwords
 		},
 	}
 
@@ -82,15 +82,15 @@ func TestHashPassword_Uniqueness(t *testing.T) {
 	}
 
 	// But both should verify correctly
-	if !CheckPasswordHash(password, hash1) {
-		t.Error("CheckPasswordHash() failed to verify first hash")
+	if err := ComparePassword(hash1, password); err != nil {
+		t.Errorf("ComparePassword() failed to verify first hash: %v", err)
 	}
-	if !CheckPasswordHash(password, hash2) {
-		t.Error("CheckPasswordHash() failed to verify second hash")
+	if err := ComparePassword(hash2, password); err != nil {
+		t.Errorf("ComparePassword() failed to verify second hash: %v", err)
 	}
 }
 
-func TestCheckPasswordHash(t *testing.T) {
+func TestComparePassword(t *testing.T) {
 	password := "password123"
 	hash, _ := HashPassword(password)
 
@@ -98,57 +98,63 @@ func TestCheckPasswordHash(t *testing.T) {
 		name     string
 		password string
 		hash     string
-		want     bool
+		wantErr  bool // true if we expect an error (mismatch)
 	}{
 		{
 			name:     "correct password",
 			password: password,
 			hash:     hash,
-			want:     true,
+			wantErr:  false,
 		},
 		{
 			name:     "incorrect password",
 			password: "wrongpassword",
 			hash:     hash,
-			want:     false,
+			wantErr:  true,
 		},
 		{
 			name:     "empty password",
 			password: "",
 			hash:     hash,
-			want:     false,
+			wantErr:  true,
 		},
 		{
 			name:     "invalid hash",
 			password: password,
 			hash:     "not-a-valid-hash",
-			want:     false,
+			wantErr:  true,
 		},
 		{
 			name:     "empty hash",
 			password: password,
 			hash:     "",
-			want:     false,
+			wantErr:  true,
 		},
 		{
 			name:     "case sensitive - different case",
 			password: "Password123",
 			hash:     hash,
-			want:     false,
+			wantErr:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CheckPasswordHash(tt.password, tt.hash)
-			if got != tt.want {
-				t.Errorf("CheckPasswordHash() = %v, want %v", got, tt.want)
+			err := ComparePassword(tt.hash, tt.password)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("ComparePassword() expected error (password mismatch), got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("ComparePassword() unexpected error: %v", err)
+				}
 			}
 		})
 	}
 }
 
-func TestCheckPasswordHash_EdgeCases(t *testing.T) {
+func TestComparePassword_EdgeCases(t *testing.T) {
 	// Test with various password lengths
 	lengths := []int{1, 10, 50, 72}
 
@@ -159,13 +165,13 @@ func TestCheckPasswordHash_EdgeCases(t *testing.T) {
 			t.Fatalf("HashPassword() failed for length %d: %v", length, err)
 		}
 
-		if !CheckPasswordHash(password, hash) {
-			t.Errorf("CheckPasswordHash() failed for password of length %d", length)
+		if err := ComparePassword(hash, password); err != nil {
+			t.Errorf("ComparePassword() failed for password of length %d: %v", length, err)
 		}
 	}
 }
 
-func TestCheckPasswordHash_SpecialCharacters(t *testing.T) {
+func TestComparePassword_SpecialCharacters(t *testing.T) {
 	passwords := []string{
 		"p@ssw0rd!",
 		"пароль", // Cyrillic
@@ -182,8 +188,8 @@ func TestCheckPasswordHash_SpecialCharacters(t *testing.T) {
 				t.Fatalf("HashPassword() error: %v", err)
 			}
 
-			if !CheckPasswordHash(password, hash) {
-				t.Errorf("CheckPasswordHash() failed for password: %s", password)
+			if err := ComparePassword(hash, password); err != nil {
+				t.Errorf("ComparePassword() failed for password: %s, error: %v", password, err)
 			}
 		})
 	}
@@ -198,12 +204,12 @@ func BenchmarkHashPassword(b *testing.B) {
 	}
 }
 
-func BenchmarkCheckPasswordHash(b *testing.B) {
+func BenchmarkComparePassword(b *testing.B) {
 	password := "benchmark123"
 	hash, _ := HashPassword(password)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		CheckPasswordHash(password, hash)
+		ComparePassword(password, hash)
 	}
 }

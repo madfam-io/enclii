@@ -539,7 +539,7 @@ func (r *ServiceReconciler) generatePVCs(req *ReconcileRequest, namespace string
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{accessMode},
-				Resources: corev1.ResourceRequirements{
+				Resources: corev1.VolumeResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceStorage: storageSize,
 					},

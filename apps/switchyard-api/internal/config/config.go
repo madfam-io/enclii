@@ -17,10 +17,14 @@ type Config struct {
 	// Container Registry
 	Registry string
 
+	// Authentication Mode
+	AuthMode string // "local" (default) or "oidc"
+
 	// OIDC Configuration
 	OIDCIssuer       string
 	OIDCClientID     string
 	OIDCClientSecret string
+	OIDCRedirectURL  string
 
 	// Kubernetes
 	KubeConfig  string
@@ -66,9 +70,11 @@ func Load() (*Config, error) {
 	viper.SetDefault("database-url", "postgres://postgres:postgres@localhost:5432/enclii_dev?sslmode=require")
 	viper.SetDefault("log-level", "info")
 	viper.SetDefault("registry", "ghcr.io/madfam")
+	viper.SetDefault("auth-mode", "local") // Default to local bootstrap mode
 	viper.SetDefault("oidc-issuer", "http://localhost:5556")
 	viper.SetDefault("oidc-client-id", "enclii")
 	viper.SetDefault("oidc-client-secret", "")
+	viper.SetDefault("oidc-redirect-url", "http://localhost:8080/v1/auth/callback")
 	viper.SetDefault("kube-config", os.Getenv("HOME")+"/.kube/config")
 	viper.SetDefault("kube-context", "kind-enclii")
 	viper.SetDefault("buildkit-addr", "docker://")
@@ -95,9 +101,11 @@ func Load() (*Config, error) {
 		DatabaseURL:               viper.GetString("database-url"),
 		LogLevel:                  logLevel,
 		Registry:                  viper.GetString("registry"),
+		AuthMode:                  viper.GetString("auth-mode"),
 		OIDCIssuer:                viper.GetString("oidc-issuer"),
 		OIDCClientID:              viper.GetString("oidc-client-id"),
 		OIDCClientSecret:          viper.GetString("oidc-client-secret"),
+		OIDCRedirectURL:           viper.GetString("oidc-redirect-url"),
 		KubeConfig:                viper.GetString("kube-config"),
 		KubeContext:               viper.GetString("kube-context"),
 		BuildkitAddr:              viper.GetString("buildkit-addr"),

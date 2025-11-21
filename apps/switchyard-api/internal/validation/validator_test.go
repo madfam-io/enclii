@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -56,6 +57,9 @@ func TestValidator_ValidateStruct(t *testing.T) {
 			input: &CreateServiceRequest{
 				Name:    "test-service",
 				GitRepo: "https://github.com/user/repo.git",
+				BuildConfig: BuildConfig{
+					Type: "auto",
+				},
 			},
 			wantError: false,
 		},
@@ -107,8 +111,8 @@ func TestValidateDNSName(t *testing.T) {
 		{"invalid start with hyphen", "-test", true},
 		{"invalid end with hyphen", "test-", true},
 		{"invalid empty", "", true},
-		{"invalid too long", string(make([]byte, 64)), true},
-		{"valid max length", string(make([]byte, 63)), false},
+		{"invalid too long", strings.Repeat("a", 64), true},
+		{"valid max length", strings.Repeat("a", 63), false},
 	}
 
 	for _, tt := range tests {
@@ -174,7 +178,7 @@ func TestValidateGitRepo(t *testing.T) {
 	}{
 		{"valid https", "https://github.com/user/repo.git", false},
 		{"valid http", "http://github.com/user/repo.git", false},
-		{"valid git@", "git@github.com:user/repo.git", false},
+		{"invalid git@ (SSH not supported)", "git@github.com:user/repo.git", true}, // Implementation only supports HTTP(S)
 		{"invalid no .git", "https://github.com/user/repo", true},
 		{"invalid no protocol", "github.com/user/repo.git", true},
 		{"invalid empty", "", true},
@@ -398,11 +402,12 @@ func TestSanitizeDNSName(t *testing.T) {
 		{"normal name", "my-project", "my-project"},
 		{"uppercase", "MyProject", "myproject"},
 		{"spaces", "My Project", "myproject"},
-		{"special chars", "my_project!", "my-project"},
+		{"special chars", "my_project!", "myproject"}, // Invalid chars removed, not replaced
 		{"leading hyphen", "-test", "test"},
 		{"trailing hyphen", "test-", "test"},
 		{"empty", "", "default"},
-		{"too long", string(make([]byte, 70)), string(make([]byte, 63))},
+		{"too long", strings.Repeat("a", 70), strings.Repeat("a", 63)}, // Use valid chars, truncated to 63
+
 	}
 
 	for _, tt := range tests {

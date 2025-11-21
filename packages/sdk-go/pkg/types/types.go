@@ -160,14 +160,16 @@ const (
 
 // User represents a user account in the system
 type User struct {
-	ID           uuid.UUID `json:"id" db:"id"`
-	Email        string    `json:"email" db:"email"`
-	PasswordHash string    `json:"-" db:"password_hash"` // Never expose password hash in JSON
-	Name         string    `json:"name" db:"name"`
-	OIDCSub      string    `json:"oidc_sub,omitempty" db:"oidc_sub"` // OIDC subject identifier
-	Active       bool      `json:"active" db:"active"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+	ID           uuid.UUID  `json:"id" db:"id"`
+	Email        string     `json:"email" db:"email"`
+	PasswordHash string     `json:"-" db:"password_hash"` // Never expose password hash in JSON
+	Name         string     `json:"name" db:"name"`
+	Role         string     `json:"role" db:"role"` // admin, developer, or viewer
+	OIDCSubject  *string    `json:"oidc_subject,omitempty" db:"oidc_subject"` // OIDC subject identifier (sub claim)
+	OIDCIssuer   *string    `json:"oidc_issuer,omitempty" db:"oidc_issuer"`   // OIDC issuer URL (iss claim)
+	Active       bool       `json:"active" db:"active"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
 	LastLoginAt  *time.Time `json:"last_login_at,omitempty" db:"last_login_at"`
 }
 

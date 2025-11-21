@@ -3,7 +3,6 @@ package audit
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -97,12 +96,13 @@ func (l *AsyncLogger) Log(log *types.AuditLog) {
 					"dropped_count":  droppedCount,
 					"fallback_count": l.fallbackCount,
 					"action":         log.Action,
-					"user_id":        log.UserID,
-					"resource":       log.Resource,
+					"actor_id":       log.ActorID,
+					"resource_type":  log.ResourceType,
+					"resource_id":    log.ResourceID,
 				}).Error("CRITICAL COMPLIANCE VIOLATION: Audit log dropped - both buffers full!")
 
 				// Also log to stderr for alerting
-				log.Printf("CRITICAL: Audit log dropped! Total dropped: %d", droppedCount)
+				logrus.Errorf("CRITICAL: Audit log dropped! Total dropped: %d", droppedCount)
 				l.lastDropWarned = time.Now()
 			}
 			l.mu.Unlock()
@@ -209,12 +209,13 @@ func (l *AsyncLogger) flushBatch(batch []*types.AuditLog, channel string) {
 
 			// SECURITY FIX: Log database write failures for compliance monitoring
 			logrus.WithFields(logrus.Fields{
-				"channel":      channel,
-				"error_count":  errorCount,
-				"action":       log.Action,
-				"user_id":      log.UserID,
-				"resource":     log.Resource,
-				"error":        err.Error(),
+				"channel":       channel,
+				"error_count":   errorCount,
+				"action":        log.Action,
+				"actor_id":      log.ActorID,
+				"resource_type": log.ResourceType,
+				"resource_id":   log.ResourceID,
+				"error":         err.Error(),
 			}).Error("Failed to write audit log to database")
 
 			// For now, just continue - we don't want to crash on audit log failure

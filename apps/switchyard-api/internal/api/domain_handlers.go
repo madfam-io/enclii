@@ -10,10 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
-	"github.com/sirupsen/logrus"
 )
 
 // AddCustomDomain adds a custom domain to a service
@@ -68,7 +67,7 @@ func (h *Handler) AddCustomDomain(c *gin.Context) {
 	// Check if domain is already in use
 	exists, err := h.repos.CustomDomains.Exists(ctx, req.Domain)
 	if err != nil {
-		h.logger.WithError(err).Error("Failed to check domain existence")
+		h.logger.Error(ctx, "Failed to check domain existence", logging.Error("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
@@ -99,7 +98,7 @@ func (h *Handler) AddCustomDomain(c *gin.Context) {
 	}
 
 	if err := h.repos.CustomDomains.Create(ctx, domain); err != nil {
-		h.logger.WithError(err).Error("Failed to create custom domain")
+		h.logger.Error(ctx, "Failed to create custom domain", logging.Error("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create custom domain"})
 		return
 	}
@@ -126,7 +125,7 @@ func (h *Handler) ListCustomDomains(c *gin.Context) {
 
 	domains, err := h.repos.CustomDomains.GetByServiceID(ctx, serviceID)
 	if err != nil {
-		h.logger.WithError(err).Error("Failed to list custom domains")
+		h.logger.Error(ctx, "Failed to list custom domains", logging.Error("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list custom domains"})
 		return
 	}
@@ -191,7 +190,7 @@ func (h *Handler) UpdateCustomDomain(c *gin.Context) {
 	}
 
 	if err := h.repos.CustomDomains.Update(ctx, domain); err != nil {
-		h.logger.WithError(err).Error("Failed to update custom domain")
+		h.logger.Error(ctx, "Failed to update custom domain", logging.Error("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update custom domain"})
 		return
 	}
@@ -222,7 +221,7 @@ func (h *Handler) DeleteCustomDomain(c *gin.Context) {
 
 	// Delete domain
 	if err := h.repos.CustomDomains.Delete(ctx, domainID); err != nil {
-		h.logger.WithError(err).Error("Failed to delete custom domain")
+		h.logger.Error(ctx, "Failed to delete custom domain", logging.Error("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete custom domain"})
 		return
 	}
@@ -255,7 +254,9 @@ func (h *Handler) VerifyCustomDomain(c *gin.Context) {
 	expectedValue := fmt.Sprintf("enclii-verification=%s", domain.ID.String())
 	verified, err := verifyDNSTXTRecord(domain.Domain, expectedValue)
 	if err != nil {
-		h.logger.WithError(err).WithField("domain", domain.Domain).Error("Failed to verify DNS")
+		h.logger.Error(ctx, "Failed to verify DNS",
+			logging.Error("error", err),
+			logging.String("domain", domain.Domain))
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to verify DNS record",
 			"details": err.Error(),
@@ -278,7 +279,7 @@ func (h *Handler) VerifyCustomDomain(c *gin.Context) {
 	domain.VerifiedAt = &verifiedAt
 
 	if err := h.repos.CustomDomains.Update(ctx, domain); err != nil {
-		h.logger.WithError(err).Error("Failed to update domain verification status")
+		h.logger.Error(ctx, "Failed to update domain verification status", logging.Error("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update domain"})
 		return
 	}
@@ -294,34 +295,34 @@ func (h *Handler) triggerDomainReconciliation(ctx context.Context, serviceID, en
 	// Get service
 	service, err := h.repos.Services.GetByID(serviceID)
 	if err != nil {
-		h.logger.WithError(err).Error("Failed to get service for reconciliation")
+		h.logger.Error(ctx, "Failed to get service for reconciliation", logging.Error("error", err))
 		return
 	}
 
 	// Get latest deployment
 	deployment, err := h.repos.Deployments.GetLatestByService(ctx, serviceID.String())
 	if err != nil {
-		h.logger.WithError(err).Warn("No deployment found for service, skipping domain reconciliation")
+		h.logger.Warn(ctx, "No deployment found for service, skipping domain reconciliation", logging.Error("error", err))
 		return
 	}
 
 	// Get release
 	release, err := h.repos.Releases.GetByID(deployment.ReleaseID)
 	if err != nil {
-		h.logger.WithError(err).Error("Failed to get release for reconciliation")
+		h.logger.Error(ctx, "Failed to get release for reconciliation", logging.Error("error", err))
 		return
 	}
 
 	// Get custom domains and routes
 	domains, err := h.repos.CustomDomains.GetByServiceAndEnvironment(ctx, serviceID.String(), environmentID.String())
 	if err != nil {
-		h.logger.WithError(err).Error("Failed to get custom domains")
+		h.logger.Error(ctx, "Failed to get custom domains", logging.Error("error", err))
 		domains = []types.CustomDomain{} // Continue with empty domains
 	}
 
 	routes, err := h.repos.Routes.GetByServiceAndEnvironment(ctx, serviceID.String(), environmentID.String())
 	if err != nil {
-		h.logger.WithError(err).Error("Failed to get routes")
+		h.logger.Error(ctx, "Failed to get routes", logging.Error("error", err))
 		routes = []types.Route{} // Continue with empty routes
 	}
 
@@ -336,12 +337,12 @@ func (h *Handler) triggerDomainReconciliation(ctx context.Context, serviceID, en
 
 	result := h.serviceReconciler.Reconcile(ctx, reconcileReq)
 	if !result.Success {
-		h.logger.WithFields(logrus.Fields{
-			"service": service.Name,
-			"error":   result.Error,
-		}).Error("Failed to reconcile service with custom domains")
+		h.logger.Error(ctx, "Failed to reconcile service with custom domains",
+			logging.String("service", service.Name),
+			logging.Error("error", result.Error))
 	} else {
-		h.logger.WithField("service", service.Name).Info("Successfully reconciled service with custom domains")
+		h.logger.Info(ctx, "Successfully reconciled service with custom domains",
+			logging.String("service", service.Name))
 	}
 }
 

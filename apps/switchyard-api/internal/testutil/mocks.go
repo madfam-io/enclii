@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
@@ -46,7 +46,7 @@ func (m *MockProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*typ
 	if p, ok := m.projects[id]; ok {
 		return p, nil
 	}
-	return nil, db.ErrNotFound
+	return nil, errors.ErrNotFound
 }
 
 func (m *MockProjectRepository) GetBySlug(slug string) (*types.Project, error) {
@@ -55,7 +55,7 @@ func (m *MockProjectRepository) GetBySlug(slug string) (*types.Project, error) {
 	if p, ok := m.slugMap[slug]; ok {
 		return p, nil
 	}
-	return nil, db.ErrNotFound
+	return nil, errors.ErrNotFound
 }
 
 func (m *MockProjectRepository) List() ([]*types.Project, error) {
@@ -97,7 +97,7 @@ func (m *MockServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 	if s, ok := m.services[id]; ok {
 		return s, nil
 	}
-	return nil, db.ErrNotFound
+	return nil, errors.ErrNotFound
 }
 
 func (m *MockServiceRepository) ListAll(ctx context.Context) ([]*types.Service, error) {
@@ -154,7 +154,7 @@ func (m *MockUserRepository) GetByID(id uuid.UUID) (*types.User, error) {
 	if u, ok := m.users[id]; ok {
 		return u, nil
 	}
-	return nil, db.ErrNotFound
+	return nil, errors.ErrNotFound
 }
 
 func (m *MockUserRepository) GetByEmail(email string) (*types.User, error) {
@@ -163,7 +163,7 @@ func (m *MockUserRepository) GetByEmail(email string) (*types.User, error) {
 	if u, ok := m.emailMap[email]; ok {
 		return u, nil
 	}
-	return nil, db.ErrNotFound
+	return nil, errors.ErrNotFound
 }
 
 func (m *MockUserRepository) Update(user *types.User) error {
@@ -199,7 +199,7 @@ func (m *MockReleaseRepository) GetByID(id uuid.UUID) (*types.Release, error) {
 	if r, ok := m.releases[id]; ok {
 		return r, nil
 	}
-	return nil, db.ErrNotFound
+	return nil, errors.ErrNotFound
 }
 
 func (m *MockReleaseRepository) UpdateStatus(id uuid.UUID, status types.ReleaseStatus) error {
@@ -209,7 +209,7 @@ func (m *MockReleaseRepository) UpdateStatus(id uuid.UUID, status types.ReleaseS
 		r.Status = status
 		return nil
 	}
-	return db.ErrNotFound
+	return errors.ErrNotFound
 }
 
 func (m *MockReleaseRepository) UpdateSBOM(ctx context.Context, id uuid.UUID, sbom, sbomFormat string) error {
@@ -220,7 +220,7 @@ func (m *MockReleaseRepository) UpdateSBOM(ctx context.Context, id uuid.UUID, sb
 		r.SBOMFormat = sbomFormat
 		return nil
 	}
-	return db.ErrNotFound
+	return errors.ErrNotFound
 }
 
 func (m *MockReleaseRepository) UpdateSignature(ctx context.Context, id uuid.UUID, signature string) error {
@@ -230,7 +230,7 @@ func (m *MockReleaseRepository) UpdateSignature(ctx context.Context, id uuid.UUI
 		r.ImageSignature = signature
 		return nil
 	}
-	return db.ErrNotFound
+	return errors.ErrNotFound
 }
 
 func (m *MockReleaseRepository) ListByService(serviceID uuid.UUID) ([]*types.Release, error) {
@@ -270,7 +270,7 @@ func (m *MockDeploymentRepository) GetByID(ctx context.Context, id string) (*typ
 	if d, ok := m.deployments[id]; ok {
 		return d, nil
 	}
-	return nil, db.ErrNotFound
+	return nil, errors.ErrNotFound
 }
 
 func (m *MockDeploymentRepository) UpdateStatus(id uuid.UUID, status types.DeploymentStatus, health types.HealthStatus) error {
@@ -281,7 +281,7 @@ func (m *MockDeploymentRepository) UpdateStatus(id uuid.UUID, status types.Deplo
 		d.Health = health
 		return nil
 	}
-	return db.ErrNotFound
+	return errors.ErrNotFound
 }
 
 func (m *MockDeploymentRepository) ListByRelease(ctx context.Context, releaseID string) ([]*types.Deployment, error) {
@@ -297,7 +297,7 @@ func (m *MockDeploymentRepository) ListByRelease(ctx context.Context, releaseID 
 }
 
 func (m *MockDeploymentRepository) GetLatestByService(ctx context.Context, serviceID string) (*types.Deployment, error) {
-	return nil, db.ErrNotFound
+	return nil, errors.ErrNotFound
 }
 
 func (m *MockDeploymentRepository) GetByStatus(ctx context.Context, status types.DeploymentStatus) ([]*types.Deployment, error) {
@@ -337,7 +337,7 @@ func (m *MockEnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID) (
 	if e, ok := m.environments[id]; ok {
 		return e, nil
 	}
-	return nil, db.ErrNotFound
+	return nil, errors.ErrNotFound
 }
 
 func (m *MockEnvironmentRepository) ListByProject(projectID uuid.UUID) ([]*types.Environment, error) {
@@ -363,7 +363,7 @@ func NewMockProjectAccessRepository() *MockProjectAccessRepository {
 	}
 }
 
-func (m *MockProjectAccessRepository) Grant(access *db.ProjectAccess) error {
+func (m *MockProjectAccessRepository) Grant(access *types.ProjectAccess) error {
 	return nil
 }
 
@@ -371,11 +371,11 @@ func (m *MockProjectAccessRepository) Revoke(ctx context.Context, userID, projec
 	return nil
 }
 
-func (m *MockProjectAccessRepository) GetByUserAndProject(ctx context.Context, userID, projectID uuid.UUID) ([]*db.ProjectAccess, error) {
+func (m *MockProjectAccessRepository) GetByUserAndProject(ctx context.Context, userID, projectID uuid.UUID) ([]*types.ProjectAccess, error) {
 	return nil, nil
 }
 
-func (m *MockProjectAccessRepository) ListByUser(ctx context.Context, userID uuid.UUID) ([]*db.ProjectAccess, error) {
+func (m *MockProjectAccessRepository) ListByUser(ctx context.Context, userID uuid.UUID) ([]*types.ProjectAccess, error) {
 	return nil, nil
 }
 
@@ -383,15 +383,26 @@ func (m *MockProjectAccessRepository) HasAccess(ctx context.Context, userID, pro
 	return true, nil // Default to allow for testing
 }
 
-// MockRepositories creates a set of mock repositories for testing
-func MockRepositories() *db.Repositories {
-	return &db.Repositories{
-		Projects:     NewMockProjectRepository(),
-		Services:     NewMockServiceRepository(),
-		Users:        NewMockUserRepository(),
-		Releases:     NewMockReleaseRepository(),
-		Deployments:  NewMockDeploymentRepository(),
-		Environments: NewMockEnvironmentRepository(),
+// MockRepositories is a struct that holds mock repository implementations
+type MockRepositories struct {
+	Projects      *MockProjectRepository
+	Services      *MockServiceRepository
+	Users         *MockUserRepository
+	Releases      *MockReleaseRepository
+	Deployments   *MockDeploymentRepository
+	Environments  *MockEnvironmentRepository
+	ProjectAccess *MockProjectAccessRepository
+}
+
+// NewMockRepositories creates a new set of mock repositories for testing
+func NewMockRepositories() *MockRepositories {
+	return &MockRepositories{
+		Projects:      NewMockProjectRepository(),
+		Services:      NewMockServiceRepository(),
+		Users:         NewMockUserRepository(),
+		Releases:      NewMockReleaseRepository(),
+		Deployments:   NewMockDeploymentRepository(),
+		Environments:  NewMockEnvironmentRepository(),
 		ProjectAccess: NewMockProjectAccessRepository(),
 	}
 }

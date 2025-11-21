@@ -55,11 +55,17 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *CreateProjectRe
 	}
 
 	// Check if slug already exists
-	existing, _ := s.repos.Project.GetBySlug(ctx, req.Slug)
+	existing, _ := s.repos.Projects.GetBySlug(req.Slug)
 	if existing != nil {
 		return nil, errors.ErrSlugAlreadyExists.WithDetails(map[string]any{
 			"slug": req.Slug,
 		})
+	}
+
+	// Parse user ID
+	userID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.ErrInvalidInput)
 	}
 
 	s.logger.WithFields(logrus.Fields{
@@ -69,27 +75,26 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *CreateProjectRe
 
 	// Create project
 	project := &types.Project{
-		ID:          uuid.New().String(),
-		Name:        req.Name,
-		Slug:        req.Slug,
-		Description: req.Description,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		ID:        uuid.New(),
+		Name:      req.Name,
+		Slug:      req.Slug,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
-	if err := s.repos.Project.Create(ctx, project); err != nil {
+	if err := s.repos.Projects.Create(project); err != nil {
 		s.logger.Error("Failed to create project", "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
 	// Audit log
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      req.UserID,
+		ActorID:      userID,
 		ActorEmail:   req.UserEmail,
 		ActorRole:    types.Role(req.UserRole),
 		Action:       "project_created",
 		ResourceType: "project",
-		ResourceID:   project.ID,
+		ResourceID:   project.ID.String(),
 		ResourceName: project.Name,
 		Outcome:      "success",
 	})
@@ -101,7 +106,7 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *CreateProjectRe
 
 // GetProject retrieves a project by slug
 func (s *ProjectService) GetProject(ctx context.Context, slug string) (*types.Project, error) {
-	project, err := s.repos.Project.GetBySlug(ctx, slug)
+	project, err := s.repos.Projects.GetBySlug(slug)
 	if err != nil {
 		s.logger.Error("Failed to get project", "slug", slug, "error", err)
 		return nil, errors.Wrap(err, errors.ErrProjectNotFound)
@@ -112,7 +117,7 @@ func (s *ProjectService) GetProject(ctx context.Context, slug string) (*types.Pr
 
 // ListProjects lists all projects
 func (s *ProjectService) ListProjects(ctx context.Context) ([]*types.Project, error) {
-	projects, err := s.repos.Project.List(ctx)
+	projects, err := s.repos.Projects.List()
 	if err != nil {
 		s.logger.Error("Failed to list projects", "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
@@ -139,8 +144,14 @@ type CreateServiceResponse struct {
 
 // CreateService creates a new service in a project
 func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRequest) (*CreateServiceResponse, error) {
+	// Parse project ID
+	projectID, err := uuid.Parse(req.ProjectID)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.ErrInvalidInput)
+	}
+
 	// Validate project exists
-	_, err := s.repos.Project.GetByID(ctx, req.ProjectID)
+	_, err = s.repos.Projects.GetByID(ctx, projectID)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrProjectNotFound)
 	}
@@ -148,6 +159,12 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 	// Validate input
 	if err := s.validateServiceInput(req.Name, req.GitRepo); err != nil {
 		return nil, err
+	}
+
+	// Parse user ID
+	userID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.ErrInvalidInput)
 	}
 
 	s.logger.WithFields(logrus.Fields{
@@ -158,8 +175,8 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 
 	// Create service
 	service := &types.Service{
-		ID:          uuid.New().String(),
-		ProjectID:   req.ProjectID,
+		ID:          uuid.New(),
+		ProjectID:   projectID,
 		Name:        req.Name,
 		GitRepo:     req.GitRepo,
 		BuildConfig: req.BuildConfig,
@@ -167,19 +184,19 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 		UpdatedAt:   time.Now(),
 	}
 
-	if err := s.repos.Service.Create(ctx, service); err != nil {
+	if err := s.repos.Services.Create(service); err != nil {
 		s.logger.Error("Failed to create service", "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
 	// Audit log
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      req.UserID,
+		ActorID:      userID,
 		ActorEmail:   req.UserEmail,
 		ActorRole:    types.Role(req.UserRole),
 		Action:       "service_created",
 		ResourceType: "service",
-		ResourceID:   service.ID,
+		ResourceID:   service.ID.String(),
 		ResourceName: service.Name,
 		Outcome:      "success",
 		Context: map[string]interface{}{
@@ -194,7 +211,13 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 
 // GetService retrieves a service by ID
 func (s *ProjectService) GetService(ctx context.Context, serviceID string) (*types.Service, error) {
-	service, err := s.repos.Service.GetByID(ctx, serviceID)
+	// Parse service ID
+	svcID, err := uuid.Parse(serviceID)
+	if err != nil {
+		return nil, errors.Wrap(err, errors.ErrInvalidInput)
+	}
+
+	service, err := s.repos.Services.GetByID(svcID)
 	if err != nil {
 		s.logger.Error("Failed to get service", "service_id", serviceID, "error", err)
 		return nil, errors.Wrap(err, errors.ErrServiceNotFound)
@@ -206,12 +229,12 @@ func (s *ProjectService) GetService(ctx context.Context, serviceID string) (*typ
 // ListServices lists all services for a project
 func (s *ProjectService) ListServices(ctx context.Context, projectSlug string) ([]*types.Service, error) {
 	// Validate project exists
-	project, err := s.repos.Project.GetBySlug(ctx, projectSlug)
+	project, err := s.repos.Projects.GetBySlug(projectSlug)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrProjectNotFound)
 	}
 
-	services, err := s.repos.Service.ListByProject(ctx, project.ID)
+	services, err := s.repos.Services.ListByProject(project.ID)
 	if err != nil {
 		s.logger.Error("Failed to list services", "project_slug", projectSlug, "error", err)
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)

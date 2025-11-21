@@ -33,7 +33,7 @@ type Handler struct {
 
 	// Infrastructure
 	config             *config.Config
-	auth               *auth.JWTManager
+	auth               auth.AuthManager // Interface supporting both JWTManager and OIDCManager
 	auditMiddleware    *audit.Middleware
 	cache              cache.CacheService
 	builder            *builder.Service
@@ -52,7 +52,7 @@ type Handler struct {
 func NewHandler(
 	repos *db.Repositories,
 	config *config.Config,
-	auth *auth.JWTManager,
+	auth auth.AuthManager, // Can be JWTManager or OIDCManager
 	cache cache.CacheService,
 	builder *builder.Service,
 	k8sClient *k8s.Client,
@@ -114,33 +114,54 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	// API v1 routes
 	v1 := router.Group("/v1")
 	{
-		// Auth routes (no authentication required, but audit login/register)
-		v1.POST("/auth/register", h.auditMiddleware.AuditMiddleware(), h.Register)
-		v1.POST("/auth/login", h.auditMiddleware.AuditMiddleware(), h.Login)
-		v1.POST("/auth/refresh", h.RefreshToken)
+		// Auth routes - Different endpoints based on auth mode
+		if h.config.AuthMode == "oidc" {
+			// ===== OIDC Mode (Production with Plinto) =====
+			// Redirect to OIDC provider for login
+			v1.GET("/auth/login", h.OIDCLogin)
 
-		// Logout requires authentication and audit
+			// OAuth callback from OIDC provider
+			v1.GET("/auth/callback", h.OIDCCallback)
+
+			// Registration is handled by OIDC provider (Plinto)
+			// POST /auth/register is not available in OIDC mode
+
+		} else {
+			// ===== Local Mode (Bootstrap) =====
+			// Local user registration
+			v1.POST("/auth/register", h.auditMiddleware.AuditMiddleware(), h.Register)
+
+			// Local login with email/password
+			v1.POST("/auth/login", h.auditMiddleware.AuditMiddleware(), h.Login)
+
+			// JWKS endpoint for external services to verify our tokens
+			v1.GET("/auth/jwks", h.JWKS)
+		}
+
+		// Common auth endpoints (both modes)
+		v1.POST("/auth/refresh", h.RefreshToken)
 		v1.POST("/auth/logout", h.auth.AuthMiddleware(), h.auditMiddleware.AuditMiddleware(), h.Logout)
 
 		// Protected routes (require authentication + audit)
+		// These work the same way in both local and OIDC modes
 		protected := v1.Group("")
 		protected.Use(h.auth.AuthMiddleware())
 		protected.Use(h.auditMiddleware.AuditMiddleware())
 		{
 			// Projects
-			protected.POST("/projects", h.auth.RequireRole(types.RoleAdmin), h.CreateProject)
+			protected.POST("/projects", h.auth.RequireRole(string(types.RoleAdmin)), h.CreateProject)
 			protected.GET("/projects", h.ListProjects)
 			protected.GET("/projects/:slug", h.GetProject)
 
 			// Services
-			protected.POST("/projects/:slug/services", h.auth.RequireRole(types.RoleDeveloper), h.CreateService)
+			protected.POST("/projects/:slug/services", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateService)
 			protected.GET("/projects/:slug/services", h.ListServices)
 			protected.GET("/services/:id", h.GetService)
 
 			// Build & Deploy
-			protected.POST("/services/:id/build", h.auth.RequireRole(types.RoleDeveloper), h.BuildService)
+			protected.POST("/services/:id/build", h.auth.RequireRole(string(types.RoleDeveloper)), h.BuildService)
 			protected.GET("/services/:id/releases", h.ListReleases)
-			protected.POST("/services/:id/deploy", h.auth.RequireRole(types.RoleDeveloper), h.DeployService)
+			protected.POST("/services/:id/deploy", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeployService)
 
 			// Status & Deployments
 			protected.GET("/services/:id/status", h.GetServiceStatus)
@@ -148,7 +169,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/services/:id/deployments/latest", h.GetLatestDeployment)
 			protected.GET("/deployments/:id", h.GetDeployment)
 			protected.GET("/deployments/:id/logs", h.GetLogs)
-			protected.POST("/deployments/:id/rollback", h.auth.RequireRole(types.RoleDeveloper), h.RollbackDeployment)
+			protected.POST("/deployments/:id/rollback", h.auth.RequireRole(string(types.RoleDeveloper)), h.RollbackDeployment)
 
 			// Topology
 			protected.GET("/topology", h.GetTopology)
@@ -157,12 +178,12 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/topology/path", h.FindDependencyPath)
 
 			// Custom Domains
-			protected.POST("/services/:service_id/domains", h.auth.RequireRole(types.RoleDeveloper), h.AddCustomDomain)
+			protected.POST("/services/:service_id/domains", h.auth.RequireRole(string(types.RoleDeveloper)), h.AddCustomDomain)
 			protected.GET("/services/:service_id/domains", h.ListCustomDomains)
 			protected.GET("/services/:service_id/domains/:domain_id", h.GetCustomDomain)
-			protected.PATCH("/services/:service_id/domains/:domain_id", h.auth.RequireRole(types.RoleDeveloper), h.UpdateCustomDomain)
-			protected.DELETE("/services/:service_id/domains/:domain_id", h.auth.RequireRole(types.RoleDeveloper), h.DeleteCustomDomain)
-			protected.POST("/services/:service_id/domains/:domain_id/verify", h.auth.RequireRole(types.RoleDeveloper), h.VerifyCustomDomain)
+			protected.PATCH("/services/:service_id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateCustomDomain)
+			protected.DELETE("/services/:service_id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteCustomDomain)
+			protected.POST("/services/:service_id/domains/:domain_id/verify", h.auth.RequireRole(string(types.RoleDeveloper)), h.VerifyCustomDomain)
 		}
 	}
 }
