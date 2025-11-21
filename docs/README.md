@@ -1,0 +1,208 @@
+# Enclii Documentation
+
+**Welcome to the Enclii documentation!** This directory contains all technical documentation, guides, audit reports, and implementation notes.
+
+## Quick Start
+
+**New to Enclii?** Start here:
+1. [Quickstart Guide](./getting-started/QUICKSTART.md) - Get up and running in 5 minutes
+2. [Development Setup](./getting-started/DEVELOPMENT.md) - Set up your development environment
+3. [Build Setup](./getting-started/BUILD_SETUP.md) - Understand the build system
+
+**Want to understand the architecture?** Read:
+- [Architecture Overview](./architecture/ARCHITECTURE.md)
+- [API Documentation](./architecture/API.md)
+
+## Documentation Structure
+
+### 📚 Getting Started
+New developer onboarding and initial setup guides.
+
+- [Quickstart Guide](./getting-started/QUICKSTART.md) - Quick introduction and setup
+- [Development Setup](./getting-started/DEVELOPMENT.md) - Complete development environment configuration
+- [Build Setup](./getting-started/BUILD_SETUP.md) - Build system and tooling guide
+
+### 🏗️ Architecture
+System design, architecture decisions, and API references.
+
+- [Architecture Overview](./architecture/ARCHITECTURE.md) - System architecture and design patterns
+- [API Documentation](./architecture/API.md) - REST API reference and examples
+- [Blue Ocean Roadmap](./architecture/BLUE_OCEAN_ROADMAP.md) - Future architecture plans
+
+### 📖 Guides
+User guides for common tasks and migrations.
+
+- [Dogfooding Guide](./guides/DOGFOODING_GUIDE.md) - Running Enclii on Enclii (self-hosting)
+- [Railway Migration Guide](./guides/RAILWAY_MIGRATION_GUIDE.md) - Migrating from Railway
+- [Vercel Migration Guide](./guides/VERCEL_MIGRATION_GUIDE.md) - Migrating from Vercel
+- [Testing Guide](./guides/TESTING_GUIDE.md) - Writing and running tests
+- [Audit Logging Test Guide](./guides/AUDIT_LOGGING_TEST_GUIDE.md) - Testing audit logging functionality
+
+### 🚀 Production
+Production deployment, readiness, and operational guides.
+
+- [Production Readiness Audit](./production/PRODUCTION_READINESS_AUDIT.md) - Production readiness assessment
+- [Production Deployment Roadmap](./production/PRODUCTION_DEPLOYMENT_ROADMAP.md) - Deployment timeline and milestones
+- [Gap Analysis](./production/GAP_ANALYSIS.md) - Feature comparison with Vercel and Railway
+
+### 🔍 Audits
+Comprehensive audit reports organized by category. **Start with the [Audit README](./audits/README.md)** for navigation.
+
+#### Master Reports
+- [Master Audit Report](./audits/MASTER_REPORT.md) - Comprehensive overview of all audits
+- [Audit Navigation Guide](./audits/README.md) - **START HERE** - Navigation by role
+
+#### Security Audits
+- [Comprehensive Security Audit](./audits/security/COMPREHENSIVE_AUDIT.md)
+- [Security Executive Summary](./audits/security/EXECUTIVE_SUMMARY.md)
+- [Security Quick Reference](./audits/security/QUICK_REFERENCE.md)
+- [Authentication Audit Report](./audits/security/AUTH_REPORT.md)
+- [Secret Management Audit](./audits/security/SECRET_MANAGEMENT.md)
+
+#### Infrastructure Audits
+- [Infrastructure README](./audits/infrastructure/README.md) - **START HERE** for infrastructure
+- [Comprehensive Infrastructure Audit](./audits/infrastructure/COMPREHENSIVE_AUDIT.md)
+- [Infrastructure Audit Report](./audits/infrastructure/AUDIT_REPORT.md)
+- [Infrastructure Summary](./audits/infrastructure/SUMMARY.md)
+- [Infrastructure Issues Tracker](./audits/infrastructure/ISSUES_TRACKER.md)
+
+#### Codebase Audits
+- [Comprehensive Codebase Audit](./audits/codebase/COMPREHENSIVE_AUDIT.md)
+- [Enclii Comprehensive Audit](./audits/codebase/ENCLII_COMPREHENSIVE_AUDIT.md)
+- [Go Code Audit Report](./audits/codebase/GO_AUDIT_REPORT.md)
+- [Go Audit Summary](./audits/codebase/GO_SUMMARY.md)
+- [Codebase Quick Reference](./audits/codebase/QUICK_REFERENCE.md)
+- [Switchyard Audit](./audits/codebase/SWITCHYARD_AUDIT.md)
+
+#### UI/Frontend Audits
+- [Comprehensive UI Audit](./audits/ui/COMPREHENSIVE_AUDIT.md)
+- [UI Executive Summary](./audits/ui/EXECUTIVE_SUMMARY.md)
+- [Switchyard UI Audit](./audits/ui/SWITCHYARD_UI_AUDIT.md)
+- [Switchyard UI Summary](./audits/ui/SWITCHYARD_UI_SUMMARY.md)
+
+#### Dependencies Audits
+- [Dependencies README](./audits/dependencies/README.md) - **START HERE** for dependencies
+- [Comprehensive Dependencies Analysis](./audits/dependencies/COMPREHENSIVE_ANALYSIS.md)
+- [Dependency Audit Checklist](./audits/dependencies/AUDIT_CHECKLIST.md)
+- [Dependencies Quick Reference](./audits/dependencies/QUICK_REFERENCE.md)
+
+#### Testing Audits
+- [Testing Infrastructure Assessment](./audits/testing/INFRASTRUCTURE_ASSESSMENT.md)
+- [Testing Assessment Summary](./audits/testing/ASSESSMENT_SUMMARY.md)
+- [Testing Improvement Roadmap](./audits/testing/IMPROVEMENT_ROADMAP.md)
+- [Test Coverage Status](./audits/testing/COVERAGE_STATUS.md)
+
+#### Technical Debt
+- [Technical Debt README](./audits/technical-debt/README.md) - **START HERE** for tech debt
+- [Technical Debt Synthesis Report](./audits/technical-debt/SYNTHESIS_REPORT.md)
+- [Technical Debt Executive Summary](./audits/technical-debt/EXECUTIVE_SUMMARY.md)
+- [Technical Debt Action Checklist](./audits/technical-debt/ACTION_CHECKLIST.md)
+
+### 🛠️ Implementation
+Implementation status reports and strategy documents.
+
+- [Build Pipeline Implementation](./implementation/BUILD_PIPELINE_IMPLEMENTATION.md)
+- [CLI Implementation Complete](./implementation/CLI_IMPLEMENTATION_COMPLETE.md)
+- [MVP Implementation](./implementation/MVP_IMPLEMENTATION.md)
+- [Immediate Priorities Implementation](./implementation/IMMEDIATE_PRIORITIES_IMPLEMENTATION.md)
+- [Blue Ocean Implementation Status](./implementation/BLUE_OCEAN_IMPLEMENTATION_STATUS.md)
+- [Bootstrap Auth Strategy](./implementation/BOOTSTRAP_AUTH_STRATEGY.md)
+- [Main Integration Complete](./implementation/MAIN_INTEGRATION_COMPLETE.md)
+
+### 📦 Archive
+Historical reports and completed progress tracking documents.
+
+- [Analysis Complete](./archive/ANALYSIS_COMPLETE.md)
+- [Audit Files Reviewed](./archive/AUDIT_FILES_REVIEWED.md)
+- [Audit Issues Tracker](./archive/AUDIT_ISSUES_TRACKER.md)
+- [Audit Logging Provenance](./archive/AUDIT_LOGGING_PROVENANCE.md)
+- [Cleanup Summary](./archive/CLEANUP_SUMMARY.md)
+- [Documentation Quality Review](./archive/DOCUMENTATION_QUALITY_REVIEW.md)
+- [Phase 1 Fixes Complete](./archive/PHASE_1_FIXES_COMPLETE.md)
+- [Phase 2 Auth Security Complete](./archive/PHASE_2_AUTH_SECURITY_COMPLETE.md)
+- [Refactoring Progress](./archive/REFACTORING_PROGRESS.md)
+- [Secret Audit Summary](./archive/SECRET_AUDIT_SUMMARY.md)
+- [Sprint 0 Complete](./archive/SPRINT_0_COMPLETE.md)
+- [Sprint 0 Progress](./archive/SPRINT_0_PROGRESS.md)
+- [Sprint 1 Progress](./archive/SPRINT_1_PROGRESS.md)
+- [Switchyard Executive Summary](./archive/SWITCHYARD_EXECUTIVE_SUMMARY.md)
+- [Switchyard Gap Report](./archive/SWITCHYARD_GAP_REPORT.md)
+
+## Navigation by Role
+
+### 👔 Executives / CTOs
+**Time commitment:** 30 minutes
+
+1. [Master Audit Report](./audits/MASTER_REPORT.md) (Executive Summary section)
+2. [Technical Debt Executive Summary](./audits/technical-debt/EXECUTIVE_SUMMARY.md)
+3. [Security Executive Summary](./audits/security/EXECUTIVE_SUMMARY.md)
+
+### 👨‍💼 Engineering Managers
+**Time commitment:** 1-2 hours
+
+1. [Master Audit Report](./audits/MASTER_REPORT.md) (Production Roadmap section)
+2. [Technical Debt Action Checklist](./audits/technical-debt/ACTION_CHECKLIST.md)
+3. [Testing Assessment Summary](./audits/testing/ASSESSMENT_SUMMARY.md)
+
+### 🔧 DevOps / SRE Engineers
+**Time commitment:** 2-3 hours
+
+1. [Infrastructure README](./audits/infrastructure/README.md)
+2. [Dependency Audit Checklist](./audits/dependencies/AUDIT_CHECKLIST.md)
+3. [Comprehensive Infrastructure Audit](./audits/infrastructure/COMPREHENSIVE_AUDIT.md)
+
+### 🔐 Security Engineers
+**Time commitment:** 2-3 hours
+
+1. [Security Quick Reference](./audits/security/QUICK_REFERENCE.md)
+2. [Comprehensive Security Audit](./audits/security/COMPREHENSIVE_AUDIT.md)
+3. [Dependencies Quick Reference](./audits/dependencies/QUICK_REFERENCE.md)
+
+### 💻 Frontend Developers
+**Time commitment:** 2-3 hours
+
+1. [UI Executive Summary](./audits/ui/EXECUTIVE_SUMMARY.md)
+2. [Comprehensive UI Audit](./audits/ui/COMPREHENSIVE_AUDIT.md)
+3. [Testing Guide](./guides/TESTING_GUIDE.md)
+
+### 💻 Backend Developers
+**Time commitment:** 2-3 hours
+
+1. [Go Audit Summary](./audits/codebase/GO_SUMMARY.md)
+2. [Go Code Audit Report](./audits/codebase/GO_AUDIT_REPORT.md)
+3. [Testing Improvement Roadmap](./audits/testing/IMPROVEMENT_ROADMAP.md)
+
+## Core Documentation (Root Directory)
+
+The following essential documents are located in the repository root:
+
+- [README.md](../README.md) - Main project README and overview
+- [CLAUDE.md](../CLAUDE.md) - Instructions for Claude Code AI assistant
+- [SOFTWARE_SPEC.md](../SOFTWARE_SPEC.md) - Complete software specification
+
+## Contributing to Documentation
+
+When adding new documentation:
+
+1. **Getting Started:** Add to `getting-started/` for onboarding content
+2. **Architecture:** Add to `architecture/` for system design docs
+3. **Guides:** Add to `guides/` for how-to guides and tutorials
+4. **Production:** Add to `production/` for deployment and operations
+5. **Audits:** Add to appropriate `audits/` subdirectory
+6. **Implementation:** Add to `implementation/` for status reports
+7. **Archive:** Move completed/historical docs to `archive/`
+
+**Remember to update this README.md when adding new documentation!**
+
+## Documentation Standards
+
+- Use clear, descriptive filenames in UPPERCASE with underscores
+- Include a summary/overview at the top of each document
+- Add navigation links to related documents
+- Keep README files in subdirectories for complex sections
+- Archive outdated documentation rather than deleting it
+
+---
+
+**Last Updated:** 2025-11-21
+**Documentation Version:** 2.0 (Reorganized Structure)

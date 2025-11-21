@@ -6,11 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
-**Current Status:** 70% production-ready ([audit](./PRODUCTION_READINESS_AUDIT.md))
+**Current Status:** 70% production-ready ([audit](./docs/production/PRODUCTION_READINESS_AUDIT.md))
 **Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud ($100/month planned)
 **Authentication:** JWT (RS256) - Plinto integration planned for Weeks 3-4
-**Dogfooding:** Planned for Weeks 5-6 ([specs ready](./dogfooding/), [guide](./DOGFOODING_GUIDE.md))
-**Production Timeline:** 6-8 weeks to launch ([roadmap](./PRODUCTION_DEPLOYMENT_ROADMAP.md))
+**Dogfooding:** Planned for Weeks 5-6 ([specs ready](./dogfooding/), [guide](./docs/guides/DOGFOODING_GUIDE.md))
+**Production Timeline:** 6-8 weeks to launch ([roadmap](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md))
 
 ## Architecture
 
@@ -146,7 +146,7 @@ Enclii runs on cost-optimized infrastructure validated through independent resea
 **vs Traditional SaaS Stack:** $2,220/month (Railway $2,000 + Auth0 $220)
 **5-Year Savings:** $127,200
 
-See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./PRODUCTION_DEPLOYMENT_ROADMAP.md) for details.
+See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md) for details.
 
 ### Authentication
 
@@ -164,7 +164,7 @@ Plinto is a self-hosted OAuth/OIDC provider that will replace standalone JWT:
 - **Deployment:** Will deploy via Enclii (dogfooding) using `dogfooding/plinto.yaml`
 - **Protocol:** OAuth 2.0 / OIDC with RS256 JWT
 - **Features:** Multi-tenant orgs, password + SSO, JWKS rotation
-- **Implementation:** See [PRODUCTION_READINESS_AUDIT.md](./PRODUCTION_READINESS_AUDIT.md) for code examples
+- **Implementation:** See [PRODUCTION_READINESS_AUDIT.md](./docs/production/PRODUCTION_READINESS_AUDIT.md) for code examples
 
 **Why Plinto (when integrated):**
 - No Auth0/Clerk vendor lock-in
@@ -195,7 +195,7 @@ Plinto is a self-hosted OAuth/OIDC provider that will replace standalone JWT:
 - ⚠️ Awaiting Plinto integration (Weeks 3-4)
 - ❌ Implementation scheduled for Weeks 5-6
 
-See [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md) for complete implementation plan.
+See [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md) for complete implementation plan.
 
 **Why This Will Matter:**
 - **Customer Confidence:** "If they trust it, we can too"
