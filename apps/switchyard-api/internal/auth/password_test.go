@@ -82,15 +82,15 @@ func TestHashPassword_Uniqueness(t *testing.T) {
 	}
 
 	// But both should verify correctly
-	if !CheckPasswordHash(password, hash1) {
-		t.Error("CheckPasswordHash() failed to verify first hash")
+	if !ComparePassword(password, hash1) {
+		t.Error("ComparePassword() failed to verify first hash")
 	}
-	if !CheckPasswordHash(password, hash2) {
-		t.Error("CheckPasswordHash() failed to verify second hash")
+	if !ComparePassword(password, hash2) {
+		t.Error("ComparePassword() failed to verify second hash")
 	}
 }
 
-func TestCheckPasswordHash(t *testing.T) {
+func TestComparePassword(t *testing.T) {
 	password := "password123"
 	hash, _ := HashPassword(password)
 
@@ -140,15 +140,15 @@ func TestCheckPasswordHash(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := CheckPasswordHash(tt.password, tt.hash)
+			got := ComparePassword(tt.password, tt.hash)
 			if got != tt.want {
-				t.Errorf("CheckPasswordHash() = %v, want %v", got, tt.want)
+				t.Errorf("ComparePassword() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestCheckPasswordHash_EdgeCases(t *testing.T) {
+func TestComparePassword_EdgeCases(t *testing.T) {
 	// Test with various password lengths
 	lengths := []int{1, 10, 50, 72}
 
@@ -159,13 +159,13 @@ func TestCheckPasswordHash_EdgeCases(t *testing.T) {
 			t.Fatalf("HashPassword() failed for length %d: %v", length, err)
 		}
 
-		if !CheckPasswordHash(password, hash) {
-			t.Errorf("CheckPasswordHash() failed for password of length %d", length)
+		if !ComparePassword(password, hash) {
+			t.Errorf("ComparePassword() failed for password of length %d", length)
 		}
 	}
 }
 
-func TestCheckPasswordHash_SpecialCharacters(t *testing.T) {
+func TestComparePassword_SpecialCharacters(t *testing.T) {
 	passwords := []string{
 		"p@ssw0rd!",
 		"пароль", // Cyrillic
@@ -182,8 +182,8 @@ func TestCheckPasswordHash_SpecialCharacters(t *testing.T) {
 				t.Fatalf("HashPassword() error: %v", err)
 			}
 
-			if !CheckPasswordHash(password, hash) {
-				t.Errorf("CheckPasswordHash() failed for password: %s", password)
+			if !ComparePassword(password, hash) {
+				t.Errorf("ComparePassword() failed for password: %s", password)
 			}
 		})
 	}
@@ -198,12 +198,12 @@ func BenchmarkHashPassword(b *testing.B) {
 	}
 }
 
-func BenchmarkCheckPasswordHash(b *testing.B) {
+func BenchmarkComparePassword(b *testing.B) {
 	password := "benchmark123"
 	hash, _ := HashPassword(password)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		CheckPasswordHash(password, hash)
+		ComparePassword(password, hash)
 	}
 }

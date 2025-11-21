@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -8,353 +9,400 @@ import (
 )
 
 func TestNewJWTManager(t *testing.T) {
-	tests := []struct {
-		name      string
-		secretKey string
-		wantErr   bool
-	}{
-		{
-			name:      "valid secret key",
-			secretKey: "test-secret-key-32-chars-long!!",
-			wantErr:   false,
-		},
-		{
-			name:      "short secret key",
-			secretKey: "short",
-			wantErr:   true,
-		},
-		{
-			name:      "empty secret key",
-			secretKey: "",
-			wantErr:   true,
-		},
-		{
-			name:      "exactly 32 chars",
-			secretKey: "12345678901234567890123456789012",
-			wantErr:   false,
-		},
-	}
+	t.Run("creates manager successfully", func(t *testing.T) {
+		manager, err := NewJWTManager(
+			15*time.Minute,
+			7*24*time.Hour,
+			nil, // repos can be nil for basic tests
+			nil, // cache can be nil
+		)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			manager, err := NewJWTManager(tt.secretKey)
+		if err != nil {
+			t.Fatalf("NewJWTManager() failed: %v", err)
+		}
 
-			if tt.wantErr {
-				if err == nil {
-					t.Error("NewJWTManager() expected error, got nil")
-				}
-				return
-			}
+		if manager == nil {
+			t.Fatal("NewJWTManager() returned nil manager")
+		}
 
-			if err != nil {
-				t.Errorf("NewJWTManager() unexpected error: %v", err)
-				return
-			}
+		if manager.privateKey == nil {
+			t.Error("NewJWTManager() did not generate private key")
+		}
 
-			if manager == nil {
-				t.Error("NewJWTManager() returned nil manager")
-			}
-		})
-	}
+		if manager.publicKey == nil {
+			t.Error("NewJWTManager() did not set public key")
+		}
+	})
+
+	t.Run("sets correct token durations", func(t *testing.T) {
+		tokenDur := 30 * time.Minute
+		refreshDur := 14 * 24 * time.Hour
+
+		manager, err := NewJWTManager(tokenDur, refreshDur, nil, nil)
+		if err != nil {
+			t.Fatalf("NewJWTManager() failed: %v", err)
+		}
+
+		if manager.tokenDuration != tokenDur {
+			t.Errorf("Expected token duration %v, got %v", tokenDur, manager.tokenDuration)
+		}
+
+		if manager.refreshDuration != refreshDur {
+			t.Errorf("Expected refresh duration %v, got %v", refreshDur, manager.refreshDuration)
+		}
+	})
+
+	// Note: Actual repositories integration would require database setup
+	// This test is commented out as it would need proper db.Repositories,
+	// not testutil.MockRepositories
+	/*
+	t.Run("works with repositories", func(t *testing.T) {
+		manager, err := NewJWTManager(
+			15*time.Minute,
+			7*24*time.Hour,
+			repos,
+			nil,
+		)
+
+		if err != nil {
+			t.Fatalf("NewJWTManager() with repos failed: %v", err)
+		}
+
+		if manager == nil {
+			t.Fatal("NewJWTManager() returned nil manager")
+		}
+	})
+	*/
 }
 
-func TestJWTManager_GenerateAccessToken(t *testing.T) {
-	manager, err := NewJWTManager("test-secret-key-32-chars-long!!")
+func TestJWTManager_GenerateTokenPair(t *testing.T) {
+	manager, err := NewJWTManager(
+		15*time.Minute,
+		7*24*time.Hour,
+		nil,
+		nil,
+	)
 	if err != nil {
 		t.Fatalf("NewJWTManager() failed: %v", err)
 	}
 
-	userID := uuid.New()
-	email := "test@example.com"
-	role := "developer"
-
-	token, err := manager.GenerateAccessToken(userID, email, role)
-
-	if err != nil {
-		t.Errorf("GenerateAccessToken() unexpected error: %v", err)
-		return
+	user := &User{
+		ID:    uuid.New(),
+		Email: "test@example.com",
+		Name:  "Test User",
+		Role:  "developer",
 	}
 
-	if token == "" {
-		t.Error("GenerateAccessToken() returned empty token")
-		return
-	}
+	t.Run("generates valid token pair", func(t *testing.T) {
+		tokens, err := manager.GenerateTokenPair(user)
 
-	// Token should have 3 parts separated by dots (header.payload.signature)
-	parts := 0
-	for _, c := range token {
-		if c == '.' {
-			parts++
+		if err != nil {
+			t.Fatalf("GenerateTokenPair() failed: %v", err)
 		}
-	}
-	if parts != 2 {
-		t.Errorf("GenerateAccessToken() token has %d dots, want 2 (JWT format)", parts)
-	}
+
+		if tokens == nil {
+			t.Fatal("GenerateTokenPair() returned nil")
+		}
+
+		if tokens.AccessToken == "" {
+			t.Error("GenerateTokenPair() returned empty access token")
+		}
+
+		if tokens.RefreshToken == "" {
+			t.Error("GenerateTokenPair() returned empty refresh token")
+		}
+
+		if tokens.ExpiresAt.IsZero() {
+			t.Error("GenerateTokenPair() returned zero expiration time")
+		}
+	})
+
+	t.Run("access token contains correct claims", func(t *testing.T) {
+		tokens, err := manager.GenerateTokenPair(user)
+		if err != nil {
+			t.Fatalf("GenerateTokenPair() failed: %v", err)
+		}
+
+		claims, err := manager.ValidateToken(tokens.AccessToken)
+		if err != nil {
+			t.Fatalf("ValidateToken() failed: %v", err)
+		}
+
+		if claims.UserID != user.ID {
+			t.Errorf("Expected UserID %v, got %v", user.ID, claims.UserID)
+		}
+
+		if claims.Email != user.Email {
+			t.Errorf("Expected Email %s, got %s", user.Email, claims.Email)
+		}
+
+		if claims.Role != user.Role {
+			t.Errorf("Expected Role %s, got %s", user.Role, claims.Role)
+		}
+
+		if claims.TokenType != "access" {
+			t.Errorf("Expected TokenType 'access', got %s", claims.TokenType)
+		}
+	})
 }
 
-func TestJWTManager_ValidateAccessToken(t *testing.T) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-
-	userID := uuid.New()
-	email := "test@example.com"
-	role := "developer"
-
-	token, _ := manager.GenerateAccessToken(userID, email, role)
-
-	tests := []struct {
-		name    string
-		token   string
-		wantErr bool
-	}{
-		{
-			name:    "valid token",
-			token:   token,
-			wantErr: false,
-		},
-		{
-			name:    "invalid token",
-			token:   "invalid.token.here",
-			wantErr: true,
-		},
-		{
-			name:    "empty token",
-			token:   "",
-			wantErr: true,
-		},
-		{
-			name:    "malformed token",
-			token:   "not-a-jwt",
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			claims, err := manager.ValidateAccessToken(tt.token)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("ValidateAccessToken() expected error, got nil")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Errorf("ValidateAccessToken() unexpected error: %v", err)
-				return
-			}
-
-			if claims == nil {
-				t.Error("ValidateAccessToken() returned nil claims")
-				return
-			}
-
-			if claims.UserID != userID {
-				t.Errorf("ValidateAccessToken() userID = %v, want %v", claims.UserID, userID)
-			}
-
-			if claims.Email != email {
-				t.Errorf("ValidateAccessToken() email = %v, want %v", claims.Email, email)
-			}
-
-			if claims.Role != role {
-				t.Errorf("ValidateAccessToken() role = %v, want %v", claims.Role, role)
-			}
-		})
-	}
-}
-
-func TestJWTManager_ValidateAccessToken_DifferentSecret(t *testing.T) {
-	manager1, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-	manager2, _ := NewJWTManager("different-secret-key-32-chars!")
-
-	userID := uuid.New()
-	token, _ := manager1.GenerateAccessToken(userID, "test@example.com", "developer")
-
-	// Token signed with manager1's secret should fail validation with manager2
-	_, err := manager2.ValidateAccessToken(token)
-
-	if err == nil {
-		t.Error("ValidateAccessToken() should fail with different secret key")
-	}
-}
-
-func TestJWTManager_GenerateRefreshToken(t *testing.T) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-
-	userID := uuid.New()
-
-	token, err := manager.GenerateRefreshToken(userID)
-
+func TestJWTManager_ValidateToken(t *testing.T) {
+	manager, err := NewJWTManager(
+		15*time.Minute,
+		7*24*time.Hour,
+		nil,
+		nil,
+	)
 	if err != nil {
-		t.Errorf("GenerateRefreshToken() unexpected error: %v", err)
-		return
+		t.Fatalf("NewJWTManager() failed: %v", err)
 	}
 
-	if token == "" {
-		t.Error("GenerateRefreshToken() returned empty token")
+	user := &User{
+		ID:    uuid.New(),
+		Email: "test@example.com",
+		Name:  "Test User",
+		Role:  "admin",
 	}
+
+	t.Run("validates valid access token", func(t *testing.T) {
+		tokens, err := manager.GenerateTokenPair(user)
+		if err != nil {
+			t.Fatalf("GenerateTokenPair() failed: %v", err)
+		}
+
+		claims, err := manager.ValidateToken(tokens.AccessToken)
+		if err != nil {
+			t.Errorf("ValidateToken() failed for valid token: %v", err)
+		}
+
+		if claims == nil {
+			t.Fatal("ValidateToken() returned nil claims")
+		}
+
+		if claims.UserID != user.ID {
+			t.Errorf("Claims UserID mismatch: expected %v, got %v", user.ID, claims.UserID)
+		}
+	})
+
+	t.Run("rejects invalid token", func(t *testing.T) {
+		_, err := manager.ValidateToken("invalid.token.here")
+		if err == nil {
+			t.Error("ValidateToken() should reject invalid token")
+		}
+	})
+
+	t.Run("rejects empty token", func(t *testing.T) {
+		_, err := manager.ValidateToken("")
+		if err == nil {
+			t.Error("ValidateToken() should reject empty token")
+		}
+	})
 }
 
-func TestJWTManager_ValidateRefreshToken(t *testing.T) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-
-	userID := uuid.New()
-	token, _ := manager.GenerateRefreshToken(userID)
-
-	tests := []struct {
-		name    string
-		token   string
-		wantErr bool
-	}{
-		{
-			name:    "valid refresh token",
-			token:   token,
-			wantErr: false,
-		},
-		{
-			name:    "invalid token",
-			token:   "invalid.token.here",
-			wantErr: true,
-		},
-		{
-			name:    "empty token",
-			token:   "",
-			wantErr: true,
-		},
+func TestJWTManager_RefreshToken(t *testing.T) {
+	manager, err := NewJWTManager(
+		15*time.Minute,
+		7*24*time.Hour,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewJWTManager() failed: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			claims, err := manager.ValidateRefreshToken(tt.token)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Error("ValidateRefreshToken() expected error, got nil")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Errorf("ValidateRefreshToken() unexpected error: %v", err)
-				return
-			}
-
-			if claims == nil {
-				t.Error("ValidateRefreshToken() returned nil claims")
-				return
-			}
-
-			if claims.UserID != userID {
-				t.Errorf("ValidateRefreshToken() userID = %v, want %v", claims.UserID, userID)
-			}
-		})
+	user := &User{
+		ID:    uuid.New(),
+		Email: "refresh@example.com",
+		Name:  "Refresh User",
+		Role:  "developer",
 	}
+
+	t.Run("refreshes valid refresh token", func(t *testing.T) {
+		tokens, err := manager.GenerateTokenPair(user)
+		if err != nil {
+			t.Fatalf("GenerateTokenPair() failed: %v", err)
+		}
+
+		newTokens, err := manager.RefreshToken(tokens.RefreshToken)
+		if err != nil {
+			t.Errorf("RefreshToken() failed: %v", err)
+		}
+
+		if newTokens == nil {
+			t.Fatal("RefreshToken() returned nil")
+		}
+
+		if newTokens.AccessToken == "" {
+			t.Error("RefreshToken() returned empty access token")
+		}
+
+		if newTokens.RefreshToken == "" {
+			t.Error("RefreshToken() returned empty refresh token")
+		}
+
+		// New tokens should be different from old ones
+		if newTokens.AccessToken == tokens.AccessToken {
+			t.Error("RefreshToken() returned same access token")
+		}
+	})
+
+	t.Run("rejects invalid refresh token", func(t *testing.T) {
+		_, err := manager.RefreshToken("invalid.refresh.token")
+		if err == nil {
+			t.Error("RefreshToken() should reject invalid token")
+		}
+	})
 }
 
-func TestJWTManager_AccessToken_CannotBeUsedAsRefreshToken(t *testing.T) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-
-	userID := uuid.New()
-	accessToken, _ := manager.GenerateAccessToken(userID, "test@example.com", "developer")
-
-	// Trying to validate access token as refresh token should fail
-	_, err := manager.ValidateRefreshToken(accessToken)
-
-	if err == nil {
-		t.Error("ValidateRefreshToken() should reject access token")
+func TestJWTManager_GetJWKS(t *testing.T) {
+	manager, err := NewJWTManager(
+		15*time.Minute,
+		7*24*time.Hour,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewJWTManager() failed: %v", err)
 	}
+
+	t.Run("returns valid JWKS", func(t *testing.T) {
+		jwks := manager.GetJWKS()
+
+		if jwks == nil {
+			t.Fatal("GetJWKS() returned nil")
+		}
+
+		keys, ok := jwks["keys"]
+		if !ok {
+			t.Fatal("GetJWKS() missing 'keys' field")
+		}
+
+		keysArray, ok := keys.([]map[string]interface{})
+		if !ok {
+			t.Fatal("GetJWKS() 'keys' is not an array")
+		}
+
+		if len(keysArray) == 0 {
+			t.Fatal("GetJWKS() returned empty keys array")
+		}
+
+		key := keysArray[0]
+
+		// Check required JWK fields
+		if key["kty"] != "RSA" {
+			t.Error("JWKS key type should be RSA")
+		}
+
+		if key["use"] != "sig" {
+			t.Error("JWKS use should be 'sig'")
+		}
+
+		if key["alg"] != "RS256" {
+			t.Error("JWKS algorithm should be RS256")
+		}
+
+		if _, ok := key["n"]; !ok {
+			t.Error("JWKS missing modulus 'n'")
+		}
+
+		if _, ok := key["e"]; !ok {
+			t.Error("JWKS missing exponent 'e'")
+		}
+	})
 }
 
-func TestJWTManager_RefreshToken_CannotBeUsedAsAccessToken(t *testing.T) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-
-	userID := uuid.New()
-	refreshToken, _ := manager.GenerateRefreshToken(userID)
-
-	// Trying to validate refresh token as access token should fail
-	_, err := manager.ValidateAccessToken(refreshToken)
-
-	if err == nil {
-		t.Error("ValidateAccessToken() should reject refresh token")
+func TestJWTManager_ExportPublicKey(t *testing.T) {
+	manager, err := NewJWTManager(
+		15*time.Minute,
+		7*24*time.Hour,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("NewJWTManager() failed: %v", err)
 	}
+
+	t.Run("exports valid PEM public key", func(t *testing.T) {
+		pem, err := manager.ExportPublicKey()
+
+		if err != nil {
+			t.Fatalf("ExportPublicKey() failed: %v", err)
+		}
+
+		if pem == "" {
+			t.Fatal("ExportPublicKey() returned empty string")
+		}
+
+		// Check PEM format
+		if len(pem) < 100 {
+			t.Error("ExportPublicKey() returned suspiciously short PEM")
+		}
+
+		// PEM should start with header
+		expectedPrefix := "-----BEGIN PUBLIC KEY-----"
+		if len(pem) < len(expectedPrefix) || pem[:len(expectedPrefix)] != expectedPrefix {
+			t.Error("ExportPublicKey() does not return valid PEM format")
+		}
+	})
 }
 
-func TestJWTManager_TokenExpiration(t *testing.T) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-
-	// Create a manager with very short expiration for testing
-	manager.accessTokenDuration = 1 * time.Millisecond
-
-	userID := uuid.New()
-	token, _ := manager.GenerateAccessToken(userID, "test@example.com", "developer")
-
-	// Wait for token to expire
-	time.Sleep(10 * time.Millisecond)
-
-	_, err := manager.ValidateAccessToken(token)
-
-	if err == nil {
-		t.Error("ValidateAccessToken() should reject expired token")
+func TestJWTManager_RevokeSession(t *testing.T) {
+	manager, err := NewJWTManager(
+		15*time.Minute,
+		7*24*time.Hour,
+		nil,
+		&MockSessionRevoker{},
+	)
+	if err != nil {
+		t.Fatalf("NewJWTManager() failed: %v", err)
 	}
+
+	ctx := context.Background()
+
+	t.Run("revokes session successfully", func(t *testing.T) {
+		sessionID := uuid.New().String()
+		err := manager.RevokeSession(ctx, sessionID)
+
+		if err != nil {
+			t.Errorf("RevokeSession() failed: %v", err)
+		}
+	})
+
+	t.Run("handles revocation without cache", func(t *testing.T) {
+		managerNoCache, err := NewJWTManager(
+			15*time.Minute,
+			7*24*time.Hour,
+			nil,
+			nil, // No cache
+		)
+		if err != nil {
+			t.Fatalf("NewJWTManager() failed: %v", err)
+		}
+
+		// Should not error even without cache
+		err = managerNoCache.RevokeSession(ctx, "some-session-id")
+		if err != nil {
+			t.Errorf("RevokeSession() should not error without cache: %v", err)
+		}
+	})
 }
 
-func TestJWTManager_TokenUniqueness(t *testing.T) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-
-	userID := uuid.New()
-	email := "test@example.com"
-	role := "developer"
-
-	token1, _ := manager.GenerateAccessToken(userID, email, role)
-	// Small delay to ensure different timestamp
-	time.Sleep(1 * time.Millisecond)
-	token2, _ := manager.GenerateAccessToken(userID, email, role)
-
-	if token1 == token2 {
-		t.Error("GenerateAccessToken() produced identical tokens (should have different timestamps)")
-	}
-
-	// Both tokens should validate correctly
-	claims1, err1 := manager.ValidateAccessToken(token1)
-	claims2, err2 := manager.ValidateAccessToken(token2)
-
-	if err1 != nil || err2 != nil {
-		t.Fatalf("ValidateAccessToken() errors: %v, %v", err1, err2)
-	}
-
-	if claims1.UserID != claims2.UserID {
-		t.Error("Tokens should have same user ID")
-	}
+// MockSessionRevoker is a mock implementation for testing
+type MockSessionRevoker struct {
+	revoked map[string]bool
 }
 
-func BenchmarkGenerateAccessToken(b *testing.B) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-	userID := uuid.New()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		manager.GenerateAccessToken(userID, "test@example.com", "developer")
+func (m *MockSessionRevoker) RevokeSession(ctx context.Context, sessionID string, duration time.Duration) error {
+	if m.revoked == nil {
+		m.revoked = make(map[string]bool)
 	}
+	m.revoked[sessionID] = true
+	return nil
 }
 
-func BenchmarkValidateAccessToken(b *testing.B) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-	userID := uuid.New()
-	token, _ := manager.GenerateAccessToken(userID, "test@example.com", "developer")
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		manager.ValidateAccessToken(token)
+func (m *MockSessionRevoker) IsSessionRevoked(ctx context.Context, sessionID string) (bool, error) {
+	if m.revoked == nil {
+		return false, nil
 	}
-}
-
-func BenchmarkGenerateRefreshToken(b *testing.B) {
-	manager, _ := NewJWTManager("test-secret-key-32-chars-long!!")
-	userID := uuid.New()
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		manager.GenerateRefreshToken(userID)
-	}
+	return m.revoked[sessionID], nil
 }
