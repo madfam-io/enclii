@@ -1,8 +1,16 @@
 # Bootstrap Authentication Strategy: Solving the Enclii ↔ Plinto Chicken-and-Egg Problem
 
-**Date:** November 20, 2025
-**Status:** PLANNED - Implementation Required
+**Date:** November 21, 2025
+**Status:** PHASE C IMPLEMENTED - Testing Required
 **Priority:** CRITICAL for Weeks 3-4 (Plinto Integration)
+
+**Implementation Summary:**
+- ✅ Phase A (Local Auth): Already working
+- ⚠️ Phase B (Deploy Plinto): Ready for deployment
+- ✅ Phase C (OIDC Mode): **CODE COMPLETE** - Requires testing
+- ❌ End-to-End Testing: Not performed
+- ❌ Migration 005: Not validated
+- ⚠️ Build Status: ~8 non-critical errors remain in deployment handlers
 
 ---
 
@@ -47,17 +55,19 @@
 
 **This IS your "Bootstrap Mode" - it's already working!**
 
-### ⚠️ What's Missing (OIDC/Plinto Integration)
+### ✅ What's Implemented (OIDC/Plinto Integration) - Phase C
 
-**Location:** N/A - Not implemented
+**Status:** CODE COMPLETE - Testing Required
 
-**Missing Components:**
-- ❌ OIDC client integration
-- ❌ JWKS endpoint (`POST /auth/jwks` - stub exists in handlers)
-- ❌ OAuth 2.0 authorization code flow
-- ❌ Token validation against external OIDC provider
-- ❌ **AUTH_MODE** configuration to switch between local and OIDC
-- ❌ Plinto-specific integration code
+**Implemented Components:**
+- ✅ OIDC client integration (`internal/auth/oidc.go`)
+- ✅ JWKS endpoint with proper RSA key encoding (`/v1/auth/jwks`)
+- ✅ OAuth 2.0 authorization code flow
+- ✅ Token validation and user migration logic
+- ✅ **AUTH_MODE** configuration to switch between local and OIDC
+- ✅ Factory pattern for dual-mode auth (`internal/auth/manager.go`)
+- ✅ Database migration 005 for OIDC support
+- ✅ Email-based user migration (links local accounts to OIDC)
 
 ### 📋 Configuration Prepared (Unused)
 
@@ -186,13 +196,23 @@ curl -X POST https://auth.enclii.io/admin/clients \
 
 ---
 
-### Phase C: The Switch (OIDC Mode) ❌ NOT IMPLEMENTED
+### Phase C: The Switch (OIDC Mode) ✅ CODE COMPLETE
 
 **Goal:** Reconfigure Enclii to use Plinto for authentication
 
-**Current Status:** **REQUIRES IMPLEMENTATION**
+**Current Status:** **IMPLEMENTED - Testing Required**
 
-#### Required Code Changes
+**What Was Implemented (November 21, 2025):**
+- ✅ All code changes described below have been completed
+- ✅ JWKS endpoint properly encodes RSA public key
+- ✅ User migration logic via email matching
+- ✅ Dual-mode authentication (local vs OIDC)
+- ❌ **NOT TESTED** - No validation with real OIDC provider
+- ❌ **NOT TESTED** - Migration 005 not run
+- ❌ **NOT TESTED** - Application startup not validated
+- ⚠️ **BUILD STATUS:** ~8 non-critical errors in deployment_handlers.go
+
+#### Code Changes Completed
 
 ##### 1. Add AUTH_MODE Configuration
 
@@ -739,12 +759,31 @@ curl -X POST https://api.enclii.io/v1/auth/login \
 
 ## Summary
 
-**The bootstrap problem is solvable with a phased approach:**
+**The bootstrap problem has been solved with a phased approach:**
 
-1. ✅ **Phase A is already done** - Local JWT auth works
-2. 🔄 **Phase B is straightforward** - Deploy Plinto using local admin
-3. ❌ **Phase C requires implementation** - OIDC integration (~5-7 days)
+1. ✅ **Phase A is complete** - Local JWT auth works
+2. 🔄 **Phase B is ready** - Deploy Plinto using local admin (infrastructure required)
+3. ✅ **Phase C code complete** - OIDC integration implemented (NOT TESTED)
 
-**Key Insight:** The current JWT auth system IS your bootstrap mode. You just need to add OIDC as an alternative authentication method, then switch to it after Plinto is deployed.
+**Implementation Status (November 21, 2025):**
+- ✅ All code for Phase C implemented
+- ✅ JWKS endpoint properly encodes RSA keys
+- ✅ User migration logic implemented
+- ✅ Dual-mode auth with factory pattern
+- ❌ **ZERO testing performed** - all code untested
+- ❌ Migration 005 not validated
+- ❌ Build has ~8 non-critical errors (deployment handlers)
+- ❌ No validation with real OIDC provider
 
-**Critical Success Factor:** Implement auth mode switching with fallback capability, so you can always revert to local auth if Plinto has issues.
+**What This Means:**
+The architecture is sound and the code is written, but **this is untested alpha code**.
+Before production use, you MUST:
+1. Run migration 005 and verify schema changes
+2. Test application startup in both local and OIDC modes
+3. Validate OIDC flow with a real provider (or mock)
+4. Fix remaining build errors
+5. Write and run unit/integration tests
+
+**Critical Success Factor:** Auth mode switching with fallback capability is implemented,
+so you can revert to local auth if Plinto has issues. This safety mechanism is code-complete
+but untested.

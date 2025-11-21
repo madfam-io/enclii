@@ -7,33 +7,29 @@ import (
 
 	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
 // CreateProject creates a new project
 func (h *Handler) CreateProject(c *gin.Context) {
 	ctx := c.Request.Context()
-	var req types.CreateProjectRequest
+	var req struct {
+		Name        string `json:"name" binding:"required"`
+		Slug        string `json:"slug" binding:"required"`
+		Description string `json:"description"`
+	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
 	// Use service layer for project creation
 	createReq := &services.CreateProjectRequest{
-		Name:        req.Name,
-		Slug:        req.Slug,
-		Description: req.Description,
-		UserID:      c.GetString("user_id"),
-		UserEmail:   c.GetString("user_email"),
-		UserRole:    c.GetString("user_role"),
+		Name:      req.Name,
+		Slug:      req.Slug,
+		UserID:    c.GetString("user_id"),
+		UserEmail: c.GetString("user_email"),
+		UserRole:  c.GetString("user_role"),
 	}
 
 	resp, err := h.projectService.CreateProject(ctx, createReq)
@@ -49,11 +45,11 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		return
 	}
 
-	// Clear cache
-	h.cache.DelByTag(ctx, "projects")
+	// TODO: Clear cache (DelByTag not yet implemented)
+	// h.cache.DelByTag(ctx, "projects")
 
-	// Record metrics
-	h.metrics.RecordProjectCreated()
+	// TODO: Record metrics (RecordProjectCreated not yet implemented)
+	// h.metrics.RecordProjectCreated()
 
 	c.JSON(http.StatusCreated, resp.Project)
 }

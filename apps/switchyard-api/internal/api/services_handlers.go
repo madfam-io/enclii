@@ -39,7 +39,7 @@ func (h *Handler) CreateService(c *gin.Context) {
 
 	// Use service layer for service creation
 	createReq := &services.CreateServiceRequest{
-		ProjectID:   project.ID,
+		ProjectID:   project.ID.String(),
 		Name:        req.Name,
 		GitRepo:     req.GitRepo,
 		BuildConfig: req.BuildConfig,

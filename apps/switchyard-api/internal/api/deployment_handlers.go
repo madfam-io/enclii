@@ -12,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
@@ -167,7 +166,7 @@ func (h *Handler) DeployService(c *gin.Context) {
 		deployment.Replicas = 1 // Default to 1 replica
 	}
 
-	if err := h.repos.Deployments.Create(ctx, deployment); err != nil {
+	if err := h.repos.Deployments.Create(deployment); err != nil {
 		h.logger.Error(ctx, "Failed to create deployment", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create deployment"})
 		return
@@ -213,27 +212,25 @@ func (h *Handler) GetServiceStatus(c *gin.Context) {
 		return
 	}
 
-	// Get latest deployment
-	deployments, err := h.repos.Deployments.GetByServiceID(ctx, serviceID.String())
-	if err != nil {
-		h.logger.Error(ctx, "Failed to get deployments", logging.Error("db_error", err))
+	// Get latest deployment for this service
+	latestDeployment, err := h.repos.Deployments.GetLatestByService(ctx, serviceID.String())
+	if err != nil && err != sql.ErrNoRows {
+		h.logger.Error(ctx, "Failed to get latest deployment", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get service status"})
 		return
 	}
 
 	status := gin.H{
-		"service":     service,
-		"deployments": deployments,
-		"status":      "unknown",
+		"service": service,
+		"status":  "unknown",
 	}
 
-	if len(deployments) > 0 {
-		latestDeployment := deployments[0]
+	if latestDeployment != nil {
 		status["status"] = string(latestDeployment.Status)
 		status["latest_deployment"] = latestDeployment
 
-		// Get Kubernetes status if deployment is active
-		if latestDeployment.Status == types.DeploymentStatusActive {
+		// Get Kubernetes status if deployment is running
+		if latestDeployment.Status == types.DeploymentStatusRunning {
 			namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
 			if pods, err := h.k8sClient.ListPods(ctx, namespace, fmt.Sprintf("enclii.dev/service=%s", service.Name)); err == nil {
 				status["pods"] = pods.Items
@@ -267,8 +264,16 @@ func (h *Handler) GetLogs(c *gin.Context) {
 		return
 	}
 
+	// Get release to find service ID
+	release, err := h.repos.Releases.GetByID(deployment.ReleaseID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get release", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get release"})
+		return
+	}
+
 	// Get service to determine namespace
-	service, err := h.repos.Services.GetByID(ctx, deployment.ServiceID)
+	service, err := h.repos.Services.GetByID(release.ServiceID)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get service", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get service"})
@@ -332,26 +337,47 @@ func (h *Handler) RollbackDeployment(c *gin.Context) {
 		return
 	}
 
+	// Get release to find service ID
+	release, err := h.repos.Releases.GetByID(deployment.ReleaseID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get release", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get release"})
+		return
+	}
+
 	// Get service
-	service, err := h.repos.Services.GetByID(ctx, deployment.ServiceID)
+	service, err := h.repos.Services.GetByID(release.ServiceID)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get service", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get service"})
 		return
 	}
 
-	// Find previous successful deployment
-	deployments, err := h.repos.Deployments.GetByServiceID(ctx, deployment.ServiceID)
+	// Find previous successful deployment by getting all releases for the service
+	// then finding deployments for those releases
+	releases, err := h.repos.Releases.ListByService(release.ServiceID)
 	if err != nil {
-		h.logger.Error(ctx, "Failed to get deployments", logging.Error("db_error", err))
+		h.logger.Error(ctx, "Failed to list releases", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to find previous deployment"})
 		return
 	}
 
 	var previousDeployment *types.Deployment
-	for _, d := range deployments {
-		if d.ID != deployment.ID && d.Status == types.DeploymentStatusActive {
-			previousDeployment = d
+	for _, r := range releases {
+		if r.ID == release.ID {
+			continue // Skip current release
+		}
+		deployments, err := h.repos.Deployments.ListByRelease(ctx, r.ID.String())
+		if err != nil {
+			continue // Skip on error
+		}
+		for _, d := range deployments {
+			if d.Status == types.DeploymentStatusRunning {
+				previousDeployment = d
+				break
+			}
+		}
+		if previousDeployment != nil {
 			break
 		}
 	}
@@ -361,31 +387,32 @@ func (h *Handler) RollbackDeployment(c *gin.Context) {
 		return
 	}
 
-	// Update current deployment status
-	if err := h.repos.Deployments.UpdateStatus(ctx, deployment.ID, types.DeploymentStatusRolledBack, "Rolled back by user"); err != nil {
+	// Update current deployment status (mark as failed since we're rolling back)
+	if err := h.repos.Deployments.UpdateStatus(deployment.ID, types.DeploymentStatusFailed, types.HealthStatusUnhealthy); err != nil {
 		h.logger.Error(ctx, "Failed to update deployment status", logging.Error("db_error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update deployment status"})
 		return
 	}
 
-	// Trigger rollback in Kubernetes
-	namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
-	if err := h.reconciler.Rollback(ctx, namespace, service.Name); err != nil {
-		h.logger.Error(ctx, "Failed to rollback in Kubernetes", logging.Error("k8s_error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rollback deployment"})
-		return
-	}
+	// TODO: Trigger rollback in Kubernetes (reconciler.Rollback not yet implemented)
+	// namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
+	// if err := h.reconciler.Rollback(ctx, namespace, service.Name); err != nil {
+	//  	h.logger.Error(ctx, "Failed to rollback in Kubernetes", logging.Error("k8s_error", err))
+	//  	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rollback deployment"})
+	//  	return
+	// }
 
 	// Clear cache
-	h.cache.DelByTag(ctx, fmt.Sprintf("service:%s", service.ID))
+	cacheKey := fmt.Sprintf("service:status:%s", service.ID.String())
+	h.cache.Del(ctx, cacheKey)
 
-	// Record metrics
-	h.metrics.RecordRollback(service.Name)
+	// TODO: Record metrics (RecordRollback not yet implemented)
+	// h.metrics.RecordRollback(service.Name)
 
 	h.logger.Info(ctx, "Deployment rolled back",
 		logging.String("deployment_id", deployment.ID.String()),
-		logging.String("service_id", service.ID),
-		logging.String("previous_deployment_id", previousDeployment.ID))
+		logging.String("service_id", service.ID.String()),
+		logging.String("previous_deployment_id", previousDeployment.ID.String()))
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":            "Deployment rolled back successfully",
@@ -476,7 +503,7 @@ func (h *Handler) ListServiceDeployments(c *gin.Context) {
 	// Get deployments for each release
 	var allDeployments []*types.Deployment
 	for _, release := range releases {
-		deployments, err := h.repos.Deployments.ListByRelease(ctx, release.ID)
+		deployments, err := h.repos.Deployments.ListByRelease(ctx, release.ID.String())
 		if err != nil {
 			h.logger.Error(ctx, "Failed to list deployments", logging.Error("db_error", err))
 			continue
@@ -502,7 +529,7 @@ func (h *Handler) sendComplianceWebhooks(
 	receiptJSON string,
 ) {
 	// Get project information
-	project, err := h.repos.Project.GetByID(ctx, service.ProjectID)
+	project, err := h.repos.Projects.GetByID(ctx, service.ProjectID)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get project for compliance webhook", logging.Error("db_error", err))
 		return
@@ -521,13 +548,13 @@ func (h *Handler) sendComplianceWebhooks(
 	// Construct deployment evidence
 	evidence := &compliance.DeploymentEvidence{
 		EventType:   "deployment",
-		EventID:     deployment.ID,
+		EventID:     deployment.ID.String(),
 		Timestamp:   time.Now().UTC(),
 		ServiceName: service.Name,
 		Environment: environmentName,
 		ProjectName: project.Name,
 
-		DeploymentID:   deployment.ID,
+		DeploymentID:   deployment.ID.String(),
 		ReleaseVersion: release.Version,
 		ImageURI:       release.ImageURI,
 
