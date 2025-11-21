@@ -38,9 +38,16 @@ func main() {
 	}
 
 	// Setup logging
-	logrus.SetLevel(cfg.LogLevel)
-	logrus.SetFormatter(&logrus.JSONFormatter{})
-	logger := logging.NewLogrusLogger(logrus.StandardLogger())
+	logger, err := logging.NewStructuredLogger(&logging.LogConfig{
+		Level:       cfg.LogLevel.String(),
+		Format:      "json",
+		Output:      "stdout",
+		ServiceName: "switchyard-api",
+		Environment: cfg.Environment,
+	})
+	if err != nil {
+		logrus.Fatal("Failed to initialize logger:", err)
+	}
 
 	// Connect to database
 	database, err := sql.Open("postgres", cfg.DatabaseURL)
@@ -123,7 +130,10 @@ func main() {
 	}
 
 	// Initialize reconciler
-	reconcilerController := reconciler.NewController(k8sClient, repos, logger)
+	reconcilerController := reconciler.NewController(database, repos, k8sClient, logrus.StandardLogger())
+
+	// Initialize service reconciler (also used directly by API handlers)
+	serviceReconciler := reconciler.NewServiceReconciler(k8sClient, logrus.StandardLogger())
 
 	// Initialize metrics collector
 	metricsCollector := monitoring.NewMetricsCollector()
@@ -168,12 +178,21 @@ func main() {
 	logrus.Info("✓ Topology graph builder initialized")
 
 	// Initialize service layer (business logic)
+	// Note: AuthService currently only works with JWT local auth mode
+	// TODO: Refactor to support both JWT and OIDC modes
+	jwtManager, ok := authManager.(*auth.JWTManager)
+	if !ok {
+		logrus.Warn("⚠ AuthService not initialized - OIDC mode detected")
+		logrus.Warn("   AuthService currently only supports JWT local auth mode")
+	}
 	authService := services.NewAuthService(
 		repos,
-		authManager,
+		jwtManager, // May be nil in OIDC mode
 		logrus.StandardLogger(),
 	)
-	logrus.Info("✓ AuthService initialized")
+	if jwtManager != nil {
+		logrus.Info("✓ AuthService initialized")
+	}
 
 	projectService := services.NewProjectService(
 		repos,
@@ -205,6 +224,7 @@ func main() {
 		builderService,
 		k8sClient,
 		reconcilerController,
+		serviceReconciler,
 		metricsCollector,
 		logger,
 		validatorInstance,
