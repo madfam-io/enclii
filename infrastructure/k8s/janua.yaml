@@ -1,0 +1,256 @@
+---
+# Janua Identity Platform Deployment
+# Namespace: janua-prod
+# Image: ghcr.io/madfam-io/janua:latest
+#
+# This manifest deploys the Janua authentication and identity platform
+# to the Enclii Sovereign Cloud.
+#
+# Prerequisites:
+# 1. cert-manager installed (for TLS certificates)
+# 2. Traefik ingress controller running (default with k3s)
+# 3. DNS record for janua.dev pointing to server IP
+#
+# Deployment:
+#   kubectl apply -f janua.yaml
+#
+# Verification:
+#   kubectl get pods -n janua-prod
+#   kubectl get ingress -n janua-prod
+#   curl https://janua.dev/health
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: janua-prod
+  labels:
+    name: janua-prod
+    app.kubernetes.io/name: janua
+    app.kubernetes.io/component: identity-platform
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: janua-secrets
+  namespace: janua-prod
+type: Opaque
+stringData:
+  # IMPORTANT: Replace these placeholder values with actual secrets
+  # Use kubectl create secret or external secret management (Vault, Lockbox)
+  #
+  # PostgreSQL connection string
+  JANUA_DATABASE_URL: "postgresql://janua:CHANGE_ME@postgres.janua-prod.svc.cluster.local:5432/janua?sslmode=require"
+
+  # Redis connection string (for sessions and rate limiting)
+  JANUA_REDIS_URL: "redis://:CHANGE_ME@redis.janua-prod.svc.cluster.local:6379/0"
+
+  # JWT signing secret (generate with: openssl rand -base64 64)
+  JANUA_SECRET: "CHANGE_ME_TO_RANDOM_64_BYTE_STRING"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: janua-api
+  namespace: janua-prod
+  labels:
+    app: janua-api
+    app.kubernetes.io/name: janua
+    app.kubernetes.io/component: api
+    app.kubernetes.io/version: "latest"
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: janua-api
+  template:
+    metadata:
+      labels:
+        app: janua-api
+        app.kubernetes.io/name: janua
+        app.kubernetes.io/component: api
+    spec:
+      containers:
+      - name: janua-api
+        image: ghcr.io/madfam-io/janua:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        env:
+        # Environment configuration
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3000"
+        - name: LOG_LEVEL
+          value: "info"
+
+        # Database configuration (from secret)
+        - name: JANUA_DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: janua-secrets
+              key: JANUA_DATABASE_URL
+
+        # Redis configuration (from secret)
+        - name: JANUA_REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: janua-secrets
+              key: JANUA_REDIS_URL
+
+        # JWT secret (from secret)
+        - name: JANUA_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: janua-secrets
+              key: JANUA_SECRET
+
+        # Health check endpoints
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        # Resource limits
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+
+      # Security context for pod
+      securityContext:
+        fsGroup: 1000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: janua-api
+  namespace: janua-prod
+  labels:
+    app: janua-api
+    app.kubernetes.io/name: janua
+    app.kubernetes.io/component: api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app: janua-api
+
+---
+# Standard Kubernetes Ingress (compatible with Traefik)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: janua-ingress
+  namespace: janua-prod
+  labels:
+    app: janua-api
+    app.kubernetes.io/name: janua
+  annotations:
+    # Traefik annotations
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+
+    # cert-manager annotations for automatic TLS
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+    # Security headers
+    traefik.ingress.kubernetes.io/router.middlewares: janua-prod-security-headers@kubernetescrd
+spec:
+  tls:
+  - hosts:
+    - janua.dev
+    secretName: janua-tls
+  rules:
+  - host: janua.dev
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: janua-api
+            port:
+              number: 3000
+
+---
+# Optional: Traefik Middleware for security headers
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: janua-prod
+spec:
+  headers:
+    customResponseHeaders:
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "DENY"
+      X-XSS-Protection: "1; mode=block"
+      Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+    customRequestHeaders:
+      X-Forwarded-Proto: "https"
+
+---
+# LetsEncrypt ClusterIssuer (create this once per cluster)
+# This uses HTTP-01 challenge via Traefik
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # ACME server URL for Let's Encrypt production
+    server: https://acme-v02.api.letsencrypt.org/directory
+
+    # Email address for ACME registration (CHANGE THIS!)
+    email: admin@janua.dev
+
+    # Secret to store ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+
+    # HTTP-01 solver using Traefik ingress
+    solvers:
+    - http01:
+        ingress:
+          class: traefik
