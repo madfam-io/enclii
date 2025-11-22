@@ -68,7 +68,7 @@ spec:
           name: enclii-secrets
           key: redis-url
 
-    # Plinto OAuth configuration
+    # Janua OAuth configuration
     - name: OIDC_ISSUER
       value: https://auth.enclii.io
     - name: OIDC_JWKS_URL
@@ -121,7 +121,7 @@ spec:
   domains:
     - domain: api.enclii.io
       tls: true
-      tlsIssuer: cloudflare  # Using Cloudflare for SaaS
+      tlsIssuer: cloudflare # Using Cloudflare for SaaS
 
   # Autoscaling based on CPU and memory
   autoscaling:
@@ -133,15 +133,15 @@ spec:
 
   # Service-level objectives
   slo:
-    availability: 99.95  # 99.95% uptime target
-    latencyP95: 200      # P95 latency < 200ms
-    errorRate: 0.5       # Error rate < 0.5%
+    availability: 99.95 # 99.95% uptime target
+    latencyP95: 200 # P95 latency < 200ms
+    errorRate: 0.5 # Error rate < 0.5%
 
 ---
 # Network policy for Switchyard API
 # Only allow traffic from:
 # - Switchyard UI
-# - Plinto (for OIDC verification)
+# - Janua (for OIDC verification)
 # - Ingress controller
 # - Reconcilers
 
@@ -190,7 +190,7 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              app: plinto
+              app: janua
       ports:
         - protocol: TCP
           port: 8000

@@ -9,7 +9,7 @@
 [![Cost](https://img.shields.io/badge/monthly%20cost-%24100-success)](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
 **Status:** Alpha (70% production-ready) | [Production Roadmap →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
-**Authentication:** JWT (RS256) - Plinto integration planned for Weeks 3-4
+**Authentication:** JWT (RS256) - Janua integration planned for Weeks 3-4
 **Infrastructure:** Hetzner + Cloudflare + Ubicloud (~$100/month)
 
 ---
@@ -20,17 +20,17 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 
 ### The Dogfooding Strategy (Planned)
 
-> **Goal:** "We'll run our entire platform on Enclii, authenticated by Plinto. We'll be our own most demanding customer."
+> **Goal:** "We'll run our entire platform on Enclii, authenticated by Janua. We'll be our own most demanding customer."
 
 **Planned Services** (Weeks 5-6 of roadmap):
 - 🔲 **Control Plane API** (`api.enclii.io`) → Deploy via Enclii itself
 - 🔲 **Web Dashboard** (`app.enclii.io`) → Deploy via Enclii itself
-- 🔲 **Authentication** (`auth.enclii.io`) → Plinto (from [separate repo](https://github.com/madfam-io/plinto))
+- 🔲 **Authentication** (`auth.enclii.io`) → Janua (from [separate repo](https://github.com/madfam-io/janua))
 - 🔲 **Landing Page** (`enclii.io`) → Deploy via Enclii itself
 - 🔲 **Documentation** (`docs.enclii.io`) → Deploy via Enclii itself
 - 🔲 **Status Page** (`status.enclii.io`) → Deploy via Enclii itself
 
-**Current Status:** Service specs ready in `dogfooding/` directory. Implementation scheduled for Weeks 5-6 after Plinto integration (Weeks 3-4). [See dogfooding plan →](./docs/guides/DOGFOODING_GUIDE.md)
+**Current Status:** Service specs ready in `dogfooding/` directory. Implementation scheduled for Weeks 5-6 after Janua integration (Weeks 3-4). [See dogfooding plan →](./docs/guides/DOGFOODING_GUIDE.md)
 
 ---
 
@@ -61,20 +61,20 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 - **Secure session management** with Redis
 - **API key support** for CI/CD integration
 
-**Planned (Weeks 3-4): Plinto Integration**
+**Planned (Weeks 3-4): Janua Integration**
 - Self-hosted OAuth 2.0 / OIDC provider
 - Multi-tenant organization support
 - Replace Auth0/Clerk dependency
-- Built from: [github.com/madfam-io/plinto](https://github.com/madfam-io/plinto)
+- Built from: [github.com/madfam-io/janua](https://github.com/madfam-io/janua)
 - Deploy via Enclii itself (dogfooding)
 
-**Why Plinto (when integrated):**
+**Why Janua (when integrated):**
 - ✅ No Auth0/Clerk vendor lock-in
 - ✅ No per-MAU costs ($0 vs $220+/month)
 - ✅ Full control over auth flows
 - ✅ Multi-tenant ready out of the box
 
-[View Plinto integration plan →](./docs/production/PRODUCTION_READINESS_AUDIT.md)
+[View Janua integration plan →](./docs/production/PRODUCTION_READINESS_AUDIT.md)
 
 ### 🚀 Multi-Tenant SaaS Ready
 
@@ -141,7 +141,7 @@ enclii/
 ├── dogfooding/                # ⭐ Service specs for self-hosting
 │   ├── switchyard-api.yaml    # Control plane (from this repo)
 │   ├── switchyard-ui.yaml     # Web UI (from this repo)
-│   ├── plinto.yaml            # Auth (from github.com/madfam-io/plinto)
+│   ├── janua.yaml             # Auth (from github.com/madfam-io/janua)
 │   ├── landing-page.yaml      # Marketing site
 │   ├── docs-site.yaml         # Documentation
 │   └── status-page.yaml       # Status monitoring
@@ -177,7 +177,7 @@ From [PRODUCTION_READINESS_AUDIT.md](./PRODUCTION_READINESS_AUDIT.md):
 - ⚠️ R2 object storage for SBOMs needed (2 days)
 - ⚠️ Redis Sentinel HA needed (1 day)
 
-**Plinto Integration: 65%**
+**Janua Integration: 65%**
 - ✅ Already using RS256 JWT (perfect compatibility!)
 - ✅ Database has `oidc_sub` field ready
 - ❌ JWKS provider not implemented
@@ -188,7 +188,7 @@ From [PRODUCTION_READINESS_AUDIT.md](./PRODUCTION_READINESS_AUDIT.md):
 
 **Week 1-2:** Infrastructure (Hetzner + Cloudflare + Ubicloud)
 **Week 3-4:** Security hardening (NetworkPolicies, admission control)
-**Week 5-6:** Plinto integration + Dogfooding setup
+**Week 5-6:** Janua integration + Dogfooding setup
 **Week 7-8:** Load testing + Security audit + **GO LIVE** 🚀
 
 [View detailed roadmap →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
@@ -263,11 +263,11 @@ kubectl apply -k infra/k8s/production
 ```bash
 # Import service specs
 ./bin/enclii service create --file dogfooding/switchyard-api.yaml
-./bin/enclii service create --file dogfooding/plinto.yaml
+./bin/enclii service create --file dogfooding/janua.yaml
 
 # Deploy via Enclii itself
 ./bin/enclii deploy --service switchyard-api --env production
-./bin/enclii deploy --service plinto --env production
+./bin/enclii deploy --service janua --env production
 
 # ✅ Enclii now deploys Enclii!
 ```
@@ -285,7 +285,7 @@ enclii ps                # List services, versions, health
 enclii scale             # Configure autoscaling
 enclii secrets set       # Manage secrets
 enclii rollback          # Revert to previous release
-enclii auth login        # Authenticate via Plinto OAuth
+enclii auth login        # Authenticate via Janua OAuth
 ```
 
 **Common workflows:**
@@ -340,7 +340,7 @@ enclii scale --min 5 --max 10 --service api --env prod
 | **Cost** | $2,000+/mo | **$100/mo** 💰 |
 | **Custom Domains** | Limited, expensive | **100 FREE** (Cloudflare for SaaS) |
 | **Vendor Lock-In** | Full lock-in | **None** (portable Kubernetes) |
-| **Auth** | Bring your own ($220/mo for Auth0) | **Plinto included** ($0) |
+| **Auth** | Bring your own ($220/mo for Auth0) | **Janua included** ($0) |
 | **Bandwidth** | Expensive egress | **Zero egress** (Cloudflare R2) |
 | **Multi-Tenancy** | Not designed for it | **Built-in** (NetworkPolicies, quotas) |
 | **Self-Hosting** | Impossible | **Fully self-hosted** |
@@ -352,7 +352,7 @@ enclii scale --min 5 --max 10 --service api --env prod
 | **Cost** | $2,500/mo | **$100/mo** 💰 |
 | **Backend Support** | Limited (Functions) | **Full container support** |
 | **Database** | Bring your own | **Managed PostgreSQL included** |
-| **Auth** | Clerk ($300+/mo) | **Plinto included** ($0) |
+| **Auth** | Clerk ($300+/mo) | **Janua included** ($0) |
 | **Control** | SaaS (no control) | **Full control** (self-hosted) |
 
 ### The Self-Hosted Advantage
@@ -383,12 +383,12 @@ enclii scale --min 5 --max 10 --service api --env prod
 - ⚠️ R2 object storage (2 days)
 - ⚠️ Redis Sentinel HA (1 day)
 
-### Phase 2: Plinto Integration (Weeks 3-4)
+### Phase 2: Janua Integration (Weeks 3-4)
 
-- ❌ JWKS provider for Plinto
+- ❌ JWKS provider for Janua
 - ❌ OAuth 2.0 handlers
 - ❌ Frontend oidc-client-ts integration
-- ❌ Plinto deployment on Enclii
+- ❌ Janua deployment on Enclii
 - ❌ Multi-tenant organization support
 
 ### Phase 3: Production (Weeks 5-8)
@@ -446,7 +446,7 @@ Email: [security@enclii.dev](mailto:security@enclii.dev)
 
 ## The Vision: Dogfooding as Competitive Advantage
 
-**Goal (Weeks 5-8):** Run our entire production infrastructure on Enclii, authenticated by Plinto.
+**Goal (Weeks 5-8):** Run our entire production infrastructure on Enclii, authenticated by Janua.
 
 When we launch, prospects will ask **"Can Enclii handle production?"**
 
@@ -456,7 +456,7 @@ We'll answer with verifiable proof:
 **What we're building (service specs ready in `dogfooding/`):**
 - Control Plane API at api.enclii.io
 - Web Dashboard at app.enclii.io
-- Plinto Auth at auth.enclii.io
+- Janua Auth at auth.enclii.io
 - Public status page at status.enclii.io
 
 **Why this matters:**
@@ -499,7 +499,7 @@ This aligns with the **MADFAM Manifesto Section IV**: protecting open infrastruc
 
 - **Documentation:** [docs.enclii.io](https://docs.enclii.io)
 - **Status Page:** [status.enclii.io](https://status.enclii.io)
-- **Plinto (Auth):** [github.com/madfam-io/plinto](https://github.com/madfam-io/plinto)
+- **Janua (Auth):** [github.com/madfam-io/janua](https://github.com/madfam-io/janua)
 - **Production Roadmap:** [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 - **Dogfooding Guide:** [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md)
 

@@ -8,7 +8,7 @@ Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infr
 
 **Current Status:** 70% production-ready ([audit](./docs/production/PRODUCTION_READINESS_AUDIT.md))
 **Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud ($100/month planned)
-**Authentication:** JWT (RS256) - Plinto integration planned for Weeks 3-4
+**Authentication:** JWT (RS256) - Janua integration planned for Weeks 3-4
 **Dogfooding:** Planned for Weeks 5-6 ([specs ready](./dogfooding/), [guide](./docs/guides/DOGFOODING_GUIDE.md))
 **Production Timeline:** 6-8 weeks to launch ([roadmap](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md))
 
@@ -156,17 +156,17 @@ See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_R
 - **Session Management** via Redis
 - **API Keys** for CI/CD integration
 
-**Planned Integration (Weeks 3-4): Plinto**
+**Planned Integration (Weeks 3-4): Janua**
 
-Plinto is a self-hosted OAuth/OIDC provider that will replace standalone JWT:
+Janua is a self-hosted OAuth/OIDC provider that will replace standalone JWT:
 
-- **Repository:** [github.com/madfam-io/plinto](https://github.com/madfam-io/plinto)
-- **Deployment:** Will deploy via Enclii (dogfooding) using `dogfooding/plinto.yaml`
+- **Repository:** [github.com/madfam-io/janua](https://github.com/madfam-io/janua)
+- **Deployment:** Will deploy via Enclii (dogfooding) using `dogfooding/janua.yaml`
 - **Protocol:** OAuth 2.0 / OIDC with RS256 JWT
 - **Features:** Multi-tenant orgs, password + SSO, JWKS rotation
 - **Implementation:** See [PRODUCTION_READINESS_AUDIT.md](./docs/production/PRODUCTION_READINESS_AUDIT.md) for code examples
 
-**Why Plinto (when integrated):**
+**Why Janua (when integrated):**
 - No Auth0/Clerk vendor lock-in
 - No per-MAU costs ($0 vs $220+/month)
 - Full control over auth flows
@@ -175,24 +175,24 @@ Plinto is a self-hosted OAuth/OIDC provider that will replace standalone JWT:
 
 ### Dogfooding Strategy (Planned for Weeks 5-6)
 
-**Goal:** Run our entire platform on Enclii, authenticated by Plinto.
+**Goal:** Run our entire platform on Enclii, authenticated by Janua.
 
 > **Future State:** "We'll run our entire production on Enclii. We'll be our own most demanding customer."
 
 **Planned Services** (service specs ready in `dogfooding/`):
 - `switchyard-api` → api.enclii.io (control plane, deployed via Enclii)
 - `switchyard-ui` → app.enclii.io (web dashboard, deployed via Enclii)
-- `plinto` → auth.enclii.io (authentication from [separate repo](https://github.com/madfam-io/plinto))
+- `janua` → auth.enclii.io (authentication from [separate repo](https://github.com/madfam-io/janua))
 - `landing-page` → enclii.io (marketing site)
 - `docs-site` → docs.enclii.io (documentation)
 - `status-page` → status.enclii.io (uptime monitoring)
 
 **Current Status:**
 - ✅ Service specs created in `dogfooding/` directory
-- ✅ Multi-repo build strategy defined (Plinto from different GitHub repo)
+- ✅ Multi-repo build strategy defined (Janua from different GitHub repo)
 - ✅ NetworkPolicies, autoscaling, custom domains configured
 - ⚠️ Awaiting infrastructure setup (Weeks 1-2)
-- ⚠️ Awaiting Plinto integration (Weeks 3-4)
+- ⚠️ Awaiting Janua integration (Weeks 3-4)
 - ❌ Implementation scheduled for Weeks 5-6
 
 See [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md) for complete implementation plan.

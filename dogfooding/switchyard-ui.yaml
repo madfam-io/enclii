@@ -11,7 +11,7 @@ metadata:
 spec:
   # Build from the Enclii repository
   build:
-    type: nixpacks  # Auto-detect Next.js and build optimally
+    type: nixpacks # Auto-detect Next.js and build optimally
     context: apps/switchyard-ui
     buildArgs:
       - name: NEXT_PUBLIC_API_URL
@@ -24,7 +24,7 @@ spec:
       git:
         repository: https://github.com/madfam-io/enclii
         branch: main
-        path: apps/switchyard-ui  # Build only this subdirectory
+        path: apps/switchyard-ui # Build only this subdirectory
         autoDeploy: true
 
   runtime:
@@ -62,7 +62,7 @@ spec:
     - name: API_URL_INTERNAL
       value: http://switchyard-api.enclii-platform.svc.cluster.local:8080
 
-    # Plinto OAuth configuration
+    # Janua OAuth configuration
     - name: NEXT_PUBLIC_AUTH_URL
       value: https://auth.enclii.io
     - name: NEXT_PUBLIC_AUTH_CLIENT_ID
@@ -76,14 +76,14 @@ spec:
     - name: NEXT_PUBLIC_ANALYTICS_ENABLED
       value: "true"
     - name: NEXT_TELEMETRY_DISABLED
-      value: "1"  # Disable Next.js telemetry
+      value: "1" # Disable Next.js telemetry
 
   # Custom domains
   domains:
     - domain: app.enclii.io
       tls: true
       tlsIssuer: cloudflare
-    - domain: dashboard.enclii.io  # Alternative domain
+    - domain: dashboard.enclii.io # Alternative domain
       tls: true
       tlsIssuer: cloudflare
 
@@ -97,7 +97,7 @@ spec:
   # Caching strategy
   caching:
     enabled: true
-    ttl: 3600  # 1 hour cache for static assets
+    ttl: 3600 # 1 hour cache for static assets
     headers:
       - "Cache-Control: public, max-age=3600, immutable"
 
@@ -107,7 +107,7 @@ spec:
 # - Ingress controller
 # Allow traffic to:
 # - Switchyard API
-# - Plinto
+# - Janua
 
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -138,11 +138,11 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
-    # To Plinto
+    # To Janua
     - to:
         - podSelector:
             matchLabels:
-              app: plinto
+              app: janua
       ports:
         - protocol: TCP
           port: 8000
