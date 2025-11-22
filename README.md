@@ -470,8 +470,28 @@ We'll answer with verifiable proof:
 
 ## License
 
-**Proprietary** © Innovaciones MADFAM S.A.S. de C.V.
-All rights reserved.
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
+This project is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0) to protect the sovereignty of the infrastructure and ensure that all modifications remain open source when deployed as a network service.
+
+**Copyright (C) 2025 Innovaciones MADFAM SAS de CV**
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along with this program. If not, see [LICENSE](./LICENSE) or visit https://www.gnu.org/licenses/agpl-3.0.html.
+
+### Why AGPL-3.0?
+
+The AGPL-3.0 license ensures that:
+
+- **Network Copyleft**: Anyone running a modified version of Enclii as a network service must provide the source code to users
+- **Infrastructure Sovereignty**: No vendor can take this code, modify it, and offer it as a proprietary service without sharing improvements
+- **Community Protection**: All improvements and modifications must be contributed back to the community
+- **Freedom Preservation**: Users retain the freedom to study, modify, and distribute the software
+
+This aligns with the **MADFAM Manifesto Section IV**: protecting open infrastructure from proprietary capture.
 
 ---
 

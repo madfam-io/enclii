@@ -2,6 +2,7 @@
   "name": "switchyard-ui",
   "version": "1.0.0-alpha",
   "description": "Enclii Web UI Dashboard",
+  "license": "AGPL-3.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
