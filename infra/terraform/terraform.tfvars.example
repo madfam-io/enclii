@@ -1,0 +1,110 @@
+# Enclii Terraform Variables Example
+# Copy this file to terraform.tfvars and fill in your values
+# NEVER commit terraform.tfvars to version control
+
+# =============================================================================
+# REQUIRED - Provider Credentials
+# =============================================================================
+
+# Hetzner Cloud API token
+# Get from: https://console.hetzner.cloud/projects/<project>/security/tokens
+hetzner_token = "your-hetzner-api-token"
+
+# Cloudflare API token (needs Zone:Edit, Tunnel:Edit, R2:Edit permissions)
+# Create at: https://dash.cloudflare.com/profile/api-tokens
+cloudflare_api_token = "your-cloudflare-api-token"
+
+# Cloudflare account ID
+# Found at: https://dash.cloudflare.com/ (right sidebar)
+cloudflare_account_id = "your-account-id"
+
+# =============================================================================
+# REQUIRED - R2 Storage Credentials
+# =============================================================================
+
+# R2 API credentials (S3-compatible)
+# Create at: https://dash.cloudflare.com/<account>/r2/api-tokens
+r2_access_key_id     = "your-r2-access-key"
+r2_secret_access_key = "your-r2-secret-key"
+
+# =============================================================================
+# REQUIRED - Domain Configuration
+# =============================================================================
+
+# Your domain managed in Cloudflare
+domain = "enclii.dev"
+
+# Subdomains
+subdomain_api = "api"  # api.enclii.dev
+subdomain_app = "app"  # app.enclii.dev
+
+# =============================================================================
+# REQUIRED - Security
+# =============================================================================
+
+# IP addresses allowed to SSH and access Kubernetes API
+# Add your office/home IPs here
+management_ips = [
+  "203.0.113.50/32",  # Example: Your home IP
+  "198.51.100.0/24",  # Example: Office network
+]
+
+# Email domain for Zero Trust Access
+allowed_email_domain = "madfam.io"
+
+# =============================================================================
+# OPTIONAL - Infrastructure Sizing
+# =============================================================================
+
+# Datacenter location
+# Options: nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki),
+#          ash (Ashburn), hil (Hillsboro)
+location = "nbg1"
+
+# Control plane nodes (1 for dev, 3 for HA production)
+control_plane_count = 1
+control_plane_type  = "cx21"  # 2 vCPU, 4GB RAM, ~€5/mo
+
+# Worker nodes
+worker_count = 2
+worker_type  = "cx31"  # 2 vCPU, 8GB RAM, ~€10/mo
+
+# Storage volumes (GB)
+postgres_volume_size    = 50
+build_cache_volume_size = 100
+redis_volume_size       = 10
+
+# =============================================================================
+# OPTIONAL - Features
+# =============================================================================
+
+# Enable floating IP for stable egress
+enable_floating_ip = false
+
+# Environment tag
+environment = "production"
+
+# R2 bucket names
+r2_bucket_backups   = "enclii-backups"
+r2_bucket_artifacts = "enclii-artifacts"
+
+# =============================================================================
+# Cost Estimate (Monthly)
+# =============================================================================
+# With default settings:
+# - 1x cx21 control plane:  €5.18
+# - 2x cx31 workers:        €19.84
+# - 50GB volume:            €2.35
+# - 100GB volume:           €4.70
+# - 10GB volume:            €0.47
+# - Network:                ~€1.00
+# - Cloudflare:             Free (with Pro for WAF)
+# ---------------------------------
+# Total:                    ~€34/month
+#
+# For HA (3 control planes, 3 workers):
+# - 3x cx21 control plane:  €15.54
+# - 3x cx31 workers:        €29.76
+# - Volumes + Network:      ~€10
+# ---------------------------------
+# Total:                    ~€55/month

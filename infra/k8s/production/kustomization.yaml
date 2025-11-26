@@ -5,6 +5,8 @@ namespace: enclii-production
 
 resources:
   - ../base
+  - cloudflared.yaml
+  - redis-sentinel.yaml
 
 patchesStrategicMerge:
   - replicas-patch.yaml
@@ -23,7 +25,7 @@ configMapGenerator:
 images:
   - name: switchyard-api
     newName: ghcr.io/madfam/switchyard-api
-    digest: sha256:abcdef123456  # Use specific digest in production
+    digest: sha256:abcdef123456 # Use specific digest in production
 
 commonLabels:
   environment: production

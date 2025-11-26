@@ -1,0 +1,69 @@
+#cloud-config
+# K3s Agent (Worker Node) Cloud-Init Configuration
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - jq
+  - htop
+  - vim
+
+write_files:
+  - path: /etc/rancher/k3s/config.yaml
+    content: |
+      node-name: ${node_name}
+      server: https://${server_ip}:6443
+      token: ${k3s_token}
+    permissions: '0600'
+
+  - path: /etc/sysctl.d/99-kubernetes.conf
+    content: |
+      # Kubernetes networking requirements
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+
+      # Performance tuning for container workloads
+      net.core.somaxconn = 32768
+      net.ipv4.tcp_max_syn_backlog = 32768
+      net.core.netdev_max_backlog = 32768
+
+      # Memory management
+      vm.swappiness = 0
+      vm.overcommit_memory = 1
+
+  - path: /etc/security/limits.d/99-kubernetes.conf
+    content: |
+      * soft nofile 1048576
+      * hard nofile 1048576
+      * soft nproc 65535
+      * hard nproc 65535
+
+runcmd:
+  # Apply sysctl settings
+  - sysctl --system
+
+  # Disable swap
+  - swapoff -a
+  - sed -i '/ swap / s/^/#/' /etc/fstab
+
+  # Wait for server to be ready
+  - |
+    echo "Waiting for K3s server..."
+    while ! curl -k https://${server_ip}:6443/healthz 2>/dev/null; do
+      sleep 10
+    done
+    echo "K3s server is ready"
+
+  # Install K3s agent
+  - |
+    curl -sfL https://get.k3s.io | sh -s - agent \
+      --config /etc/rancher/k3s/config.yaml
+
+final_message: "K3s agent ${node_name} joined cluster successfully after $UPTIME seconds"

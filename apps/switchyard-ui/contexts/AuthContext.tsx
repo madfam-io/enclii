@@ -1,42 +1,166 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  ReactNode,
+} from "react";
 
 /**
- * Authentication Context for managing user authentication state
+ * Authentication Context for Enclii Switchyard UI
  *
- * SECURITY WARNING: This is a basic implementation for development.
- * For production, implement OAuth 2.0 / OIDC with providers like:
- * - Auth0 (https://auth0.com/)
- * - Okta (https://www.okta.com/)
- * - Keycloak (https://www.keycloak.org/)
- * - AWS Cognito (https://aws.amazon.com/cognito/)
+ * Supports both local authentication and OIDC/OAuth via Janua/Plinto.
  *
- * TODO Phase 2:
- * - Integrate OAuth 2.0 provider
- * - Implement token refresh logic
- * - Add session management
- * - Implement secure token storage
+ * Authentication Modes:
+ * - Local: Email/password directly to Switchyard API
+ * - OIDC: OAuth 2.0 flow via external identity provider (Janua)
+ *
+ * The auth mode is determined by NEXT_PUBLIC_AUTH_MODE environment variable.
  */
+
+// =============================================================================
+// TYPES
+// =============================================================================
 
 interface User {
   id: string;
   email: string;
   name?: string;
   roles?: string[];
+  avatarUrl?: string;
+}
+
+interface TokenInfo {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt: number; // Unix timestamp
+  tokenType: string;
 }
 
 interface AuthContextType {
+  // State
   user: User | null;
-  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  authMode: "local" | "oidc";
+
+  // Local auth methods
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-  setToken: (token: string) => void;
+  register: (email: string, password: string, name: string) => Promise<void>;
+
+  // OIDC methods
+  loginWithOIDC: () => void;
+  handleOAuthCallback: (code: string, state?: string) => Promise<void>;
+
+  // Common methods
+  logout: () => Promise<void>;
+  refreshTokens: () => Promise<boolean>;
+
+  // Token access (for API calls)
+  getAccessToken: () => string | null;
 }
 
+// =============================================================================
+// CONFIGURATION
+// =============================================================================
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const AUTH_MODE = (process.env.NEXT_PUBLIC_AUTH_MODE || "local") as
+  | "local"
+  | "oidc";
+
+// Token refresh buffer - refresh 5 minutes before expiry
+const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
+// =============================================================================
+// CONTEXT
+// =============================================================================
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// =============================================================================
+// STORAGE HELPERS
+// =============================================================================
+
+const storage = {
+  getTokens(): TokenInfo | null {
+    if (typeof window === "undefined") return null;
+    const stored = localStorage.getItem("enclii_tokens");
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return null;
+    }
+  },
+
+  setTokens(tokens: TokenInfo): void {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("enclii_tokens", JSON.stringify(tokens));
+  },
+
+  clearTokens(): void {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem("enclii_tokens");
+  },
+
+  getUser(): User | null {
+    if (typeof window === "undefined") return null;
+    const stored = localStorage.getItem("enclii_user");
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored);
+    } catch {
+      return null;
+    }
+  },
+
+  setUser(user: User): void {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("enclii_user", JSON.stringify(user));
+  },
+
+  clearUser(): void {
+    if (typeof window === "undefined") return;
+    localStorage.removeItem("enclii_user");
+  },
+
+  clear(): void {
+    this.clearTokens();
+    this.clearUser();
+  },
+};
+
+// =============================================================================
+// JWT HELPERS
+// =============================================================================
+
+function parseJwt(token: string): Record<string, unknown> | null {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(""),
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
+function isTokenExpired(expiresAt: number): boolean {
+  return Date.now() >= expiresAt - TOKEN_REFRESH_BUFFER_MS;
+}
+
+// =============================================================================
+// PROVIDER
+// =============================================================================
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -44,132 +168,400 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setTokenState] = useState<string | null>(null);
+  const [tokens, setTokens] = useState<TokenInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [refreshTimer, setRefreshTimer] = useState<NodeJS.Timeout | null>(null);
 
-  // Load token from localStorage on mount
+  // ==========================================================================
+  // INITIALIZATION
+  // ==========================================================================
+
   useEffect(() => {
-    const storedToken = localStorage.getItem('auth_token');
-    if (storedToken) {
-      setTokenState(storedToken);
-      // TODO: Validate token and fetch user info
-      // For now, decode JWT to get user info (insecure - just for demo)
-      try {
-        const payload = JSON.parse(atob(storedToken.split('.')[1]));
-        setUser({
-          id: payload.sub || '',
-          email: payload.email || '',
-          name: payload.name,
-          roles: payload.roles || [],
+    // Load stored auth state on mount
+    const storedTokens = storage.getTokens();
+    const storedUser = storage.getUser();
+
+    if (storedTokens && storedUser) {
+      if (!isTokenExpired(storedTokens.expiresAt)) {
+        setTokens(storedTokens);
+        setUser(storedUser);
+        scheduleTokenRefresh(storedTokens.expiresAt);
+      } else if (storedTokens.refreshToken) {
+        // Token expired but we have refresh token - try to refresh
+        refreshTokens().catch(() => {
+          storage.clear();
         });
-      } catch (error) {
-        console.error('Failed to parse token:', error);
-        localStorage.removeItem('auth_token');
+      } else {
+        storage.clear();
       }
     }
+
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  // ==========================================================================
+  // TOKEN REFRESH SCHEDULING
+  // ==========================================================================
+
+  const scheduleTokenRefresh = useCallback(
+    (expiresAt: number) => {
+      // Clear existing timer
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      // Calculate when to refresh (5 minutes before expiry)
+      const refreshIn = expiresAt - Date.now() - TOKEN_REFRESH_BUFFER_MS;
+
+      if (refreshIn > 0) {
+        const timer = setTimeout(() => {
+          refreshTokens();
+        }, refreshIn);
+        setRefreshTimer(timer);
+      }
+    },
+    [refreshTimer],
+  );
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+    };
+  }, [refreshTimer]);
+
+  // ==========================================================================
+  // API HELPERS
+  // ==========================================================================
+
+  const apiRequest = async (
+    endpoint: string,
+    options: RequestInit = {},
+  ): Promise<Response> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (tokens?.accessToken) {
+      headers["Authorization"] = `Bearer ${tokens.accessToken}`;
+    }
+
+    return fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+  };
+
+  // ==========================================================================
+  // LOCAL AUTHENTICATION
+  // ==========================================================================
+
+  const login = async (email: string, password: string): Promise<void> => {
     setIsLoading(true);
+
     try {
-      // TODO: Replace with actual OAuth 2.0 / OIDC login flow
-      // This is a placeholder for development only
-      const response = await fetch('http://localhost:8080/api/v1/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const response = await apiRequest("/api/v1/auth/login", {
+        method: "POST",
         body: JSON.stringify({ email, password }),
       });
 
       if (!response.ok) {
-        throw new Error('Login failed');
+        const error = await response.json();
+        throw new Error(error.error || "Login failed");
       }
 
       const data = await response.json();
 
-      if (data.token) {
-        setTokenState(data.token);
-        localStorage.setItem('auth_token', data.token);
+      const tokenInfo: TokenInfo = {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresAt: new Date(data.expires_at).getTime(),
+        tokenType: data.token_type || "Bearer",
+      };
 
-        // Decode token to get user info
-        const payload = JSON.parse(atob(data.token.split('.')[1]));
-        setUser({
-          id: payload.sub || '',
-          email: payload.email || email,
-          name: payload.name,
-          roles: payload.roles || [],
-        });
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+      const userData: User = {
+        id: data.user?.id || "",
+        email: data.user?.email || email,
+        name: data.user?.name,
+        roles: data.user?.roles || [],
+      };
+
+      setTokens(tokenInfo);
+      setUser(userData);
+      storage.setTokens(tokenInfo);
+      storage.setUser(userData);
+      scheduleTokenRefresh(tokenInfo.expiresAt);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    setTokenState(null);
-    localStorage.removeItem('auth_token');
+  const register = async (
+    email: string,
+    password: string,
+    name: string,
+  ): Promise<void> => {
+    setIsLoading(true);
 
-    // TODO: Call logout endpoint to invalidate session
-    // fetch('http://localhost:8080/api/v1/auth/logout', { method: 'POST' });
-  };
-
-  const setToken = (newToken: string) => {
-    setTokenState(newToken);
-    localStorage.setItem('auth_token', newToken);
-
-    // Decode token to get user info
     try {
-      const payload = JSON.parse(atob(newToken.split('.')[1]));
-      setUser({
-        id: payload.sub || '',
-        email: payload.email || '',
-        name: payload.name,
-        roles: payload.roles || [],
+      const response = await apiRequest("/api/v1/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ email, password, name }),
       });
-    } catch (error) {
-      console.error('Failed to parse token:', error);
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Registration failed");
+      }
+
+      const data = await response.json();
+
+      const tokenInfo: TokenInfo = {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresAt: new Date(data.expires_at).getTime(),
+        tokenType: data.token_type || "Bearer",
+      };
+
+      const userData: User = {
+        id: data.user?.id || "",
+        email: data.user?.email || email,
+        name: data.user?.name || name,
+        roles: data.user?.roles || [],
+      };
+
+      setTokens(tokenInfo);
+      setUser(userData);
+      storage.setTokens(tokenInfo);
+      storage.setUser(userData);
+      scheduleTokenRefresh(tokenInfo.expiresAt);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // ==========================================================================
+  // OIDC AUTHENTICATION
+  // ==========================================================================
+
+  const loginWithOIDC = (): void => {
+    // Store current URL for redirect after login
+    if (typeof window !== "undefined") {
+      localStorage.setItem("auth_return_url", window.location.pathname);
+    }
+
+    // Redirect to backend OIDC login endpoint
+    // The backend will redirect to the OIDC provider (Janua)
+    window.location.href = `${API_BASE_URL}/api/v1/auth/oidc/login`;
+  };
+
+  const handleOAuthCallback = async (
+    code: string,
+    state?: string,
+  ): Promise<void> => {
+    setIsLoading(true);
+
+    try {
+      // The backend handles the code exchange, we just need to hit the callback
+      // endpoint with the code and state
+      const params = new URLSearchParams({ code });
+      if (state) {
+        params.append("state", state);
+      }
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/auth/oidc/callback?${params.toString()}`,
+        {
+          method: "GET",
+          credentials: "include", // Include cookies for state verification
+        },
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "OAuth callback failed");
+      }
+
+      const data = await response.json();
+
+      const tokenInfo: TokenInfo = {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresAt: new Date(data.expires_at).getTime(),
+        tokenType: data.token_type || "Bearer",
+      };
+
+      // Extract user info from token
+      const claims = parseJwt(data.access_token);
+      const userData: User = {
+        id: (claims?.sub as string) || (claims?.user_id as string) || "",
+        email: (claims?.email as string) || "",
+        name: claims?.name as string,
+        roles: (claims?.roles as string[]) || [],
+      };
+
+      setTokens(tokenInfo);
+      setUser(userData);
+      storage.setTokens(tokenInfo);
+      storage.setUser(userData);
+      scheduleTokenRefresh(tokenInfo.expiresAt);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ==========================================================================
+  // COMMON METHODS
+  // ==========================================================================
+
+  const logout = async (): Promise<void> => {
+    try {
+      // Call backend logout endpoint to revoke session
+      if (tokens?.accessToken) {
+        await apiRequest("/api/v1/auth/logout", {
+          method: "POST",
+        }).catch(() => {
+          // Ignore errors - we're logging out anyway
+        });
+      }
+    } finally {
+      // Clear local state regardless of API call result
+      setTokens(null);
+      setUser(null);
+      storage.clear();
+
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+        setRefreshTimer(null);
+      }
+    }
+  };
+
+  const refreshTokens = async (): Promise<boolean> => {
+    const currentTokens = tokens || storage.getTokens();
+
+    if (!currentTokens?.refreshToken) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          refresh_token: currentTokens.refreshToken,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Token refresh failed");
+      }
+
+      const data = await response.json();
+
+      const newTokenInfo: TokenInfo = {
+        accessToken: data.access_token,
+        refreshToken: currentTokens.refreshToken, // Keep existing refresh token
+        expiresAt: new Date(data.expires_at).getTime(),
+        tokenType: data.token_type || "Bearer",
+      };
+
+      setTokens(newTokenInfo);
+      storage.setTokens(newTokenInfo);
+      scheduleTokenRefresh(newTokenInfo.expiresAt);
+
+      return true;
+    } catch (error) {
+      console.error("Token refresh failed:", error);
+      // Clear auth state on refresh failure
+      await logout();
+      return false;
+    }
+  };
+
+  const getAccessToken = (): string | null => {
+    const currentTokens = tokens || storage.getTokens();
+
+    if (!currentTokens) {
+      return null;
+    }
+
+    // Check if token is expired
+    if (isTokenExpired(currentTokens.expiresAt)) {
+      // Trigger refresh but return current token
+      // (the API call might still work if server has grace period)
+      refreshTokens();
+    }
+
+    return currentTokens.accessToken;
+  };
+
+  // ==========================================================================
+  // CONTEXT VALUE
+  // ==========================================================================
+
   const value: AuthContextType = {
     user,
-    token,
-    isAuthenticated: !!user && !!token,
+    isAuthenticated: !!user && !!tokens,
     isLoading,
+    authMode: AUTH_MODE,
     login,
+    register,
+    loginWithOIDC,
+    handleOAuthCallback,
     logout,
-    setToken,
+    refreshTokens,
+    getAccessToken,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export function useAuth() {
+// =============================================================================
+// HOOKS
+// =============================================================================
+
+export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
 
 /**
- * Hook to protect routes that require authentication
+ * Hook for protecting routes that require authentication.
+ * Returns redirect info for unauthenticated users.
  */
-export function useRequireAuth() {
+export function useRequireAuth(): {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  shouldRedirect: boolean;
+} {
   const { isAuthenticated, isLoading } = useAuth();
-  const [shouldRedirect, setShouldRedirect] = useState(false);
 
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      setShouldRedirect(true);
-    }
-  }, [isAuthenticated, isLoading]);
+  return {
+    isAuthenticated,
+    isLoading,
+    shouldRedirect: !isLoading && !isAuthenticated,
+  };
+}
 
-  return { shouldRedirect, isLoading };
+/**
+ * Hook for getting the access token for API requests.
+ * Automatically handles token refresh.
+ */
+export function useAccessToken(): string | null {
+  const { getAccessToken, isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  return getAccessToken();
 }

@@ -1,0 +1,87 @@
+#cloud-config
+# K3s Server (Control Plane) Cloud-Init Configuration
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - jq
+  - htop
+  - vim
+
+write_files:
+  - path: /etc/rancher/k3s/config.yaml
+    content: |
+      node-name: ${node_name}
+      cluster-cidr: ${cluster_cidr}
+      service-cidr: ${service_cidr}
+      disable:
+        - traefik
+        - servicelb
+      flannel-backend: wireguard-native
+      write-kubeconfig-mode: "0644"
+      tls-san:
+        - ${node_name}
+        - 10.0.1.10
+      %{ if !is_first_server }
+      server: https://${first_server_ip}:6443
+      %{ endif }
+      token: ${k3s_token}
+    permissions: '0600'
+
+  - path: /etc/sysctl.d/99-kubernetes.conf
+    content: |
+      # Kubernetes networking requirements
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+
+      # Performance tuning
+      net.core.somaxconn = 32768
+      net.ipv4.tcp_max_syn_backlog = 32768
+      net.core.netdev_max_backlog = 32768
+
+      # Memory management
+      vm.swappiness = 0
+      vm.overcommit_memory = 1
+
+  - path: /etc/security/limits.d/99-kubernetes.conf
+    content: |
+      * soft nofile 1048576
+      * hard nofile 1048576
+      * soft nproc 65535
+      * hard nproc 65535
+
+runcmd:
+  # Apply sysctl settings
+  - sysctl --system
+
+  # Disable swap
+  - swapoff -a
+  - sed -i '/ swap / s/^/#/' /etc/fstab
+
+  # Install K3s server
+  - |
+    curl -sfL https://get.k3s.io | sh -s - server \
+      --config /etc/rancher/k3s/config.yaml
+
+  # Wait for K3s to be ready
+  - |
+    while ! kubectl get nodes 2>/dev/null; do
+      echo "Waiting for K3s..."
+      sleep 5
+    done
+
+  # Install Helm (for easier application deployment)
+  - |
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+  # Label node
+  - kubectl label node ${node_name} node-role.kubernetes.io/control-plane=true --overwrite
+
+final_message: "K3s server ${node_name} initialized successfully after $UPTIME seconds"
