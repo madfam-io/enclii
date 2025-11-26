@@ -1,14 +1,14 @@
-# Enclii + Plinto Dogfooding Strategy
+# Enclii + Janua Dogfooding Strategy
 
 > ⚠️ **IMPLEMENTATION PLAN** - This document describes the **future state** (Weeks 5-6 of roadmap).
-> **Current Status:** Service specs created, awaiting infrastructure setup (Weeks 1-2) and Plinto integration (Weeks 3-4).
-> **Not Yet Implemented:** Enclii is NOT yet self-hosting. Plinto is NOT yet integrated.
+> **Current Status:** Service specs created, awaiting infrastructure setup (Weeks 1-2) and Janua integration (Weeks 3-4).
+> **Not Yet Implemented:** Enclii is NOT yet self-hosting. Janua is NOT yet integrated.
 
 ---
 
-> **Goal (Weeks 5-6):** "We'll run our entire platform on Enclii, authenticated by Plinto. We'll be our own most demanding customer."
+> **Goal (Weeks 5-6):** "We'll run our entire platform on Enclii, authenticated by Janua. We'll be our own most demanding customer."
 
-This document outlines the **plan** for how Enclii will deploy **itself** using its own platform, and how we'll use **Plinto** (our own auth solution) to authenticate the Enclii control plane. This will be critical for product quality, customer confidence, and sales credibility.
+This document outlines the **plan** for how Enclii will deploy **itself** using its own platform, and how we'll use **Janua** (our own auth solution) to authenticate the Enclii control plane. This will be critical for product quality, customer confidence, and sales credibility.
 
 ---
 
@@ -34,13 +34,13 @@ This document outlines the **plan** for how Enclii will deploy **itself** using 
 - ❌ Not using our own platform (can't validate our own product)
 - ❌ Missing customer pain points (we don't experience what they do)
 - ❌ No confidence signal ("If they don't use it, why should we?")
-- ❌ Plinto built but unused (we don't authenticate with our own solution)
+- ❌ Janua built but unused (we don't authenticate with our own solution)
 
 **After Dogfooding:**
 - ✅ Enclii deploys Enclii (using `enclii deploy` commands)
-- ✅ Plinto authenticates Enclii (OAuth/OIDC flows battle-tested daily)
+- ✅ Janua authenticates Enclii (OAuth/OIDC flows battle-tested daily)
 - ✅ We experience every customer pain point first
-- ✅ Powerful sales narrative: "We run production on Enclii + Plinto"
+- ✅ Powerful sales narrative: "We run production on Enclii + Janua"
 - ✅ Product quality improves (we fix issues before customers see them)
 
 ### Business Impact
@@ -74,7 +74,7 @@ This document outlines the **plan** for how Enclii will deploy **itself** using 
 - ✅ Kubernetes reconcilers
 - ✅ Infrastructure manifests (`infra/k8s/`)
 
-**Plinto Repository:** https://github.com/madfam-io/plinto
+**Janua Repository:** https://github.com/madfam-io/janua
 - ✅ OAuth 2.0 / OIDC provider
 - ✅ RS256 JWT signing
 - ✅ Multi-tenant organization support
@@ -85,8 +85,8 @@ This document outlines the **plan** for how Enclii will deploy **itself** using 
 **Dogfooding Gap:**
 - ❌ No service specs for Enclii components (`dogfooding/*.yaml`)
 - ❌ Enclii deployed manually, not via `enclii deploy`
-- ❌ Plinto not deployed on Enclii
-- ❌ Enclii not authenticated by Plinto (using standalone JWT)
+- ❌ Janua not deployed on Enclii
+- ❌ Enclii not authenticated by Janua (using standalone JWT)
 - ❌ No internal services (landing page, docs, status) on Enclii
 
 ---
@@ -105,7 +105,7 @@ This document outlines the **plan** for how Enclii will deploy **itself** using 
 │  Public Internet                                                │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
 │  │  enclii.io   │  │ app.enclii.io│  │auth.enclii.io│         │
-│  │ (Landing)    │  │   (Web UI)   │  │   (Plinto)   │         │
+│  │ (Landing)    │  │   (Web UI)   │  │   (Janua)   │         │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘         │
 │         │                 │                  │                  │
 └─────────┼─────────────────┼──────────────────┼──────────────────┘
@@ -136,9 +136,9 @@ This document outlines the **plan** for how Enclii will deploy **itself** using 
 │  │  └─────────────────────────────────────────────────┘    │  │
 │  │                                                           │  │
 │  │  ┌─────────────────────────────────────────────────┐    │  │
-│  │  │  Plinto (3 replicas)                            │    │  │
+│  │  │  Janua (3 replicas)                            │    │  │
 │  │  │  └─> auth.enclii.io                             │    │  │
-│  │  │  └─> Built from: github.com/madfam-io/plinto   │    │  │
+│  │  │  └─> Built from: github.com/madfam-io/janua   │    │  │
 │  │  │  └─> Deployed via: enclii deploy                │    │  │
 │  │  │  └─> Authenticates: Enclii itself!              │    │  │
 │  │  └─────────────────────────────────────────────────┘    │  │
@@ -166,12 +166,12 @@ This document outlines the **plan** for how Enclii will deploy **itself** using 
 │  │  Shared Infrastructure                                   │  │
 │  │  ┌────────────────────────────────────────────────┐     │  │
 │  │  │  Ubicloud PostgreSQL (managed, HA)            │     │  │
-│  │  │  └─> Used by: Enclii + Plinto                 │     │  │
+│  │  │  └─> Used by: Enclii + Janua                 │     │  │
 │  │  └────────────────────────────────────────────────┘     │  │
 │  │                                                           │  │
 │  │  ┌────────────────────────────────────────────────┐     │  │
 │  │  │  Redis Sentinel (self-hosted, 3 nodes)        │     │  │
-│  │  │  └─> Used by: Enclii + Plinto                 │     │  │
+│  │  │  └─> Used by: Enclii + Janua                 │     │  │
 │  │  └────────────────────────────────────────────────┘     │  │
 │  │                                                           │  │
 │  │  ┌────────────────────────────────────────────────┐     │  │
@@ -187,11 +187,11 @@ This document outlines the **plan** for how Enclii will deploy **itself** using 
 ```
 User visits app.enclii.io
     │
-    ├─> Redirected to auth.enclii.io (Plinto)
+    ├─> Redirected to auth.enclii.io (Janua)
     │       │
     │       ├─> User logs in (password or SSO)
     │       │
-    │       └─> Plinto issues ID token (RS256 JWT)
+    │       └─> Janua issues ID token (RS256 JWT)
     │
     ├─> Redirect back to app.enclii.io/callback
     │       │
@@ -203,12 +203,12 @@ User visits app.enclii.io
     │       │
     │       ├─> Include ID token in Authorization header
     │       │
-    │       ├─> Switchyard API validates token via Plinto JWKS
+    │       ├─> Switchyard API validates token via Janua JWKS
     │       │
     │       └─> Request succeeds (user authenticated!)
 ```
 
-**Key Point:** Enclii authenticates its own users via Plinto. We eat our own dog food.
+**Key Point:** Enclii authenticates its own users via Janua. We eat our own dog food.
 
 ---
 
@@ -222,8 +222,8 @@ The **first deployment** of Enclii must be manual (chicken-and-egg problem). Aft
 
 1. **Deploy Infrastructure** (Ubicloud PostgreSQL, Redis Sentinel, R2)
 2. **Deploy Enclii Control Plane Manually** (using `kubectl apply -k infra/k8s/base`)
-3. **Deploy Plinto Manually** (using `kubectl apply -f dogfooding/plinto.yaml`)
-4. **Configure Plinto** (create OAuth clients for Enclii)
+3. **Deploy Janua Manually** (using `kubectl apply -f dogfooding/janua.yaml`)
+4. **Configure Janua** (create OAuth clients for Enclii)
 5. **Switch to Self-Service** (all future deploys via `enclii deploy`)
 
 ### Phase 2: Dogfooding (Forever After)
@@ -237,8 +237,8 @@ Once bootstrapped, **all deployments** happen via Enclii itself:
 # Deploy Switchyard UI (from GitHub)
 ./bin/enclii deploy --service switchyard-ui --env production
 
-# Deploy Plinto (from separate repo!)
-./bin/enclii deploy --service plinto --env production
+# Deploy Janua (from separate repo!)
+./bin/enclii deploy --service janua --env production
 
 # Deploy landing page
 ./bin/enclii deploy --service landing-page --env production
@@ -277,24 +277,24 @@ enclii/
 ├── dogfooding/                  # ⭐ Service specs for self-hosting
 │   ├── switchyard-api.yaml      # Enclii API spec
 │   ├── switchyard-ui.yaml       # Enclii UI spec
-│   ├── plinto.yaml              # Plinto spec (separate repo!)
+│   ├── janua.yaml              # Janua spec (separate repo!)
 │   ├── landing-page.yaml        # Landing page spec
 │   ├── docs-site.yaml           # Docs spec
 │   └── status-page.yaml         # Status page spec
 └── DOGFOODING_GUIDE.md          # This file
 ```
 
-### Plinto Repository (`github.com/madfam-io/plinto`)
+### Janua Repository (`github.com/madfam-io/janua`)
 
 ```
-plinto/
-├── src/                         # Plinto source code
+janua/
+├── src/                         # Janua source code
 ├── Dockerfile                   # Container build
 ├── docker-compose.yml           # Local dev
 └── README.md
 ```
 
-**Key Insight:** Plinto lives in a **separate repository**, but is deployed on Enclii via the `dogfooding/plinto.yaml` spec. This demonstrates Enclii's ability to build from any GitHub repository.
+**Key Insight:** Janua lives in a **separate repository**, but is deployed on Enclii via the `dogfooding/janua.yaml` spec. This demonstrates Enclii's ability to build from any GitHub repository.
 
 ---
 
@@ -305,7 +305,7 @@ plinto/
 - Hetzner account with 3x CPX31 nodes (Kubernetes cluster)
 - Cloudflare account with Tunnel configured
 - Ubicloud account with managed PostgreSQL
-- GitHub accounts with access to `madfam-io/enclii` and `madfam-io/plinto`
+- GitHub accounts with access to `madfam-io/enclii` and `madfam-io/janua`
 
 ### Step 1: Bootstrap Infrastructure (Week 1)
 
@@ -356,17 +356,17 @@ curl https://api.enclii.io/health
 
 **Result:** Enclii control plane running, but not self-hosted yet.
 
-### Step 3: Bootstrap Plinto (Week 3)
+### Step 3: Bootstrap Janua (Week 3)
 
-Deploy Plinto manually **one time**:
+Deploy Janua manually **one time**:
 
 ```bash
-# Clone Plinto repository
-git clone https://github.com/madfam-io/plinto
-cd plinto
+# Clone Janua repository
+git clone https://github.com/madfam-io/janua
+cd janua
 
 # Configure secrets
-kubectl create secret generic plinto-secrets \
+kubectl create secret generic janua-secrets \
   --from-literal=database-url="postgres://..." \
   --from-literal=redis-url="redis://..." \
   --from-literal=session-secret="$(openssl rand -base64 32)" \
@@ -376,28 +376,28 @@ kubectl create secret generic plinto-secrets \
   --from-literal=smtp-password="SG...." \
   -n enclii-platform
 
-# Deploy Plinto
-kubectl apply -f ../enclii/dogfooding/plinto.yaml
+# Deploy Janua
+kubectl apply -f ../enclii/dogfooding/janua.yaml
 
 # Wait for readiness
-kubectl wait --for=condition=ready pod -l app=plinto -n enclii-platform --timeout=300s
+kubectl wait --for=condition=ready pod -l app=janua -n enclii-platform --timeout=300s
 
 # Verify
 curl https://auth.enclii.io/health
 # {"status": "ok"}
 ```
 
-**Result:** Plinto running on Enclii infrastructure.
+**Result:** Janua running on Enclii infrastructure.
 
-### Step 4: Configure Plinto OAuth Clients (Week 3)
+### Step 4: Configure Janua OAuth Clients (Week 3)
 
-Create OAuth clients in Plinto for Enclii:
+Create OAuth clients in Janua for Enclii:
 
 ```bash
 # Create Enclii Web UI client (public)
 curl -X POST https://auth.enclii.io/v1/clients \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $PLINTO_ADMIN_TOKEN" \
+  -H "Authorization: Bearer $JANUA_ADMIN_TOKEN" \
   -d '{
     "client_id": "enclii-web-ui",
     "client_name": "Enclii Web Dashboard",
@@ -416,7 +416,7 @@ curl -X POST https://auth.enclii.io/v1/clients \
 # Create Enclii API client (confidential)
 curl -X POST https://auth.enclii.io/v1/clients \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $PLINTO_ADMIN_TOKEN" \
+  -H "Authorization: Bearer $JANUA_ADMIN_TOKEN" \
   -d '{
     "client_id": "enclii-api",
     "client_name": "Enclii Control Plane API",
@@ -428,11 +428,11 @@ curl -X POST https://auth.enclii.io/v1/clients \
   }'
 ```
 
-**Result:** Plinto configured to authenticate Enclii.
+**Result:** Janua configured to authenticate Enclii.
 
-### Step 5: Update Enclii to Use Plinto (Week 4)
+### Step 5: Update Enclii to Use Janua (Week 4)
 
-Update Switchyard API to validate Plinto tokens:
+Update Switchyard API to validate Janua tokens:
 
 ```bash
 # apps/switchyard-api/main.go
@@ -442,7 +442,7 @@ jwtManager := auth.NewJWTManager(jwksProvider)
 r.Use(jwtManager.AuthMiddleware())
 ```
 
-Update Switchyard UI to use Plinto OAuth:
+Update Switchyard UI to use Janua OAuth:
 
 ```bash
 # apps/switchyard-ui/lib/auth-config.ts
@@ -455,7 +455,7 @@ export const authConfig = {
 }
 ```
 
-**Result:** Enclii authenticates via Plinto (but still deployed manually).
+**Result:** Enclii authenticates via Janua (but still deployed manually).
 
 ### Step 6: Migrate to Self-Service Deployment (Week 5)
 
@@ -470,7 +470,7 @@ cd enclii
 # Import service specs
 ./bin/enclii service create --file dogfooding/switchyard-api.yaml
 ./bin/enclii service create --file dogfooding/switchyard-ui.yaml
-./bin/enclii service create --file dogfooding/plinto.yaml
+./bin/enclii service create --file dogfooding/janua.yaml
 ./bin/enclii service create --file dogfooding/landing-page.yaml
 ./bin/enclii service create --file dogfooding/docs-site.yaml
 ./bin/enclii service create --file dogfooding/status-page.yaml
@@ -478,7 +478,7 @@ cd enclii
 # Deploy everything via Enclii
 ./bin/enclii deploy --service switchyard-api --env production
 ./bin/enclii deploy --service switchyard-ui --env production
-./bin/enclii deploy --service plinto --env production
+./bin/enclii deploy --service janua --env production
 ./bin/enclii deploy --service landing-page --env production
 ./bin/enclii deploy --service docs-site --env production
 ./bin/enclii deploy --service status-page --env production
@@ -488,7 +488,7 @@ cd enclii
 # NAME              STATUS     REPLICAS  AGE
 # switchyard-api    Running    3/3       5m
 # switchyard-ui     Running    2/2       5m
-# plinto            Running    3/3       5m
+# janua            Running    3/3       5m
 # landing-page      Running    2/2       5m
 # docs-site         Running    2/2       5m
 # status-page       Running    2/2       5m
@@ -557,7 +557,7 @@ Customers can **verify** our claims:
 # Customer checks our public API
 curl https://api.enclii.io/health
 
-# Customer checks Plinto JWKS endpoint
+# Customer checks Janua JWKS endpoint
 curl https://auth.enclii.io/.well-known/jwks.json
 
 # Customer checks status page
@@ -571,14 +571,14 @@ They can see we're not lying. We really do run on Enclii.
 
 ## Troubleshooting
 
-### Issue: "Enclii API won't start after Plinto integration"
+### Issue: "Enclii API won't start after Janua integration"
 
 **Symptoms:**
 - Switchyard API returns 401 Unauthorized
-- Logs show: "failed to fetch JWKS from Plinto"
+- Logs show: "failed to fetch JWKS from Janua"
 
 **Root Cause:**
-- Plinto not accessible from Switchyard API pods
+- Janua not accessible from Switchyard API pods
 - NetworkPolicy blocking traffic
 
 **Fix:**
@@ -586,11 +586,11 @@ They can see we're not lying. We really do run on Enclii.
 # Check NetworkPolicy
 kubectl get netpol -n enclii-platform
 
-# Verify Plinto is reachable
+# Verify Janua is reachable
 kubectl exec -it -n enclii-platform deployment/switchyard-api -- \
-  curl http://plinto.enclii-platform.svc.cluster.local:8000/.well-known/jwks.json
+  curl http://janua.enclii-platform.svc.cluster.local:8000/.well-known/jwks.json
 
-# If blocked, update NetworkPolicy to allow egress to Plinto
+# If blocked, update NetworkPolicy to allow egress to Janua
 ```
 
 ### Issue: "Circular dependency during bootstrap"
@@ -630,10 +630,10 @@ spec:
           onlyBefore: "06:00 UTC"  # Only deploy before 6am UTC
 ```
 
-### Issue: "Plinto tokens not validating"
+### Issue: "Janua tokens not validating"
 
 **Symptoms:**
-- User logs into Plinto successfully
+- User logs into Janua successfully
 - Switchyard API rejects tokens with "invalid signature"
 
 **Root Cause:**
@@ -652,7 +652,7 @@ curl -X POST https://api.enclii.io/debug/jwks/refresh \
 
 # Check clock skew
 kubectl exec -it -n enclii-platform deployment/switchyard-api -- date
-kubectl exec -it -n enclii-platform deployment/plinto -- date
+kubectl exec -it -n enclii-platform deployment/janua -- date
 # Should be within 1-2 seconds
 ```
 
@@ -673,17 +673,17 @@ kubectl exec -it -n enclii-platform deployment/plinto -- date
 - [ ] Configure secrets and networking
 - [ ] Verify control plane health
 
-### Week 4: Bootstrap Plinto
-- [ ] Deploy Plinto manually
+### Week 4: Bootstrap Janua
+- [ ] Deploy Janua manually
 - [ ] Create OAuth clients for Enclii
-- [ ] Update Enclii to use Plinto auth
+- [ ] Update Enclii to use Janua auth
 - [ ] Test full OAuth flow
 
 ### Week 5: Migrate to Dogfooding
 - [ ] Import service specs into Enclii
 - [ ] Redeploy Switchyard API via `enclii deploy`
 - [ ] Redeploy Switchyard UI via `enclii deploy`
-- [ ] Redeploy Plinto via `enclii deploy`
+- [ ] Redeploy Janua via `enclii deploy`
 - [ ] Deploy landing page, docs, status page
 - [ ] Enable continuous deployment
 
@@ -698,7 +698,7 @@ kubectl exec -it -n enclii-platform deployment/plinto -- date
 
 ## Conclusion
 
-Dogfooding is **not optional**—it's a critical competitive advantage. By running Enclii on Enclii and authenticating with Plinto, we:
+Dogfooding is **not optional**—it's a critical competitive advantage. By running Enclii on Enclii and authenticating with Janua, we:
 
 1. **Validate our product** before customers do
 2. **Build customer confidence** through authentic usage

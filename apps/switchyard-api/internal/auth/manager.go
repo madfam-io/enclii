@@ -43,7 +43,7 @@ func NewAuthManager(
 		)
 
 	case "oidc":
-		// Production mode - OIDC authentication (after Plinto is deployed)
+		// Production mode - OIDC authentication (after Janua is deployed)
 		logrus.WithFields(logrus.Fields{
 			"issuer":       cfg.OIDCIssuer,
 			"client_id":    cfg.OIDCClientID,

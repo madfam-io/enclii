@@ -16,7 +16,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// OIDCManager handles authentication via external OIDC providers (like Plinto)
+// OIDCManager handles authentication via external OIDC providers (like Janua)
 type OIDCManager struct {
 	provider     *oidc.Provider
 	verifier     *oidc.IDTokenVerifier

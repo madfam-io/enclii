@@ -18,7 +18,7 @@
 - ✅ **Production-ready patterns** - Proper error handling, structured logging, health checks, metrics
 - ⚠️ **Authentication bug** - middleware/auth.go validates HMAC instead of RSA (security gap)
 - ⚠️ **Critical missing components** - Reconcilers (stub), Roundhouse (missing), Junctions (stub), Timetable (missing), Signal (partial), Waybill (missing)
-- ⚠️ **Plinto integration** - Not yet implemented (planned for Weeks 3-4)
+- ⚠️ **Janua integration** - Not yet implemented (planned for Weeks 3-4)
 - ⚠️ **UI coverage** - Minimal (6 TSX files, mock data only)
 
 **Overall Code Quality:** 7.5/10 (Alpha stage expectations)
@@ -190,7 +190,7 @@ enclii/
    
 ❌ Signing package is stub (no implementation)  
 ❌ Monitoring only partial (basic metrics, missing SLO tracking)  
-⚠️ JWKS endpoint not implemented (needed for Plinto)  
+⚠️ JWKS endpoint not implemented (needed for Janua)  
 
 ---
 
@@ -630,8 +630,8 @@ make health-check     # Check all environments
    - 2 replicas, 2-8 autoscaling
    - Exposed at app.enclii.io
 
-3. **`plinto.yaml`** - Authentication
-   - Built from separate repo: github.com/madfam-io/plinto
+3. **`janua.yaml`** - Authentication
+   - Built from separate repo: github.com/madfam-io/janua
    - 3 replicas (HA), 3-10 autoscaling
    - Exposed at auth.enclii.io
 
@@ -647,7 +647,7 @@ make health-check     # Check all environments
    - Uptime tracking
    - Exposed at status.enclii.io
 
-**Status:** Specs complete, awaiting infrastructure (Weeks 1-2) and Plinto integration (Weeks 3-4)
+**Status:** Specs complete, awaiting infrastructure (Weeks 1-2) and Janua integration (Weeks 3-4)
 
 ---
 
@@ -721,7 +721,7 @@ make health-check     # Check all environments
 
 ### Moderate Gaps (Days of Work)
 
-⚠️ **Plinto Authentication Integration** - Not started
+⚠️ **Janua Authentication Integration** - Not started
 - JWT generation: Done
 - JWKS endpoint: Missing
 - OAuth handlers: Missing
@@ -803,7 +803,7 @@ make health-check     # Check all environments
 | **PR Approval** | Compliance | ✅ 90% | Webhook verification (1 day) |
 | **Multi-tenancy** | Architecture | ✅ 85% | Enhanced isolation (2 days) |
 | **Dogfooding** | Business | ⚠️ 0% | Deployment (planned Weeks 5-6) |
-| **Plinto Integration** | Auth | ⚠️ 0% | JWKS, OAuth (3 weeks) |
+| **Janua Integration** | Auth | ⚠️ 0% | JWKS, OAuth (3 weeks) |
 
 ---
 
@@ -863,7 +863,7 @@ make health-check     # Check all environments
 
 ❌ **Documentation vs Code Discrepancy**
 - Documentation describes features not in code
-- Plinto integration described but not started
+- Janua integration described but not started
 - Some planned features described as complete
 
 ### Metrics
@@ -891,12 +891,12 @@ make health-check     # Check all environments
 | Monitoring | 50% | Framework ready, dashboards missing |
 | CLI | 70% | Core commands work, advanced features missing |
 | UI | 20% | Mostly mockups, not functional |
-| Plinto Auth | 0% | Not started |
+| Janua Auth | 0% | Not started |
 | Infrastructure | 60% | K8s ready, cloud provisioning missing (Terraform) |
 
 **Timeline to Production: 6-8 weeks** (realistic)
 - Week 1-2: Fix critical bugs, infrastructure
-- Week 3-4: Plinto integration
+- Week 3-4: Janua integration
 - Week 5-6: Dogfooding, missing components
 - Week 7-8: Load testing, hardening, launch
 
@@ -926,7 +926,7 @@ make health-check     # Check all environments
 
 ### Short Term (Next 2 Weeks)
 
-4. **Plinto Integration**
+4. **Janua Integration**
    - Implement JWKS endpoint
    - Add OAuth handlers
    - Frontend oidc-client-ts integration
@@ -981,12 +981,12 @@ make health-check     # Check all environments
 1. **Critical:** Auth middleware bug (1 day fix)
 2. **Major:** Missing components (Timetable, Waybill, etc.) - 4-6 weeks
 3. **UI:** Mostly stubs - 3-4 weeks  
-4. **Plinto:** Not started - 2-3 weeks
+4. **Janua:** Not started - 2-3 weeks
 5. **Infrastructure:** No Terraform - 2-3 weeks
 
 **Estimated path to production-ready:** 6-8 weeks with 3 engineers, 8-10 weeks with 2 engineers.
 
-**Recommend:** Fix critical bug immediately, prioritize Plinto integration and UI completion for MVP launch.
+**Recommend:** Fix critical bug immediately, prioritize Janua integration and UI completion for MVP launch.
 
 ---
 

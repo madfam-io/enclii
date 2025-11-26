@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 /**
  * OAuth Callback Page
  *
- * Handles the redirect from the OIDC provider (Janua/Plinto) after authentication.
+ * Handles the redirect from the OIDC provider (Janua/Janua) after authentication.
  * Exchanges the authorization code for tokens and establishes the session.
  */
 export default function AuthCallbackPage() {

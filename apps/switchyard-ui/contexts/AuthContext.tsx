@@ -12,7 +12,7 @@ import React, {
 /**
  * Authentication Context for Enclii Switchyard UI
  *
- * Supports both local authentication and OIDC/OAuth via Janua/Plinto.
+ * Supports both local authentication and OIDC/OAuth via Janua/Janua.
  *
  * Authentication Modes:
  * - Local: Email/password directly to Switchyard API

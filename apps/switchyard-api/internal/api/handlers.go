@@ -116,14 +116,14 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	{
 		// Auth routes - Different endpoints based on auth mode
 		if h.config.AuthMode == "oidc" {
-			// ===== OIDC Mode (Production with Plinto) =====
+			// ===== OIDC Mode (Production with Janua) =====
 			// Redirect to OIDC provider for login
 			v1.GET("/auth/login", h.OIDCLogin)
 
 			// OAuth callback from OIDC provider
 			v1.GET("/auth/callback", h.OIDCCallback)
 
-			// Registration is handled by OIDC provider (Plinto)
+			// Registration is handled by OIDC provider (Janua)
 			// POST /auth/register is not available in OIDC mode
 
 		} else {

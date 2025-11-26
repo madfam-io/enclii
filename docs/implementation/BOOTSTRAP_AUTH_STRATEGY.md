@@ -1,12 +1,12 @@
-# Bootstrap Authentication Strategy: Solving the Enclii ↔ Plinto Chicken-and-Egg Problem
+# Bootstrap Authentication Strategy: Solving the Enclii ↔ Janua Chicken-and-Egg Problem
 
 **Date:** November 21, 2025
 **Status:** PHASE C COMPLETE - Ready for Testing
-**Priority:** CRITICAL for Weeks 3-4 (Plinto Integration)
+**Priority:** CRITICAL for Weeks 3-4 (Janua Integration)
 
 **Implementation Summary:**
 - ✅ Phase A (Local Auth): Already working
-- ⚠️ Phase B (Deploy Plinto): Ready for deployment
+- ⚠️ Phase B (Deploy Janua): Ready for deployment
 - ✅ Phase C (OIDC Mode): **COMPLETE** - Compiles successfully
 - ❌ End-to-End Testing: Not performed (requires database setup)
 - ⚠️ Migration 005: SQL correct, not validated against live database
@@ -16,7 +16,7 @@
 
 ## The Problem: Circular Dependency
 
-**You cannot use Plinto to secure Enclii if Enclii is required to host Plinto.**
+**You cannot use Janua to secure Enclii if Enclii is required to host Janua.**
 
 ```
 ┌─────────────────────────────────────────┐
@@ -27,12 +27,12 @@
 │     │                                   │
 │     │ needs auth from ──────┐          │
 │     │                       ▼          │
-│     │                   Plinto (Auth)  │
+│     │                   Janua (Auth)  │
 │     │                       │          │
 │     │ hosts ◄───────────────┘          │
 │     │                                   │
-│  Cannot deploy Plinto without Enclii   │
-│  Cannot secure Enclii without Plinto   │
+│  Cannot deploy Janua without Enclii   │
+│  Cannot secure Enclii without Janua   │
 └─────────────────────────────────────────┘
 ```
 
@@ -55,7 +55,7 @@
 
 **This IS your "Bootstrap Mode" - it's already working!**
 
-### ✅ What's Implemented (OIDC/Plinto Integration) - Phase C
+### ✅ What's Implemented (OIDC/Janua Integration) - Phase C
 
 **Status:** CODE COMPLETE - Testing Required
 
@@ -100,7 +100,7 @@ ENCLII_REDIS_HOST=localhost
 ENCLII_REDIS_PORT=6379
 
 # Auth works via local JWT
-# No Plinto dependency
+# No Janua dependency
 ```
 
 **Authentication Flow:**
@@ -133,29 +133,29 @@ VALUES (
 
 ---
 
-### Phase B: Deploy Plinto (Using Bootstrap Admin) 🔄 NEXT STEP
+### Phase B: Deploy Janua (Using Bootstrap Admin) 🔄 NEXT STEP
 
-**Goal:** Deploy Plinto container using the local admin account
+**Goal:** Deploy Janua container using the local admin account
 
 **Prerequisites:**
 - ✅ Enclii running with local auth (Phase A)
 - ✅ Bootstrap admin account created
-- ✅ Plinto service spec ready (`dogfooding/plinto.yaml`)
+- ✅ Janua service spec ready (`dogfooding/janua.yaml`)
 
 **Steps:**
 1. Log in to Enclii dashboard using bootstrap admin
 2. Navigate to "Deploy Service"
-3. Deploy Plinto from `dogfooding/plinto.yaml`:
+3. Deploy Janua from `dogfooding/janua.yaml`:
    ```yaml
    apiVersion: enclii.dev/v1
    kind: Service
    metadata:
-     name: plinto
+     name: janua
      project: enclii-platform
    spec:
      source:
        type: git
-       repository: https://github.com/madfam-io/plinto
+       repository: https://github.com/madfam-io/janua
        branch: main
      build:
        type: dockerfile
@@ -171,13 +171,13 @@ VALUES (
        maxReplicas: 10
    ```
 4. Wait for deployment to complete
-5. Plinto is now live at `https://auth.enclii.io`
+5. Janua is now live at `https://auth.enclii.io`
 
-**Configure Plinto:**
+**Configure Janua:**
 ```bash
-# Create Enclii as an OAuth client in Plinto
+# Create Enclii as an OAuth client in Janua
 curl -X POST https://auth.enclii.io/admin/clients \
-  -H "Authorization: Bearer <plinto-admin-token>" \
+  -H "Authorization: Bearer <janua-admin-token>" \
   -d '{
     "client_id": "enclii-platform",
     "client_name": "Enclii Platform",
@@ -189,16 +189,16 @@ curl -X POST https://auth.enclii.io/admin/clients \
 ```
 
 **Action Items:**
-- ⚠️ Deploy Plinto via Enclii UI or CLI
+- ⚠️ Deploy Janua via Enclii UI or CLI
 - ⚠️ Configure DNS for `auth.enclii.io`
-- ⚠️ Register Enclii as OAuth client in Plinto
+- ⚠️ Register Enclii as OAuth client in Janua
 - ⚠️ Store client credentials securely (Vault/Lockbox)
 
 ---
 
 ### Phase C: The Switch (OIDC Mode) ✅ CODE COMPLETE
 
-**Goal:** Reconfigure Enclii to use Plinto for authentication
+**Goal:** Reconfigure Enclii to use Janua for authentication
 
 **Current Status:** **IMPLEMENTED - Testing Required**
 
@@ -435,7 +435,7 @@ func NewAuthManager(
 ```go
 // Add to existing file
 
-// OIDCLogin redirects to Plinto for authentication
+// OIDCLogin redirects to Janua for authentication
 func (h *Handler) OIDCLogin(c *gin.Context) {
     if h.config.AuthMode != "oidc" {
         c.JSON(http.StatusBadRequest, gin.H{
@@ -458,12 +458,12 @@ func (h *Handler) OIDCLogin(c *gin.Context) {
     // Store state in session/cookie
     c.SetCookie("oauth_state", state, 300, "/", "", true, true)
 
-    // Redirect to Plinto
+    // Redirect to Janua
     authURL := oidcMgr.GetAuthURL(state)
     c.Redirect(http.StatusFound, authURL)
 }
 
-// OIDCCallback handles the OAuth callback from Plinto
+// OIDCCallback handles the OAuth callback from Janua
 func (h *Handler) OIDCCallback(c *gin.Context) {
     // Verify state parameter
     savedState, err := c.Cookie("oauth_state")
@@ -513,7 +513,7 @@ func (h *Handler) OIDCCallback(c *gin.Context) {
 **File:** `apps/switchyard-api/internal/api/auth_handlers.go` (UPDATE)
 
 ```go
-// JWKS endpoint for Plinto to validate our tokens (if needed)
+// JWKS endpoint for Janua to validate our tokens (if needed)
 func (h *Handler) JWKS(c *gin.Context) {
     jwtMgr, ok := h.auth.(*auth.JWTManager)
     if !ok {
@@ -550,7 +550,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
             v1.GET("/auth/jwks", h.JWKS) // NEW
         } else if h.config.AuthMode == "oidc" {
             // OIDC auth
-            v1.GET("/auth/login", h.OIDCLogin) // Redirect to Plinto
+            v1.GET("/auth/login", h.OIDCLogin) // Redirect to Janua
             v1.GET("/auth/callback", h.OIDCCallback) // OAuth callback
             // Register endpoint disabled in OIDC mode
         }
@@ -576,7 +576,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 ENCLII_AUTH_MODE=oidc
 ENCLII_OIDC_ISSUER=https://auth.enclii.io
 ENCLII_OIDC_CLIENT_ID=enclii-platform
-ENCLII_OIDC_CLIENT_SECRET=<secret-from-plinto>
+ENCLII_OIDC_CLIENT_SECRET=<secret-from-janua>
 ENCLII_OIDC_REDIRECT_URL=https://api.enclii.io/v1/auth/callback
 ```
 
@@ -598,7 +598,7 @@ ENCLII_OIDC_REDIRECT_URL=https://api.enclii.io/v1/auth/callback
 
 3. **Verify OIDC Flow:**
    ```bash
-   # Should redirect to Plinto
+   # Should redirect to Janua
    curl -i https://api.enclii.io/v1/auth/login
    ```
 
@@ -631,8 +631,8 @@ if err != nil {
 **Solution 2: Account Linking UI**
 - Provide UI to link local account to OIDC account
 - User logs in with local credentials
-- User clicks "Link to Plinto"
-- Redirect to Plinto OAuth flow
+- User clicks "Link to Janua"
+- Redirect to Janua OAuth flow
 - On callback, link accounts in database
 
 ---
@@ -647,12 +647,12 @@ if err != nil {
 - [ ] **TODO:** Auto-create bootstrap admin on first startup
 - [ ] **TODO:** Add `ENCLII_BOOTSTRAP_ADMIN_EMAIL` env var
 
-### Phase B (Deploy Plinto) 🔄
-- [ ] Deploy Plinto via Enclii (using bootstrap admin)
+### Phase B (Deploy Janua) 🔄
+- [ ] Deploy Janua via Enclii (using bootstrap admin)
 - [ ] Configure DNS for `auth.enclii.io`
-- [ ] Register Enclii as OAuth client in Plinto
+- [ ] Register Enclii as OAuth client in Janua
 - [ ] Store OAuth credentials in Vault/Lockbox
-- [ ] Test Plinto login flow independently
+- [ ] Test Janua login flow independently
 
 ### Phase C (OIDC Integration) ❌
 - [ ] Add `AuthMode` configuration field
@@ -672,7 +672,7 @@ if err != nil {
 - [ ] Remove bootstrap admin account (optional)
 - [ ] Monitor OIDC authentication metrics
 - [ ] Set up alerting for OIDC provider downtime
-- [ ] Implement fallback to local auth if Plinto is down
+- [ ] Implement fallback to local auth if Janua is down
 
 ---
 
@@ -699,7 +699,7 @@ CREATE INDEX idx_users_oidc_subject ON users(oidc_subject);
 1. **State Parameter:** CSRF protection for OAuth flow
 2. **Token Storage:** Store OAuth tokens securely (encrypted in DB or memory only)
 3. **Session Hijacking:** Continue using Redis for session revocation
-4. **Fallback Risk:** If Plinto goes down, provide emergency local auth fallback
+4. **Fallback Risk:** If Janua goes down, provide emergency local auth fallback
 5. **Admin Lockout:** Always keep one local super-admin account as emergency access
 
 ---
@@ -713,11 +713,11 @@ CREATE INDEX idx_users_oidc_subject ON users(oidc_subject);
 
 ### Integration Tests
 - [ ] Full OAuth flow with mock OIDC provider
-- [ ] Token validation against real Plinto instance
+- [ ] Token validation against real Janua instance
 - [ ] User migration from local to OIDC
 
 ### Manual Testing Checklist
-- [ ] Login via Plinto redirects correctly
+- [ ] Login via Janua redirects correctly
 - [ ] Callback creates/updates user in Enclii
 - [ ] Existing local users can access after OIDC switch
 - [ ] API endpoints still work with OIDC tokens
@@ -730,7 +730,7 @@ CREATE INDEX idx_users_oidc_subject ON users(oidc_subject);
 | Phase | Effort | When |
 |-------|--------|------|
 | Phase A (Bootstrap) | ✅ **Complete** | Already done |
-| Phase B (Deploy Plinto) | 2-3 days | Week 3 |
+| Phase B (Deploy Janua) | 2-3 days | Week 3 |
 | Phase C (OIDC Integration) | **5-7 days** | Week 3-4 |
 | Testing & Rollout | 2-3 days | Week 4 |
 | **Total** | **9-13 days** | **Weeks 3-4** |
@@ -762,7 +762,7 @@ curl -X POST https://api.enclii.io/v1/auth/login \
 **The bootstrap problem has been solved with a phased approach:**
 
 1. ✅ **Phase A is complete** - Local JWT auth works
-2. 🔄 **Phase B is ready** - Deploy Plinto using local admin (infrastructure required)
+2. 🔄 **Phase B is ready** - Deploy Janua using local admin (infrastructure required)
 3. ✅ **Phase C code complete** - OIDC integration implemented (NOT TESTED)
 
 **Implementation Status (November 21, 2025 - Updated):**
@@ -789,5 +789,5 @@ Before production use, you MUST:
 5. Perform end-to-end testing of authentication flows
 
 **Critical Success Factor:** Auth mode switching with fallback capability is implemented,
-so you can revert to local auth if Plinto has issues. This safety mechanism is code-complete
+so you can revert to local auth if Janua has issues. This safety mechanism is code-complete
 but untested.

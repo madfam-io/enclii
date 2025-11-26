@@ -111,7 +111,7 @@ Features: Multi-tenant SaaS ready with 100 free custom domains
 | **Secrets in plaintext** | SOC 2 violation | 🔴 Critical | Sealed Secrets |
 | **No object storage** | Bandwidth costs | 🔴 Critical | Cloudflare R2 |
 | **Prometheus not deployed** | Cannot monitor | 🔴 Critical | Deploy Prometheus Operator |
-| **No auth UI** | JWT infra exists but no login | 🔴 Critical | Deploy Plinto |
+| **No auth UI** | JWT infra exists but no login | 🔴 Critical | Deploy Janua |
 | **No multi-domain SSL** | Cannot scale multi-tenant | 🟠 High | Cloudflare for SaaS |
 
 ---
@@ -450,7 +450,7 @@ spec:
 | **Cloudflare for SaaS** | First 100 custom domains | **$0** |
 | **Redis Sentinel** | Self-hosted HA | **$0** |
 | **Monitoring** | Self-hosted Prometheus/Grafana | **$0** |
-| **Plinto Auth** | Self-hosted | **$0** |
+| **Janua Auth** | Self-hosted | **$0** |
 | **Total** | | **$100/month** |
 
 **Staging Environment:** ~$50/month (50% of production)
@@ -493,13 +493,13 @@ Total: $13,412
 
 ---
 
-## Part 4: Plinto Integration Strategy
+## Part 4: Janua Integration Strategy
 
-### Deploy Plinto Authentication Platform
+### Deploy Janua Authentication Platform
 
 **Timeline:** Week 1-2 (12-16 hours)
 
-Plinto provides:
+Janua provides:
 - ✅ Complete login/signup UI (15 pre-built components)
 - ✅ OAuth 2.0 + SAML 2.0 SSO
 - ✅ Multi-factor authentication (TOTP/SMS/WebAuthn)
@@ -511,18 +511,18 @@ Plinto provides:
 **Deployment:**
 
 ```yaml
-# infra/k8s/base/plinto.yaml
+# infra/k8s/base/janua.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: plinto
+  name: janua
 spec:
   replicas: 3
   template:
     spec:
       containers:
-      - name: plinto
-        image: ghcr.io/madfam-io/plinto:latest
+      - name: janua
+        image: ghcr.io/madfam-io/janua:latest
         env:
         - name: DATABASE_URL
           value: "postgres://ubicloud-connection-string"
@@ -531,9 +531,9 @@ spec:
         - name: JWT_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
-              name: plinto-secret
+              name: janua-secret
               key: jwt-private-key
-        - name: PLINTO_BASE_URL
+        - name: JANUA_BASE_URL
           value: "https://auth.enclii.dev"
 ```
 
@@ -543,11 +543,11 @@ spec:
 // apps/switchyard-api/internal/middleware/auth.go
 func (a *AuthMiddleware) Middleware() gin.HandlerFunc {
     return func(c *gin.Context) {
-        // Support both RS256 (Plinto) and HS256 (internal)
+        // Support both RS256 (Janua) and HS256 (internal)
         token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
             switch token.Method.(type) {
             case *jwt.SigningMethodRSA:
-                return getPlintoPublicKey()  // Fetch from /.well-known/jwks.json
+                return getJanuaPublicKey()  // Fetch from /.well-known/jwks.json
             case *jwt.SigningMethodHMAC:
                 return a.jwtSecret, nil
             }
@@ -601,8 +601,8 @@ func (a *AuthMiddleware) Middleware() gin.HandlerFunc {
 | **3.16: Configure Jaeger** | 2h | $0 |
 | **3.17: Set up alert rules** | 3h | $0 |
 | **3.18: Configure PagerDuty/Opsgenie** | 2h | $10/mo |
-| **3.19: Deploy Plinto auth** | 8h | $0 |
-| **3.20: Integrate Plinto with Switchyard** | 6h | $0 |
+| **3.19: Deploy Janua auth** | 8h | $0 |
+| **3.20: Integrate Janua with Switchyard** | 6h | $0 |
 | **3.21: Deploy Enclii applications** | 4h | $0 |
 | **3.22: Test end-to-end** | 3h | $0 |
 | **Total** | **42h** | **$10/mo** |
@@ -610,7 +610,7 @@ func (a *AuthMiddleware) Middleware() gin.HandlerFunc {
 **Deliverables:**
 - ✅ Complete observability (Prometheus, Grafana, Loki, Jaeger)
 - ✅ Alert rules for SLO violations
-- ✅ Plinto authentication deployed
+- ✅ Janua authentication deployed
 - ✅ Enclii applications running
 - ✅ End-to-end tested
 
@@ -776,7 +776,7 @@ EOF
 # Edit tunnel configuration at dashboard.cloudflare.com
 # Map domains to Kubernetes services:
 # api.enclii.dev → http://switchyard-api.enclii-production.svc.cluster.local:8080
-# auth.enclii.dev → http://plinto.enclii-production.svc.cluster.local:8000
+# auth.enclii.dev → http://janua.enclii-production.svc.cluster.local:8000
 ```
 
 ### 2. Cloudflare for SaaS (Multi-Tenant Domains)
@@ -917,7 +917,7 @@ Kubernetes pods churn IPs constantly:
 
 PostgreSQL has connection limits (default 100):
 - 10 pods × 10 connections each = 100 connections
-- Add Plinto pods → over limit
+- Add Janua pods → over limit
 - Add background workers → over limit
 - Result: "too many clients" errors
 ```
@@ -1004,11 +1004,11 @@ spec:
 
 ### Authentication ✅
 
-- [ ] Plinto deployed (3 replicas)
-- [ ] Plinto connected to Ubicloud PostgreSQL
-- [ ] Plinto connected to Redis Sentinel
-- [ ] JWT validation supports RS256 (Plinto) + HS256 (internal)
-- [ ] Frontend integrated with Plinto React SDK
+- [ ] Janua deployed (3 replicas)
+- [ ] Janua connected to Ubicloud PostgreSQL
+- [ ] Janua connected to Redis Sentinel
+- [ ] JWT validation supports RS256 (Janua) + HS256 (internal)
+- [ ] Frontend integrated with Janua React SDK
 - [ ] OAuth providers configured (Google, GitHub)
 - [ ] MFA enabled for admin accounts
 
@@ -1048,10 +1048,10 @@ spec:
 - [ ] Service specs created for Enclii components (`dogfooding/`)
 - [ ] Enclii API deployed via Enclii itself
 - [ ] Enclii UI deployed via Enclii itself
-- [ ] Plinto deployed via Enclii (from separate repo)
+- [ ] Janua deployed via Enclii (from separate repo)
 - [ ] Landing page, docs, status page deployed via Enclii
 - [ ] Continuous deployment enabled for all services
-- [ ] Plinto OAuth fully integrated (Enclii authenticates with Plinto)
+- [ ] Janua OAuth fully integrated (Enclii authenticates with Janua)
 - [ ] Sales materials updated with dogfooding narrative
 - [ ] Public status page shows Enclii services
 - [ ] Team trained on deploying via `enclii deploy` command
@@ -1069,7 +1069,7 @@ Week 1-2: Infrastructure & Cloud Setup
 ├─ Day 5-6:   Ubicloud PostgreSQL + Redis Sentinel
 ├─ Day 7-8:   Sealed Secrets + DNS
 ├─ Day 9-10:  Prometheus + Grafana + Loki
-├─ Day 11-12: Plinto deployment
+├─ Day 11-12: Janua deployment
 └─ Day 13-14: Enclii applications deployed
 
 Week 3-4: Security Hardening
@@ -1088,7 +1088,7 @@ Week 5-6: Operational Excellence & Dogfooding Setup
 Week 7-8: Testing, Validation & Dogfooding
 ├─ Day 43-46: Test coverage expansion + Deploy Enclii via Enclii
 ├─ Day 47-49: Load testing + Continuous deployment setup
-├─ Day 50-52: Security audit + Plinto OAuth integration testing
+├─ Day 50-52: Security audit + Janua OAuth integration testing
 ├─ Day 53-55: SOC 2 documentation + Sales material update
 └─ Day 56:    🚀 PRODUCTION GO-LIVE (Fully Dogfooded)
 ```
@@ -1167,7 +1167,7 @@ Week 7-8: Testing, Validation & Dogfooding
 - [ ] Infrastructure choice: Hetzner + Cloudflare + Ubicloud?
 - [ ] Budget: $100/month production + $50/month staging?
 - [ ] Timeline: 8 weeks acceptable?
-- [ ] Plinto for auth (vs Auth0/Clerk)?
+- [ ] Janua for auth (vs Auth0/Clerk)?
 - [ ] Security audit: $2,000 third-party test?
 - [ ] Dogfooding approach: Run Enclii on Enclii?
 
@@ -1185,11 +1185,11 @@ This **research-validated architecture** provides:
 6. ✅ **No Vendor Lock-In:** Portable infrastructure (Kubernetes standard)
 7. ✅ **Multi-Tenant Ready:** Built for SaaS from day one
 8. ✅ **Production Grade:** 99.95% uptime SLA, auto-scaling, HA
-9. ✅ **Fully Dogfooded:** Enclii runs on Enclii, authenticated by Plinto
+9. ✅ **Fully Dogfooded:** Enclii runs on Enclii, authenticated by Janua
 
 **5-Year Savings: $125,000+** (vs Railway + Auth0)
 
-**Confidence Signal:** "We run our entire platform on Enclii, authenticated by Plinto. We're our own most demanding customer." — See [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md)
+**Confidence Signal:** "We run our entire platform on Enclii, authenticated by Janua. We're our own most demanding customer." — See [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md)
 
 **Recommended Next Step:** Approve budget and start Week 1 infrastructure provisioning.
 

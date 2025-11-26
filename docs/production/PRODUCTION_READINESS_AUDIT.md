@@ -1,6 +1,6 @@
 # Enclii Production Readiness Audit & Implementation Plan
 **Date:** November 20, 2025
-**Scope:** Full codebase audit for Hetzner + Cloudflare + Ubicloud deployment with Plinto-as-a-Service
+**Scope:** Full codebase audit for Hetzner + Cloudflare + Ubicloud deployment with Janua-as-a-Service
 **Overall Production Readiness:** 70%
 
 ---
@@ -14,7 +14,7 @@ Enclii is **well-positioned for production deployment** with the new infrastruct
 | Component | Readiness | Status | Effort to 100% |
 |-----------|-----------|--------|----------------|
 | **Infrastructure Compatibility** | 75% | 🟡 Good | 1 week |
-| **Plinto Authentication** | 65% | 🟡 Moderate | 2-3 weeks |
+| **Janua Authentication** | 65% | 🟡 Moderate | 2-3 weeks |
 | **Multi-Tenancy** | 70% | 🟡 Good | 1 week |
 | **Database (Ubicloud)** | 95% | ✅ Excellent | 1 day |
 | **Object Storage (R2)** | 40% | 🟠 Gap | 2 days |
@@ -30,7 +30,7 @@ Enclii is **well-positioned for production deployment** with the new infrastruct
 - Ubicloud PostgreSQL: $50
 - Cloudflare: $5 (R2 only)
 - Redis Sentinel: $0 (included)
-- Plinto: $0 (shares infrastructure)
+- Janua: $0 (shares infrastructure)
 
 **5-Year Savings:** $125,000+ vs Railway + Auth0
 
@@ -478,12 +478,12 @@ func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
 
 ---
 
-## Part 2: Plinto Integration (65% Ready)
+## Part 2: Janua Integration (65% Ready)
 
 ### Current Auth System Analysis
 
 **Strengths:**
-- ✅ Already uses RS256 JWT (perfect for Plinto!)
+- ✅ Already uses RS256 JWT (perfect for Janua!)
 - ✅ Database schema has `oidc_sub` field (OIDC-ready)
 - ✅ Session management with Redis
 - ✅ RBAC with roles and project access
@@ -495,32 +495,32 @@ func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
   - `internal/middleware/auth.go` - HS256 (legacy, 216 lines)
   - **ACTION:** Deprecate middleware, use JWTManager everywhere
 
-### Plinto Integration Roadmap
+### Janua Integration Roadmap
 
-#### Phase 3A: Backend Plinto Integration (Week 1)
+#### Phase 3A: Backend Janua Integration (Week 1)
 
-**Step 1: Deploy Plinto**
+**Step 1: Deploy Janua**
 
-**NEW FILE:** `infra/k8s/base/plinto.yaml`
+**NEW FILE:** `infra/k8s/base/janua.yaml`
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: plinto
+  name: janua
   namespace: enclii-production
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: plinto
+      app: janua
   template:
     metadata:
       labels:
-        app: plinto
+        app: janua
     spec:
       containers:
-      - name: plinto
-        image: ghcr.io/madfam-io/plinto:latest
+      - name: janua
+        image: ghcr.io/madfam-io/janua:latest
         ports:
         - containerPort: 8000
           name: http
@@ -529,7 +529,7 @@ spec:
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: plinto-secrets
+              name: janua-secrets
               key: database-url
         # Redis (Shared Sentinel)
         - name: REDIS_URL
@@ -540,22 +540,22 @@ spec:
         - name: JWT_PRIVATE_KEY
           valueFrom:
             secretKeyRef:
-              name: plinto-secrets
+              name: janua-secrets
               key: jwt-private-key
         - name: JWT_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
-              name: plinto-secrets
+              name: janua-secrets
               key: jwt-public-key
         # OAuth Configuration
-        - name: PLINTO_BASE_URL
+        - name: JANUA_BASE_URL
           value: "https://auth.enclii.dev"
-        - name: PLINTO_ALLOWED_ORIGINS
+        - name: JANUA_ALLOWED_ORIGINS
           value: "https://app.enclii.dev,https://enclii.dev"
         # Feature Flags
-        - name: PLINTO_ENABLE_SAML
+        - name: JANUA_ENABLE_SAML
           value: "true"
-        - name: PLINTO_ENABLE_MFA
+        - name: JANUA_ENABLE_MFA
           value: "true"
         resources:
           requests:
@@ -580,11 +580,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: plinto
+  name: janua
   namespace: enclii-production
 spec:
   selector:
-    app: plinto
+    app: janua
   ports:
   - port: 8000
     targetPort: 8000
@@ -715,7 +715,7 @@ func (h *OAuthHandler) InitiateLogin(c *gin.Context) {
 	// Store state (TODO: Use Redis with TTL)
 	h.stateStore[state] = time.Now().Format(time.RFC3339)
 
-	// Redirect to Plinto
+	// Redirect to Janua
 	authURL := h.config.AuthCodeURL(state)
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
 }
@@ -854,7 +854,7 @@ func (s *AuthService) FindOrCreateOIDCUser(ctx context.Context, oidcSub, email, 
 
 ---
 
-#### Phase 3B: Frontend Plinto Integration (3-4 days)
+#### Phase 3B: Frontend Janua Integration (3-4 days)
 
 **Step 1: Install Dependencies**
 
@@ -884,8 +884,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const oidcConfig: UserManagerSettings = {
-  authority: process.env.NEXT_PUBLIC_PLINTO_ISSUER || 'https://auth.enclii.dev',
-  client_id: process.env.NEXT_PUBLIC_PLINTO_CLIENT_ID || 'enclii-web',
+  authority: process.env.NEXT_PUBLIC_JANUA_ISSUER || 'https://auth.enclii.dev',
+  client_id: process.env.NEXT_PUBLIC_JANUA_CLIENT_ID || 'enclii-web',
   redirect_uri: `${window.location.origin}/auth/callback`,
   post_logout_redirect_uri: `${window.location.origin}/`,
   response_type: 'code',
@@ -1035,7 +1035,7 @@ export default function LoginPage() {
           onClick={login}
           className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
         >
-          Sign in with Plinto
+          Sign in with Janua
         </button>
       </div>
     </div>
@@ -1047,16 +1047,16 @@ export default function LoginPage() {
 
 ---
 
-## Part 3: Multi-Tenant Plinto-as-a-Service Architecture
+## Part 3: Multi-Tenant Janua-as-a-Service Architecture
 
-### Option 1: Shared Plinto (Recommended for MVP)
+### Option 1: Shared Janua (Recommended for MVP)
 
 **Architecture:**
 ```
 ┌─────────────────────────────────────────────┐
-│   Single Plinto Instance (3 replicas)       │
-│   - Uses Plinto's native org multi-tenancy │
-│   - All customers share one Plinto          │
+│   Single Janua Instance (3 replicas)       │
+│   - Uses Janua's native org multi-tenancy │
+│   - All customers share one Janua          │
 │   - Cost: $50/mo (PostgreSQL only)          │
 └─────────────────────────────────────────────┘
          ▲              ▲              ▲
@@ -1068,10 +1068,10 @@ export default function LoginPage() {
 **Implementation:**
 
 ```go
-// When provisioning Plinto for a customer project
-func (s *ProjectService) EnablePlintoAuth(ctx context.Context, projectID uuid.UUID) error {
-	// 1. Create organization in shared Plinto
-	org, err := s.plintoClient.CreateOrganization(ctx, &plinto.Organization{
+// When provisioning Janua for a customer project
+func (s *ProjectService) EnableJanuaAuth(ctx context.Context, projectID uuid.UUID) error {
+	// 1. Create organization in shared Janua
+	org, err := s.januaClient.CreateOrganization(ctx, &janua.Organization{
 		Name:        project.Name,
 		Slug:        project.Slug,
 		ExternalID:  projectID.String(),  // Link to Enclii project
@@ -1081,7 +1081,7 @@ func (s *ProjectService) EnablePlintoAuth(ctx context.Context, projectID uuid.UU
 	}
 
 	// 2. Create OAuth client for this organization
-	client, err := s.plintoClient.CreateOAuthClient(ctx, org.ID, &plinto.OAuthClient{
+	client, err := s.januaClient.CreateOAuthClient(ctx, org.ID, &janua.OAuthClient{
 		Name:         fmt.Sprintf("%s App", project.Name),
 		RedirectURIs: []string{
 			fmt.Sprintf("https://%s.enclii.dev/auth/callback", project.Slug),
@@ -1092,10 +1092,10 @@ func (s *ProjectService) EnablePlintoAuth(ctx context.Context, projectID uuid.UU
 		return err
 	}
 
-	// 3. Store Plinto configuration in Enclii database
+	// 3. Store Janua configuration in Enclii database
 	authConfig := &types.AuthConfig{
 		ProjectID:    projectID,
-		Provider:     "plinto",
+		Provider:     "janua",
 		Issuer:       "https://auth.enclii.dev",
 		ClientID:     client.ID,
 		ClientSecret: client.Secret,
@@ -1107,22 +1107,22 @@ func (s *ProjectService) EnablePlintoAuth(ctx context.Context, projectID uuid.UU
 ```
 
 **Pros:**
-- ✅ Simple operations (one Plinto instance)
+- ✅ Simple operations (one Janua instance)
 - ✅ Cost-effective (~$50/mo total for unlimited customers)
-- ✅ Plinto natively supports multi-tenancy
+- ✅ Janua natively supports multi-tenancy
 
 **Cons:**
-- ⚠️ Shared blast radius (one Plinto failure affects all customers)
+- ⚠️ Shared blast radius (one Janua failure affects all customers)
 - ⚠️ Tenant isolation via application logic only
 
 ---
 
-### Option 2: Plinto-per-Customer (Enterprise)
+### Option 2: Janua-per-Customer (Enterprise)
 
 **Architecture:**
 ```
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│ Plinto-Cust1 │  │ Plinto-Cust2 │  │ Plinto-Cust3 │
+│ Janua-Cust1 │  │ Janua-Cust2 │  │ Janua-Cust3 │
 │ + PostgreSQL │  │ + PostgreSQL │  │ + PostgreSQL │
 │ + Redis      │  │ + Redis      │  │ + Redis      │
 │ Cost: $100/mo│  │ Cost: $100/mo│  │ Cost: $100/mo│
@@ -1132,17 +1132,17 @@ func (s *ProjectService) EnablePlintoAuth(ctx context.Context, projectID uuid.UU
 **Implementation:**
 
 ```go
-// Dynamically provision Plinto instance for enterprise customer
-func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID uuid.UUID) error {
+// Dynamically provision Janua instance for enterprise customer
+func (s *ProjectService) ProvisionDedicatedJanua(ctx context.Context, projectID uuid.UUID) error {
 	project, _ := s.projectRepo.Get(ctx, projectID)
-	namespace := fmt.Sprintf("plinto-%s", project.Slug)
+	namespace := fmt.Sprintf("janua-%s", project.Slug)
 
 	// 1. Create namespace
 	if err := s.k8sClient.CreateNamespace(ctx, namespace); err != nil {
 		return err
 	}
 
-	// 2. Apply Plinto Helm chart
+	// 2. Apply Janua Helm chart
 	helmValues := map[string]interface{}{
 		"ingress": map[string]interface{}{
 			"host": fmt.Sprintf("auth-%s.enclii.dev", project.Slug),
@@ -1152,14 +1152,14 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 		},
 	}
 
-	if err := s.helmClient.Install(ctx, "plinto", namespace, helmValues); err != nil {
+	if err := s.helmClient.Install(ctx, "janua", namespace, helmValues); err != nil {
 		return err
 	}
 
-	// 3. Store dedicated Plinto URL
+	// 3. Store dedicated Janua URL
 	authConfig := &types.AuthConfig{
 		ProjectID:    projectID,
-		Provider:     "plinto-dedicated",
+		Provider:     "janua-dedicated",
 		Issuer:       fmt.Sprintf("https://auth-%s.enclii.dev", project.Slug),
 		Dedicated:    true,
 	}
@@ -1174,7 +1174,7 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 - ✅ Customizable per-tenant (versions, configs)
 
 **Cons:**
-- ⚠️ High complexity (N Plinto instances to manage)
+- ⚠️ High complexity (N Janua instances to manage)
 - ⚠️ Cost scales linearly (~$100/mo per tenant)
 - ⚠️ Requires automation for provisioning
 
@@ -1207,21 +1207,21 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 
 ---
 
-### Week 3-4: Plinto Integration (Authentication)
+### Week 3-4: Janua Integration (Authentication)
 
-**Goal:** Replace custom auth with Plinto OAuth
+**Goal:** Replace custom auth with Janua OAuth
 
 | Day | Task | Estimated Hours | Blockers |
 |-----|------|-----------------|----------|
-| 8-9 | Deploy Plinto to cluster | 12h | Week 1-2 complete |
-| 10-11 | JWKS provider + OAuth handlers | 16h | Plinto deployed |
+| 8-9 | Deploy Janua to cluster | 12h | Week 1-2 complete |
+| 10-11 | JWKS provider + OAuth handlers | 16h | Janua deployed |
 | 12-13 | Frontend OAuth integration | 12h | Backend ready |
 | 14 | User migration tooling | 8h | Frontend complete |
 
 **Total:** 48 hours (~1.5 weeks)
 
 **Deliverables:**
-- ✅ Plinto deployed and operational
+- ✅ Janua deployed and operational
 - ✅ OAuth login flow working
 - ✅ Existing users migrated
 - ✅ Dual auth support (temporary)
@@ -1236,14 +1236,14 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 |-----|------|-----------------|----------|
 | 15-16 | Cloudflare for SaaS integration | 12h | None |
 | 17-18 | ResourceQuotas per tenant | 8h | None |
-| 19-20 | Plinto-as-a-Service provisioning | 16h | Plinto integration complete |
+| 19-20 | Janua-as-a-Service provisioning | 16h | Janua integration complete |
 | 21-22 | Monitoring (Prometheus/Grafana) | 12h | None |
 | 23-24 | Load testing & optimization | 12h | All features complete |
 
 **Total:** 60 hours (2 weeks)
 
 **Deliverables:**
-- ✅ Multi-tenant Plinto architecture
+- ✅ Multi-tenant Janua architecture
 - ✅ Customer custom domains with auto-SSL
 - ✅ Resource isolation per tenant
 - ✅ Production monitoring
@@ -1263,7 +1263,7 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 | **Ingress** | Cloudflare Tunnel | $0 |
 | **Custom Domains** | Cloudflare for SaaS (100 free) | $0 |
 | **Redis** | Self-hosted Sentinel | $0 |
-| **Auth (Plinto)** | Self-hosted (shared infra) | $0 |
+| **Auth (Janua)** | Self-hosted (shared infra) | $0 |
 | **Monitoring** | Self-hosted Prometheus/Grafana | $0 |
 | **Total** | | **$100/month** |
 
@@ -1274,7 +1274,7 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 
 | Solution | Monthly | Annual | 5-Year |
 |----------|---------|--------|--------|
-| **Enclii (Hetzner + Cloudflare + Plinto)** | $100 | $1,200 | $6,000 |
+| **Enclii (Hetzner + Cloudflare + Janua)** | $100 | $1,200 | $6,000 |
 | **Railway + Auth0** | $2,220 | $26,640 | $133,200 |
 | **Vercel + Clerk** | $2,500 | $30,000 | $150,000 |
 | **DigitalOcean (managed)** | $341 | $4,092 | $20,460 |
@@ -1288,7 +1288,7 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 
 **Time Investment:**
 - Infrastructure setup: 46 hours (~$9,200 at $200/hr)
-- Plinto integration: 48 hours (~$9,600 at $200/hr)
+- Janua integration: 48 hours (~$9,600 at $200/hr)
 - Total investment: **~$19,000**
 
 **Payback Period:**
@@ -1305,7 +1305,7 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 |------|-------------|--------|------------|
 | **Hetzner outage** | Low | High | Multi-region ready, can migrate to any Kubernetes |
 | **Cloudflare Tunnel failure** | Low | High | 3 replicas for HA, automatic failover |
-| **Plinto production bugs** | Medium | Medium | Shared infra reduces blast radius, version pinning |
+| **Janua production bugs** | Medium | Medium | Shared infra reduces blast radius, version pinning |
 | **Database failover delay** | Low | Medium | Ubicloud automated failover (<30s) |
 | **R2 API changes** | Low | Low | S3-compatible, easy to switch to Wasabi/Backblaze |
 
@@ -1313,7 +1313,7 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 
 | Risk | Probability | Impact | Mitigation |
 |------|-------------|--------|------------|
-| **Complex multi-tenant auth** | Medium | Medium | Start with shared Plinto (simpler) |
+| **Complex multi-tenant auth** | Medium | Medium | Start with shared Janua (simpler) |
 | **Insufficient monitoring** | High | High | Deploy Prometheus/Grafana in Week 5-6 |
 | **Key rotation failure** | Low | High | JWKS automatic refresh, alerts on failures |
 | **Backup restoration untested** | High | Critical | Weekly DR drills, automated testing |
@@ -1329,7 +1329,7 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 - [ ] Ubicloud PostgreSQL HA (Primary + Standby)
 - [ ] Redis Sentinel HA (3 sentinels, quorum 2)
 - [ ] Cloudflare R2 storing SBOMs and backups
-- [ ] Plinto deployed and operational
+- [ ] Janua deployed and operational
 - [ ] OAuth login flow working
 - [ ] At least one test application deployed
 - [ ] TLS working for all domains
@@ -1345,7 +1345,7 @@ func (s *ProjectService) ProvisionDedicatedPlinto(ctx context.Context, projectID
 | **Uptime SLA** | 99.95% | Prometheus uptime checks |
 | **P95 API Latency** | <200ms | Grafana dashboard |
 | **Error Rate** | <0.1% | Application logs |
-| **Auth Flow Success** | >99% | Plinto metrics |
+| **Auth Flow Success** | >99% | Janua metrics |
 | **Infrastructure Cost** | <$120/mo | Billing reports |
 | **SBOM Compliance** | 100% | All releases have SBOMs in R2 |
 | **Custom Domain Provisioning** | <60s | Cloudflare for SaaS API |
@@ -1358,7 +1358,7 @@ Enclii is **70% production-ready** with the new infrastructure stack. The codeba
 
 **Key Strengths:**
 - ✅ Cloud-agnostic Kubernetes manifests
-- ✅ Already using RS256 JWT (Plinto-compatible!)
+- ✅ Already using RS256 JWT (Janua-compatible!)
 - ✅ OIDC-ready database schema
 - ✅ Multi-tenant namespace architecture
 - ✅ Excellent security posture
@@ -1366,7 +1366,7 @@ Enclii is **70% production-ready** with the new infrastructure stack. The codeba
 
 **Critical Path:**
 1. **Week 1-2:** Infrastructure (Cloudflare Tunnel, R2, Redis Sentinel, Ubicloud)
-2. **Week 3-4:** Plinto integration (OAuth, JWKS, user migration)
+2. **Week 3-4:** Janua integration (OAuth, JWKS, user migration)
 3. **Week 5-6:** Polish (multi-tenancy, monitoring, load testing)
 
 **Financial Impact:**

@@ -215,7 +215,7 @@ func (h *Handler) Register(c *gin.Context) {
 
 // =============== OIDC Authentication Handlers (Phase C) ===============
 
-// OIDCLogin redirects to the OIDC provider (Plinto) for authentication
+// OIDCLogin redirects to the OIDC provider (Janua) for authentication
 func (h *Handler) OIDCLogin(c *gin.Context) {
 	// Check if OIDC mode is enabled
 	if h.config.AuthMode != "oidc" {
@@ -266,11 +266,11 @@ func (h *Handler) OIDCLogin(c *gin.Context) {
 		"state":    state[:10] + "...", // Log only first 10 chars for security
 	}).Info("Redirecting to OIDC provider")
 
-	// Redirect to OIDC provider (Plinto)
+	// Redirect to OIDC provider (Janua)
 	c.Redirect(http.StatusFound, authURL)
 }
 
-// OIDCCallback handles the OAuth callback from the OIDC provider (Plinto)
+// OIDCCallback handles the OAuth callback from the OIDC provider (Janua)
 func (h *Handler) OIDCCallback(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -356,7 +356,7 @@ func (h *Handler) OIDCCallback(c *gin.Context) {
 }
 
 // JWKS returns the JSON Web Key Set for token verification
-// This endpoint is used by external services (like Plinto) to verify tokens we issue
+// This endpoint is used by external services (like Janua) to verify tokens we issue
 func (h *Handler) JWKS(c *gin.Context) {
 	// JWKS only available in local auth mode
 	// In OIDC mode, tokens are verified against the OIDC provider's JWKS

@@ -102,7 +102,7 @@ return a.publicKey, nil  // Use public key for verification
 ├── dogfooding/              ✅ SERVICE SPECS READY (6 YAML files)
 │   ├── switchyard-api.yaml
 │   ├── switchyard-ui.yaml
-│   ├── plinto.yaml          ⚠️ References separate repo (not deployed)
+│   ├── janua.yaml          ⚠️ References separate repo (not deployed)
 │   ├── landing-page.yaml
 │   ├── docs-site.yaml
 │   └── status-page.yaml
@@ -172,7 +172,7 @@ return a.publicKey, nil  // Use public key for verification
 - `enclii version` - Show version
 
 ### Missing ❌
-- `enclii auth login` - OAuth/Plinto login
+- `enclii auth login` - OAuth/Janua login
 - `enclii secrets set/get` - Secrets management
 - `enclii scale` - Autoscaling config
 - `enclii routes add/remove` - Route management
@@ -305,7 +305,7 @@ make lint              # Lint code
 ## Production Timeline
 
 **Week 1-2:** Fix critical bugs, infrastructure setup  
-**Week 3-4:** Plinto integration  
+**Week 3-4:** Janua integration  
 **Week 5-6:** Dogfooding setup  
 **Week 7-8:** Load testing, security audit, launch  
 
@@ -318,7 +318,7 @@ make lint              # Lint code
 | Fix auth middleware bug | 1 day | CRITICAL |
 | Implement missing CLI commands | 2-3 days | HIGH |
 | Complete UI implementation | 3-4 weeks | HIGH |
-| Plinto integration (OAuth) | 2-3 weeks | HIGH |
+| Janua integration (OAuth) | 2-3 weeks | HIGH |
 | Roundhouse (build workers) | 1-2 weeks | MEDIUM |
 | Timetable (cron jobs) | 2 weeks | MEDIUM |
 | Waybill (cost tracking) | 2-3 weeks | MEDIUM |
