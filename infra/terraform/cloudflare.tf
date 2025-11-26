@@ -211,7 +211,7 @@ resource "cloudflare_ruleset" "security" {
 variable "allowed_email_domain" {
   description = "Email domain allowed for Zero Trust Access"
   type        = string
-  default     = "madfam.io"
+  default     = "enclii.dev"
 }
 
 # =============================================================================

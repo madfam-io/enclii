@@ -50,7 +50,7 @@ management_ips = [
 ]
 
 # Email domain for Zero Trust Access
-allowed_email_domain = "madfam.io"
+allowed_email_domain = "enclii.dev"
 
 # =============================================================================
 # OPTIONAL - Infrastructure Sizing
