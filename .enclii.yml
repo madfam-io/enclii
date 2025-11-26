@@ -1,0 +1,208 @@
+# Enclii - Self-Hosted PaaS Platform (Dogfooding)
+# Enclii deploys itself!
+
+apiVersion: enclii.dev/v1
+kind: Service
+metadata:
+  name: enclii-api
+  project: madfam-platform
+  description: Enclii control plane API (self-hosted via Enclii)
+
+spec:
+  build:
+    type: dockerfile
+    dockerfile: apps/switchyard-api/Dockerfile
+    context: .
+    source:
+      git:
+        repository: https://github.com/madfam-io/enclii
+        branch: main
+        autoDeploy: true
+
+  runtime:
+    port: 8080
+    replicas: 3
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "1000m"
+        memory: "512Mi"
+
+    healthCheck: /health
+    readinessProbe:
+      path: /health/ready
+      initialDelaySeconds: 10
+      periodSeconds: 5
+    livenessProbe:
+      path: /health/live
+      initialDelaySeconds: 30
+      periodSeconds: 10
+
+  env:
+    - name: PORT
+      value: "8080"
+    - name: GIN_MODE
+      value: release
+    - name: LOG_LEVEL
+      value: info
+    - name: LOG_FORMAT
+      value: json
+
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: enclii-secrets
+          key: database-url
+
+    - name: REDIS_URL
+      valueFrom:
+        secretKeyRef:
+          name: enclii-secrets
+          key: redis-url
+
+    # Janua SSO (MADFAM unified auth)
+    - name: OIDC_ISSUER
+      value: https://auth.madfam.io
+    - name: OIDC_JWKS_URL
+      value: https://auth.madfam.io/.well-known/jwks.json
+    - name: OIDC_AUDIENCE
+      value: enclii-api
+
+    # MADFAM Analytics
+    - name: ANALYTICS_URL
+      value: https://analytics.madfam.io
+    - name: ANALYTICS_SITE_ID
+      value: enclii
+
+    # Coforma Feedback
+    - name: COFORMA_URL
+      value: https://coforma.madfam.io
+    - name: COFORMA_PRODUCT_ID
+      value: enclii
+
+    # Object storage (Cloudflare R2)
+    - name: R2_ENDPOINT
+      valueFrom:
+        secretKeyRef:
+          name: enclii-secrets
+          key: r2-endpoint
+    - name: R2_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: enclii-secrets
+          key: r2-access-key-id
+    - name: R2_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: enclii-secrets
+          key: r2-secret-access-key
+    - name: R2_BUCKET
+      value: enclii-production-artifacts
+
+    - name: KUBERNETES_NAMESPACE
+      value: enclii-workloads
+    - name: IN_CLUSTER
+      value: "true"
+
+  volumes:
+    - name: build-cache
+      mountPath: /var/cache/enclii
+      size: 20Gi
+      storageClassName: hetzner-ssd
+      accessMode: ReadWriteOnce
+
+  domains:
+    - domain: api.enclii.io
+      tls: true
+      tlsIssuer: cloudflare
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+  slo:
+    availability: 99.95
+    latencyP95: 200
+    errorRate: 0.5
+
+---
+# Enclii Web Dashboard
+apiVersion: enclii.dev/v1
+kind: Service
+metadata:
+  name: enclii-ui
+  project: madfam-platform
+  description: Enclii web dashboard (self-hosted via Enclii)
+
+spec:
+  build:
+    type: dockerfile
+    dockerfile: apps/switchyard-ui/Dockerfile
+    context: .
+    source:
+      git:
+        repository: https://github.com/madfam-io/enclii
+        branch: main
+        autoDeploy: true
+
+  runtime:
+    port: 3000
+    replicas: 2
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+    healthCheck: /api/health
+
+  env:
+    - name: PORT
+      value: "3000"
+    - name: NODE_ENV
+      value: production
+    - name: NEXT_PUBLIC_API_URL
+      value: https://api.enclii.io
+
+    # Janua SSO
+    - name: NEXT_PUBLIC_JANUA_URL
+      value: https://auth.madfam.io
+    - name: NEXT_PUBLIC_JANUA_CLIENT_ID
+      value: enclii-dashboard
+
+    # MADFAM Analytics
+    - name: NEXT_PUBLIC_ANALYTICS_URL
+      value: https://analytics.madfam.io
+    - name: NEXT_PUBLIC_ANALYTICS_SITE_ID
+      value: enclii
+
+    # Coforma Feedback
+    - name: NEXT_PUBLIC_COFORMA_URL
+      value: https://coforma.madfam.io
+    - name: NEXT_PUBLIC_COFORMA_PRODUCT_ID
+      value: enclii
+
+  domains:
+    - domain: app.enclii.io
+      tls: true
+      tlsIssuer: cloudflare
+    - domain: enclii.io
+      tls: true
+      tlsIssuer: cloudflare
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+  slo:
+    availability: 99.95
+    latencyP95: 150
+    errorRate: 0.5
