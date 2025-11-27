@@ -215,6 +215,22 @@ From [PRODUCTION_READINESS_AUDIT.md](./PRODUCTION_READINESS_AUDIT.md):
 brew install go node pnpm kind helm kubectl docker
 ```
 
+### NPM Registry Configuration
+
+Enclii uses MADFAM's private npm registry for internal packages. Configure your `.npmrc`:
+
+```bash
+# Add to your project's .npmrc or ~/.npmrc
+@madfam:registry=https://npm.madfam.io
+@enclii:registry=https://npm.madfam.io
+@janua:registry=https://npm.madfam.io
+//npm.madfam.io/:_authToken=${NPM_MADFAM_TOKEN}
+```
+
+Set the `NPM_MADFAM_TOKEN` environment variable with your registry token.
+
+**Note:** Enclii also hosts the npm.madfam.io registry via Verdaccio. See [NPM Registry Implementation](./docs/NPM_REGISTRY_IMPLEMENTATION.md) for details.
+
 ### Local Development (10 minutes)
 
 ```bash
