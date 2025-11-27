@@ -68,6 +68,7 @@
 |------|---------|------------|
 | **madfam-site** | MADFAM Corporate Website | Next.js 14, TypeScript |
 | **aureo-labs** | Aureo Labs Website | Next.js |
+| **primavera3d** | 3D Modeling/Fabrication Portfolio | Next.js, Turbo |
 
 ### 🔧 Tier 4: Libraries & Infrastructure
 
@@ -294,10 +295,11 @@ Available for apps: ~8 vCPU, 17GB RAM
 | **forj** | forj.design | Decentralized fab storefronts |
 | **madfam-site** | madfam.io | Corporate website |
 | **aureo-labs** | aureolabs.dev | Aureo Labs website |
+| **primavera3d** | primavera3d.com | 3D modeling/fab portfolio |
 | **geom-core** | (library) | Geometry engine |
 | **solarpunk-foundry** | (ops) | Shared infrastructure |
 
 ---
 
 *Last Updated: 2025-11-27*
-*Total Repos: 17 (not 18 hallucinated ones 😅)*
+*Total Repos: 18*
