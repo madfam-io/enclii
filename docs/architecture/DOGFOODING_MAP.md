@@ -32,49 +32,49 @@
 
 ---
 
-## 📦 Complete Repository Inventory
+## 📦 Complete Repository Inventory (17 Actual Repos)
 
-### Tier 1: Platform Infrastructure (Deploy First)
+### 🏛️ Tier 0: Platform Infrastructure (Deploy First)
 
-| Repo | Purpose | Components | Dependencies |
-|------|---------|------------|--------------|
-| **enclii** | PaaS Control Plane | switchyard-api, switchyard-ui, roundhouse, waybill, reconcilers | PostgreSQL, Redis, Janua |
-| **janua** | Identity/Auth (OIDC) | api, admin-ui | PostgreSQL, Redis, SMTP |
+| Repo | Purpose | Tech Stack |
+|------|---------|------------|
+| **enclii** | PaaS Control Plane | Go, React, PostgreSQL, Redis |
+| **janua** | Self-hosted Auth (OIDC/OAuth2) | Python/FastAPI, PostgreSQL |
 
-### Tier 2: Production SaaS Apps (Deploy After Platform)
+### 💼 Tier 1: Production SaaS Products
 
-| Repo | Purpose | Components | Auth | Database |
-|------|---------|------------|------|----------|
-| **forgesight** | Fabrication Pricing | api, web, worker | Janua | PostgreSQL |
-| **dhanam** | Financial Wellness | api, web | Janua | PostgreSQL |
-| **fortuna** | Portfolio Tracker | api, web | Janua | PostgreSQL |
-| **electrochem-sim** | Electrochemistry | api, web, simulation-worker | Janua | PostgreSQL, Redis |
+| Repo | Purpose | Tech Stack |
+|------|---------|------------|
+| **forgesight** | Global Fabrication Pricing Intelligence | Python/FastAPI, React, PostgreSQL |
+| **dhanam** | Budget & Wealth Tracking (LATAM-first) | TypeScript, React Native, PostgreSQL |
+| **fortuna** | Problem Intelligence Platform | Python, React |
+| **digifab-quoting** (cotiza.studio) | Digital Manufacturing Quoting | Node.js, React |
+| **coforma-studio** | Customer Advisory Boards SaaS | Node.js, Next.js |
 
-### Tier 3: Platform Apps (Deploy with Platform)
+### 🔬 Tier 2: Specialized Apps
 
-| Repo | Purpose | Components | Auth | Database |
-|------|---------|------------|------|----------|
-| **bloom-scroll** | Content Curation | api (FastAPI), web (Flutter) | Janua | PostgreSQL, Redis |
-| **coforma-studio** | Feedback Management | api (Node), web (Next.js) | Janua | PostgreSQL |
-| **avala** | Project Management | api, web | Janua | PostgreSQL |
-| **blueprint-harvester** | Code Extraction | api, processing-worker | Janua | PostgreSQL, MinIO, OpenSearch |
-| **cotiza-studio** | Quotation Management | api, web | Janua | PostgreSQL |
-| **forj** | Forge Operations | api, web | Janua | PostgreSQL |
+| Repo | Purpose | Tech Stack |
+|------|---------|------------|
+| **electrochem-sim** (Galvana) | Electrochemistry Simulation Platform | Python, React, Redis |
+| **sim4d** | Web-first Parametric CAD | TypeScript, WASM/OCCT |
+| **bloom-scroll** | Anti-doomscroll Content Aggregator | FastAPI, Flutter |
+| **avala** | Learning & Competency Cloud (MX compliance) | TBD |
+| **blueprint-harvester** | 3D Printable Blueprint Discovery Engine | Python, OpenSearch, MinIO |
+| **forj** | Decentralized Fabrication Storefront Builder | Three.js, Blockchain |
 
-### Tier 4: Business Sites (Static/Simple)
+### 🌐 Tier 3: Business Sites
 
-| Repo | Purpose | Type | Hosting |
-|------|---------|------|---------|
-| **madfam-site** | Company Website | Static Next.js | Enclii (or Cloudflare Pages) |
-| **solarpunk-studio** | Design Studio | Static | Enclii |
-| **coforma-ai** | AI Product Site | Static | Enclii |
+| Repo | Purpose | Tech Stack |
+|------|---------|------------|
+| **madfam-site** | MADFAM Corporate Website | Next.js 14, TypeScript |
+| **aureo-labs** | Aureo Labs Website | Next.js |
 
-### Tier 5: Libraries (Not Deployed)
+### 🔧 Tier 4: Libraries & Infrastructure
 
 | Repo | Purpose | Used By |
 |------|---------|---------|
-| **geom-core** | Geometry Library | electrochem-sim, forgesight |
-| **solarpunk-foundry** | UI Components | All web apps |
+| **geom-core** | C++ Geometry Engine (Python/WASM bindings) | sim4d, forgesight, digifab-quoting |
+| **solarpunk-foundry** | Ops, Scripts, Shared Infra | All repos |
 
 ---
 
@@ -84,22 +84,22 @@
 
 ```
                               ┌─────────────────┐
-                              │      Janua      │
-                              │  (auth.janua.dev)│
+                              │      JANUA      │
+                              │ (auth.janua.dev)│
                               └────────┬────────┘
                                        │
               ┌────────────────────────┼────────────────────────┐
               │                        │                        │
               ▼                        ▼                        ▼
     ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-    │  Enclii Apps    │    │  SaaS Products  │    │  Internal Tools │
+    │  Platform       │    │  SaaS Products  │    │  Specialized    │
     │                 │    │                 │    │                 │
-    │ • switchyard-ui │    │ • forgesight    │    │ • avala         │
-    │ • admin panels  │    │ • dhanam        │    │ • blueprint     │
-    │                 │    │ • fortuna       │    │ • coforma       │
-    └─────────────────┘    │ • bloom-scroll  │    └─────────────────┘
-                           │ • electrochem   │
-                           └─────────────────┘
+    │ • enclii UI     │    │ • forgesight    │    │ • galvana       │
+    │ • admin panels  │    │ • dhanam        │    │ • sim4d         │
+    │                 │    │ • fortuna       │    │ • bloom-scroll  │
+    │                 │    │ • cotiza.studio │    │ • avala         │
+    │                 │    │ • coforma       │    │ • forj          │
+    └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
 **OAuth 2.0 / OIDC Flow**:
@@ -107,8 +107,8 @@
 2. Redirect to `auth.janua.dev/authorize`
 3. User logs in (password/SSO/social)
 4. Janua issues RS256 JWT
-5. Redirect to `app.forgesight.quest/callback`
-6. App validates JWT via Janua JWKS (`auth.janua.dev/.well-known/jwks.json`)
+5. Redirect back with token
+6. App validates JWT via Janua JWKS
 
 ### Platform Service Flow
 
@@ -132,39 +132,12 @@
 │         ▼                                                                │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
 │  │                    KUBERNETES CLUSTER                            │    │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐   │    │
-│  │  │forgesight│ │ dhanam │ │ fortuna │ │bloom-scr│ │ ...etc  │   │    │
-│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘ └─────────┘   │    │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │    │
+│  │  │forgesight│ │  dhanam  │ │ galvana  │ │  sim4d   │  ...      │    │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
 │                                                                           │
 └──────────────────────────────────────────────────────────────────────────┘
-```
-
-### Data Flow Between Apps
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         SHARED INFRASTRUCTURE                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│   ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐  │
-│   │   PostgreSQL     │    │      Redis       │    │   MinIO/R2       │  │
-│   │   (Ubicloud)     │    │   (Sentinel)     │    │  (Object Store)  │  │
-│   └────────┬─────────┘    └────────┬─────────┘    └────────┬─────────┘  │
-│            │                       │                       │            │
-│   ┌────────┴─────────┐    ┌────────┴─────────┐    ┌────────┴─────────┐  │
-│   │ Per-app databases│    │ Session/cache    │    │ Files/artifacts  │  │
-│   │                  │    │                  │    │                  │  │
-│   │ • janua_prod     │    │ • janua sessions │    │ • SBOMs          │  │
-│   │ • enclii_prod    │    │ • app caches     │    │ • Build logs     │  │
-│   │ • forgesight_prod│    │ • rate limiting  │    │ • User uploads   │  │
-│   │ • dhanam_prod    │    │ • job queues     │    │ • Exports        │  │
-│   │ • fortuna_prod   │    │                  │    │                  │  │
-│   │ • bloomscroll_prod    │                  │    │                  │  │
-│   │ • ...            │    │                  │    │                  │  │
-│   └──────────────────┘    └──────────────────┘    └──────────────────┘  │
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -176,142 +149,60 @@ Week 1-2: Infrastructure Bootstrap
 ├── Hetzner Server (K3s cluster)
 ├── Cloudflare Tunnel (ingress)
 ├── PostgreSQL (Ubicloud managed)
-├── Redis Sentinel (self-hosted)
+├── Redis Sentinel
 └── Container Registry (GHCR)
 
-Week 3-4: Platform Core
+Week 2-3: Platform Core
 ├── 1. Janua (CRITICAL - all auth depends on this)
-│   ├── PostgreSQL database: janua_prod
-│   ├── Redis: sessions, rate limiting
 │   └── Domain: auth.janua.dev
 │
 ├── 2. Enclii Core
-│   ├── switchyard-api (api.enclii.dev)
-│   ├── switchyard-ui (app.enclii.dev)
-│   ├── PostgreSQL database: enclii_prod
-│   └── Secrets: JWT keys, Janua client credentials
+│   ├── switchyard-api
+│   ├── switchyard-ui
+│   └── Domain: app.enclii.dev
 │
-├── 3. Roundhouse (builds)
-│   ├── roundhouse-api
-│   ├── roundhouse-worker(s)
-│   └── Redis: job queue
-│
-└── 4. Waybill (billing)
-    ├── waybill-api
-    ├── waybill-aggregator
-    └── Stripe integration
+├── 3. Roundhouse (build pipeline)
+└── 4. Waybill (usage/billing)
 
-Week 5-6: App Deployments (via Enclii!)
-├── Tier 1 (Ready Now)
-│   ├── forgesight (api + web)
-│   ├── dhanam (api + web)
-│   ├── electrochem-sim (api + web + worker)
-│   ├── cotiza-studio (api + web)
-│   └── forj (api + web)
-│
-├── Tier 2 (Needs Polish)
-│   ├── fortuna (api + web)
-│   ├── avala (api + web)
-│   └── blueprint-harvester (api + worker)
-│
-└── Tier 3 (Active Dev)
-    ├── bloom-scroll (api + web)
-    └── coforma-studio (api + web)
+Week 4-5: SaaS Products
+├── forgesight (forgesight.quest)
+├── dhanam (dhanam.app)
+├── fortuna (fortuna.tube)
+├── digifab-quoting (cotiza.studio)
+└── coforma-studio (coforma.studio)
 
-Week 7+: Business Sites & Extras
-├── madfam-site
-├── solarpunk-studio
-├── coforma-ai
-├── enclii landing page
-├── enclii docs site
-└── status page
+Week 6-7: Specialized Apps
+├── electrochem-sim / Galvana
+├── sim4d (sim4d.com)
+├── bloom-scroll
+├── avala
+├── blueprint-harvester
+└── forj (forj.design)
+
+Week 8+: Business Sites
+├── madfam-site (madfam.io)
+└── aureo-labs (aureolabs.dev)
 ```
 
 ---
 
-## 📋 Dogfooding Specs Summary
-
-### Platform Services
-
-| Service | Spec File | Domain | Replicas | Autoscale |
-|---------|-----------|--------|----------|-----------|
-| switchyard-api | `switchyard-api.yaml` | api.enclii.dev | 3 | 3-10 |
-| switchyard-ui | `switchyard-ui.yaml` | app.enclii.dev | 2 | 2-8 |
-| janua | `janua.yaml` | auth.janua.dev | 3 | 3-10 |
-| roundhouse-api | (new) | builds.enclii.dev | 2 | 2-5 |
-| roundhouse-worker | (new) | - | 2 | 2-10 |
-| waybill-api | (new) | billing.enclii.dev | 2 | 2-5 |
-
-### SaaS Products
-
-| Service | Spec File | Domain | Replicas |
-|---------|-----------|--------|----------|
-| forgesight-api | `forgesight.yaml` | api.forgesight.quest | 2-10 |
-| forgesight-web | `forgesight.yaml` | forgesight.quest | 2-5 |
-| dhanam-api | `dhanam.yaml` | api.dhanam.app | 2-6 |
-| dhanam-web | `dhanam.yaml` | dhanam.app | 2-4 |
-| fortuna-api | `fortuna.yaml` | api.fortuna.app | 2-6 |
-| fortuna-web | `fortuna.yaml` | fortuna.app | 2-4 |
-| electrochem-sim-api | `electrochem-sim.yaml` | api.electrochem.sim | 2-6 |
-| electrochem-sim-web | `electrochem-sim.yaml` | electrochem.sim | 2-4 |
-| electrochem-sim-worker | `electrochem-sim.yaml` | - | 2-8 |
-| bloom-scroll-api | `bloom-scroll.yaml` | api.bloomscroll.app | 2-6 |
-| bloom-scroll-web | `bloom-scroll.yaml` | bloomscroll.app | 2-4 |
-
----
-
-## 🔐 Security & Network Policies
-
-### Namespace Isolation
+## 🔐 Namespace Isolation
 
 ```yaml
-# Each app gets its own namespace
 namespaces:
-  - enclii-platform      # Core platform services
+  - enclii-platform      # Core platform (switchyard, roundhouse, waybill)
   - enclii-janua         # Identity provider (isolated)
-  - enclii-forgesight    # Forgesight app
-  - enclii-dhanam        # Dhanam app
-  - enclii-fortuna       # Fortuna app
-  - enclii-electrochem   # Electrochem-sim app
-  - enclii-bloomscroll   # Bloom-scroll app
-  - enclii-coforma       # Coforma-studio app
-  - enclii-avala         # Avala app
-  - enclii-blueprint     # Blueprint-harvester
-  # ... etc
-```
-
-### Network Policies
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    ALLOWED TRAFFIC FLOWS                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Internet ──► Cloudflare Tunnel ──► Ingress Controller          │
-│                                           │                      │
-│                                           ▼                      │
-│                              ┌────────────────────┐              │
-│                              │   Web Services     │              │
-│                              │ (port 80/443 only) │              │
-│                              └─────────┬──────────┘              │
-│                                        │                         │
-│  ┌─────────────────────────────────────┼─────────────────────┐  │
-│  │                                     ▼                      │  │
-│  │  ALL APPS ─────────────────────► JANUA (auth)             │  │
-│  │     │                              │                       │  │
-│  │     │                              │                       │  │
-│  │     ▼                              ▼                       │  │
-│  │  Own PostgreSQL DB            Redis (sessions)            │  │
-│  │  Own Redis (cache)                                        │  │
-│  │                                                            │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  DENIED:                                                        │
-│  • App A cannot access App B's database                         │
-│  • Apps cannot access platform internals (except Janua)        │
-│  • Direct pod-to-pod across namespaces (except allowed)        │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+  - enclii-forgesight    # Forgesight
+  - enclii-dhanam        # Dhanam
+  - enclii-fortuna       # Fortuna
+  - enclii-cotiza        # Cotiza Studio (digifab-quoting)
+  - enclii-coforma       # Coforma Studio
+  - enclii-galvana       # Electrochem-sim
+  - enclii-sim4d         # Sim4D
+  - enclii-bloomscroll   # Bloom Scroll
+  - enclii-avala         # Avala
+  - enclii-blueprint     # Blueprint Harvester
+  - enclii-forj          # Forj
 ```
 
 ---
@@ -320,145 +211,93 @@ namespaces:
 
 ### Per-App Resource Budgets
 
-| App | CPU Request | Memory Request | CPU Limit | Memory Limit |
-|-----|-------------|----------------|-----------|--------------|
-| janua | 200m | 256Mi | 1000m | 1Gi |
-| switchyard-api | 250m | 512Mi | 2000m | 2Gi |
-| switchyard-ui | 100m | 256Mi | 500m | 512Mi |
-| roundhouse-worker | 500m | 1Gi | 2000m | 4Gi |
-| forgesight-api | 200m | 512Mi | 1000m | 2Gi |
-| bloom-scroll-api | 500m | 1Gi | 2000m | 4Gi |
-| electrochem-worker | 1000m | 2Gi | 4000m | 8Gi |
+| App | CPU Request | Memory Request | Notes |
+|-----|-------------|----------------|-------|
+| janua | 200m | 256Mi | Auth - always on |
+| switchyard-api | 250m | 512Mi | Platform core |
+| roundhouse-worker | 500m | 1Gi | Build jobs |
+| forgesight-api | 200m | 512Mi | Pricing engine |
+| galvana-worker | 1000m | 2Gi | Simulation heavy |
+| sim4d-api | 500m | 1Gi | CAD processing |
+| geom-core (WASM) | - | - | Client-side |
 
-### Total Cluster Resources (Hetzner CPX31 x3)
-
-```
-Total Available:
-├── vCPU: 12 cores (4 per node)
-├── RAM: 24 GB (8 per node)
-└── Storage: 480 GB SSD (160 per node)
-
-Platform Overhead (~30%):
-├── System pods (kube-system)
-├── Ingress controller
-├── Monitoring stack
-└── Redis Sentinel
-
-Available for Apps (~70%):
-├── vCPU: ~8 cores
-├── RAM: ~17 GB
-└── Storage: ~300 GB
-```
-
----
-
-## 📊 Monitoring & Observability
-
-### Metrics Collection
+### Cluster Resources (Hetzner CPX31 x3)
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    MONITORING STACK                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   All Services ──► Prometheus ──► Grafana                       │
-│       │               │              │                          │
-│       │               │              └──► Dashboards            │
-│       │               │                   • Platform health     │
-│       │               │                   • App metrics         │
-│       │               │                   • Usage/billing       │
-│       │               │                                         │
-│       │               └──► AlertManager ──► Slack/PagerDuty    │
-│       │                                                         │
-│       └──► Loki (logs) ──► Grafana Log Explorer                │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+Total: 12 vCPU, 24GB RAM, 480GB SSD
+Platform overhead: ~30%
+Available for apps: ~8 vCPU, 17GB RAM
 ```
-
-### Key Dashboards
-
-1. **Platform Health** - Enclii core services status
-2. **Janua Auth** - Login rates, token issuance, failures
-3. **Build Pipeline** - Roundhouse queue, build times
-4. **Usage Metrics** - Waybill data, per-project usage
-5. **Per-App Dashboards** - Individual app health
 
 ---
 
 ## 🔄 CI/CD Flow
 
-### Automatic Deployment Pipeline
-
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    DEPLOYMENT PIPELINE                           │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   1. Developer pushes to main                                   │
-│          │                                                       │
-│          ▼                                                       │
-│   2. GitHub webhook ──► Roundhouse API                          │
-│          │                                                       │
-│          ▼                                                       │
-│   3. Roundhouse Worker                                          │
-│      ├── Clone repo                                             │
-│      ├── Build image (BuildKit)                                 │
-│      ├── Generate SBOM (Syft)                                   │
-│      ├── Sign image (Cosign)                                    │
-│      └── Push to GHCR                                           │
-│          │                                                       │
-│          ▼                                                       │
-│   4. Callback to Switchyard                                     │
-│          │                                                       │
-│          ▼                                                       │
-│   5. Canary Deployment (if configured)                          │
-│      ├── 10% traffic ──► 5 min analysis                        │
-│      ├── 50% traffic ──► 5 min analysis                        │
-│      └── 100% traffic (or rollback)                            │
-│          │                                                       │
-│          ▼                                                       │
-│   6. Waybill records usage event                                │
-│          │                                                       │
-│          ▼                                                       │
-│   7. Slack notification                                         │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  1. git push main                                                │
+│         │                                                        │
+│         ▼                                                        │
+│  2. GitHub webhook ──► Roundhouse                               │
+│         │                                                        │
+│         ▼                                                        │
+│  3. BuildKit ──► SBOM (Syft) ──► Sign (Cosign) ──► GHCR        │
+│         │                                                        │
+│         ▼                                                        │
+│  4. Callback ──► Switchyard ──► K8s Deploy                      │
+│         │                                                        │
+│         ▼                                                        │
+│  5. Waybill records usage ──► Stripe (if billable)              │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 🎯 Success Criteria
 
-### Platform Health
-- [ ] Enclii deploys itself successfully
-- [ ] Janua authenticates all platform services
-- [ ] Roundhouse builds from GitHub webhooks
+### Platform
+- [ ] Enclii deploys itself
+- [ ] Janua authenticates all services
+- [ ] Roundhouse builds from webhooks
 - [ ] Waybill tracks usage accurately
-- [ ] Canary deployments work with auto-rollback
 
-### App Health
-- [ ] All Tier 1 apps deployed via Enclii
+### Apps
+- [ ] All 12 deployable apps running via Enclii
 - [ ] All apps authenticate via Janua
-- [ ] Custom domains working (Cloudflare)
+- [ ] Custom domains working
 - [ ] Autoscaling responding to load
-- [ ] Monitoring dashboards populated
 
-### Business Metrics
+### Business
 - [ ] Platform cost < $150/month
 - [ ] 99.9% uptime for core services
-- [ ] Build time < 5 minutes average
-- [ ] Deployment time < 2 minutes
+- [ ] Build time < 5 minutes
 - [ ] Zero security incidents
 
 ---
 
-## 📚 Related Documentation
+## 📚 App Quick Reference
 
-- [DOGFOODING_GUIDE.md](./DOGFOODING_GUIDE.md) - Step-by-step deployment guide
-- [Platform Components](./platform_components_implementation_2025_11_27.md) - Roundhouse/Waybill implementation
-- [ENCLII_CAPABILITY_MATRIX.md](./ENCLII_CAPABILITY_MATRIX.md) - Feature completeness
-- [ENCLII_EXECUTIVE_SUMMARY.md](./ENCLII_EXECUTIVE_SUMMARY.md) - Business case
+| App | Domain | What It Does |
+|-----|--------|--------------|
+| **enclii** | enclii.dev | Railway-style PaaS (~$100/mo) |
+| **janua** | janua.dev | Self-hosted Auth0 alternative |
+| **forgesight** | forgesight.quest | Fabrication pricing intelligence |
+| **dhanam** | dhanam.app | Budget/wealth tracking (LATAM) |
+| **fortuna** | fortuna.tube | Problem discovery platform |
+| **cotiza.studio** | cotiza.studio | Manufacturing quoting |
+| **coforma** | coforma.studio | Customer advisory boards |
+| **galvana** | galvana.io | Electrochemistry simulation |
+| **sim4d** | sim4d.com | Browser-based parametric CAD |
+| **bloom-scroll** | bloomscroll.app | Anti-doomscroll content |
+| **avala** | avala.mx | Learning/competency (MX) |
+| **blueprint-harvester** | - | 3D blueprint discovery |
+| **forj** | forj.design | Decentralized fab storefronts |
+| **madfam-site** | madfam.io | Corporate website |
+| **aureo-labs** | aureolabs.dev | Aureo Labs website |
+| **geom-core** | (library) | Geometry engine |
+| **solarpunk-foundry** | (ops) | Shared infrastructure |
 
 ---
 
 *Last Updated: 2025-11-27*
+*Total Repos: 17 (not 18 hallucinated ones 😅)*
