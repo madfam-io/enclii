@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: verdaccio
+  namespace: npm-registry
+  labels:
+    app.kubernetes.io/name: verdaccio
+    app.kubernetes.io/component: ingress
+  annotations:
+    # Cloudflare Tunnel integration
+    external-dns.alpha.kubernetes.io/hostname: npm.madfam.io
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    # Request size for large packages
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - npm.madfam.io
+      secretName: npm-madfam-io-tls
+  rules:
+    - host: npm.madfam.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: verdaccio
+                port:
+                  name: http

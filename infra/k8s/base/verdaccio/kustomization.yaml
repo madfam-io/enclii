@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: verdaccio
+  labels:
+    app.kubernetes.io/name: verdaccio
+    app.kubernetes.io/part-of: enclii-platform
+
+namespace: npm-registry
+
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - configmap.yaml
+  - secret.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - networkpolicy.yaml
+  - hpa.yaml
+
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: enclii-platform
+
+images:
+  - name: verdaccio/verdaccio
+    newTag: "5"

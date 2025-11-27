@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: verdaccio-storage
+  namespace: npm-registry
+  labels:
+    app.kubernetes.io/name: verdaccio
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: hetzner-volumes
+  resources:
+    requests:
+      storage: 50Gi

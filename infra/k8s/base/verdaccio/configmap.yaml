@@ -1,0 +1,144 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: verdaccio-config
+  namespace: npm-registry
+  labels:
+    app.kubernetes.io/name: verdaccio
+    app.kubernetes.io/component: config
+data:
+  config.yaml: |
+    # Verdaccio Configuration for npm.madfam.io
+    # MADFAM Private Package Registry
+
+    storage: /verdaccio/storage
+    plugins: /verdaccio/plugins
+
+    # Web UI configuration
+    web:
+      title: MADFAM Package Registry
+      logo: https://madfam.io/logo.png
+      primary_color: "#6366f1"
+      favicon: https://madfam.io/favicon.ico
+      gravatar: true
+      sort_packages: asc
+      darkMode: true
+
+    # Authentication - htpasswd initially, upgrade to Janua OAuth later
+    auth:
+      htpasswd:
+        file: /verdaccio/conf/htpasswd
+        max_users: 100
+        algorithm: bcrypt
+
+    # Security settings
+    security:
+      api:
+        legacy: true
+        jwt:
+          sign:
+            expiresIn: 29d
+          verify:
+            maxAge: 30d
+      web:
+        sign:
+          expiresIn: 7d
+
+    # Uplinks to public registries
+    uplinks:
+      npmjs:
+        url: https://registry.npmjs.org/
+        timeout: 30s
+        maxage: 10m
+        fail_timeout: 5m
+        max_fails: 3
+        cache: true
+
+    # Package access rules - MADFAM ecosystem scopes
+    packages:
+      # Core MADFAM packages
+      '@madfam/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # Dhanam - Finance platform
+      '@dhanam/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # Janua - Auth platform
+      '@janua/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # Cotiza - Quoting platform
+      '@cotiza/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # Fortuna - Lottery platform
+      '@fortuna/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # Avala - Insurance platform
+      '@avala/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # Forgesight - Analytics platform
+      '@forgesight/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # Coforma - Form builder
+      '@coforma/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # Forj - Workflow automation
+      '@forj/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # Enclii - Platform as a Service
+      '@enclii/*':
+        access: $authenticated
+        publish: $authenticated
+        unpublish: $authenticated
+
+      # All other packages - proxy to npmjs
+      '**':
+        access: $all
+        publish: $authenticated
+        unpublish: $authenticated
+        proxy: npmjs
+
+    # Server settings
+    server:
+      keepAliveTimeout: 60
+
+    # Logging
+    logs:
+      type: stdout
+      format: pretty
+      level: info
+
+    # Rate limiting and audit
+    middlewares:
+      audit:
+        enabled: true
+
+    # Feature flags
+    experiments:
+      changePassword: true
+      search: true
