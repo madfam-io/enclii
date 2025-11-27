@@ -17,8 +17,9 @@ spec:
     source:
       repo: github.com/madfam-io/fortuna
       branch: main
-      path: services/api
+      path: .
     builder: dockerfile
+    dockerfile: Dockerfile
     buildEnv:
       PYTHON_VERSION: "3.11"
 
@@ -77,7 +78,7 @@ spec:
     name: fortuna_production
     extensions:
       - uuid-ossp
-      - pgvector  # For ML embeddings
+      - pgvector # For ML embeddings
 
   cache:
     type: redis
@@ -138,7 +139,7 @@ spec:
 
   networking:
     port: 8001
-    internal: true  # Only accessible from fortuna-api
+    internal: true # Only accessible from fortuna-api
 
   env:
     ENVIRONMENT: production

@@ -17,9 +17,9 @@ spec:
     source:
       repo: github.com/madfam-io/blueprint-harvester
       branch: main
-      path: services/api
+      path: services
     builder: dockerfile
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.api
     buildEnv:
       PYTHON_VERSION: "3.11"
 
@@ -94,9 +94,9 @@ spec:
     source:
       repo: github.com/madfam-io/blueprint-harvester
       branch: main
-      path: workers/processor
+      path: services
     builder: dockerfile
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.processing
     buildEnv:
       PYTHON_VERSION: "3.11"
 
@@ -107,7 +107,7 @@ spec:
         memory: 4Gi
       limits:
         cpu: 4000m
-        memory: 16Gi  # Large meshes and ML models
+        memory: 16Gi # Large meshes and ML models
     replicas:
       min: 2
       max: 10

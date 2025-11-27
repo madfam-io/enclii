@@ -1,0 +1,146 @@
+version: "3.8"
+
+services:
+  # Enclii Switchyard API (Go)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "8080:8080"
+      - "9090:9090"  # gRPC
+    environment:
+      - ENVIRONMENT=development
+      - HTTP_PORT=8080
+      - GRPC_PORT=9090
+      - DATABASE_URL=postgresql://enclii:enclii_dev@postgres:5432/enclii_dev
+      - REDIS_URL=redis://redis:6379/0
+      - JANUA_URL=http://host.docker.internal:8000
+      - JANUA_CLIENT_ID=enclii-switchyard
+      - JANUA_CLIENT_SECRET=dev-secret
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - REGISTRY_URL=http://registry:5000
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - enclii-network
+
+  # Enclii UI (Next.js)
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NEXT_PUBLIC_JANUA_URL=http://localhost:8000
+      - NEXT_PUBLIC_JANUA_CLIENT_ID=enclii-ui
+    volumes:
+      - ./ui:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    networks:
+      - enclii-network
+
+  # Build Worker
+  build-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      - WORKER_TYPE=build
+      - DATABASE_URL=postgresql://enclii:enclii_dev@postgres:5432/enclii_dev
+      - REDIS_URL=redis://redis:6379/0
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - REGISTRY_URL=http://registry:5000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - build_cache:/var/cache/enclii
+    depends_on:
+      - api
+      - registry
+    networks:
+      - enclii-network
+
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5436:5432"
+    environment:
+      - POSTGRES_USER=enclii
+      - POSTGRES_PASSWORD=enclii_dev
+      - POSTGRES_DB=enclii_dev
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enclii -d enclii_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - enclii-network
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6383:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - enclii-network
+
+  # Local Docker Registry
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+    networks:
+      - enclii-network
+
+  # Traefik (for local routing)
+  traefik:
+    image: traefik:v2.10
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8081:8080"  # Dashboard
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - enclii-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  registry_data:
+  build_cache:
+
+networks:
+  enclii-network:
+    driver: bridge

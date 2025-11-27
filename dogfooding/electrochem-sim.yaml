@@ -17,8 +17,9 @@ spec:
     source:
       repo: github.com/madfam-io/electrochem-sim
       branch: main
-      path: services/api
+      path: .
     builder: dockerfile
+    dockerfile: Dockerfile.api
     buildEnv:
       PYTHON_VERSION: "3.11"
 
@@ -112,8 +113,9 @@ spec:
     source:
       repo: github.com/madfam-io/electrochem-sim
       branch: main
-      path: apps/web
-    builder: nixpacks
+      path: .
+    builder: dockerfile
+    dockerfile: Dockerfile.web
     buildEnv:
       NODE_VERSION: "20"
       NEXT_PUBLIC_API_URL: https://api.galvana.io
@@ -171,8 +173,9 @@ spec:
     source:
       repo: github.com/madfam-io/electrochem-sim
       branch: main
-      path: services/worker
+      path: .
     builder: dockerfile
+    dockerfile: Dockerfile.worker
 
   runtime:
     resources:
