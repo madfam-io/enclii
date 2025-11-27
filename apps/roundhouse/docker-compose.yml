@@ -1,0 +1,69 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "8081:8081"
+    environment:
+      - API_PORT=8081
+      - REDIS_URL=redis://redis:6379/0
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
+      - SWITCHYARD_API_KEY=${SWITCHYARD_API_KEY:-dev-key}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build:
+      context: .
+      target: worker
+    privileged: true  # Required for Docker-in-Docker
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - REGISTRY=${REGISTRY:-ghcr.io}
+      - REGISTRY_USER=${REGISTRY_USER:-}
+      - REGISTRY_PASSWORD=${REGISTRY_PASSWORD:-}
+      - BUILD_WORK_DIR=/var/lib/roundhouse/builds
+      - BUILD_TIMEOUT=30m
+      - MAX_CONCURRENT_BUILDS=2
+      - GENERATE_SBOM=true
+      - SIGN_IMAGES=false
+      - SWITCHYARD_INTERNAL_URL=${SWITCHYARD_INTERNAL_URL:-http://switchyard:8080}
+      - SWITCHYARD_API_KEY=${SWITCHYARD_API_KEY:-dev-key}
+    volumes:
+      - worker-builds:/var/lib/roundhouse/builds
+      - /var/run/docker.sock:/var/run/docker.sock  # Share Docker socket
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    command: redis-server --appendonly yes
+
+volumes:
+  redis-data:
+  worker-builds:

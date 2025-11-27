@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: .
+      target: api
+    ports:
+      - "8082:8082"
+    environment:
+      - API_PORT=8082
+      - DATABASE_URL=postgresql://enclii:enclii_dev@postgres:5432/enclii_dev
+      - INTERNAL_API_KEY=${INTERNAL_API_KEY:-dev-key}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - PRICE_COMPUTE_GB_HOUR=0.000463
+      - PRICE_BUILD_MINUTE=0.01
+      - PRICE_STORAGE_GB_MONTH=0.25
+      - PRICE_BANDWIDTH_GB=0.10
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  aggregator:
+    build:
+      context: .
+      target: aggregator
+    environment:
+      - DATABASE_URL=postgresql://enclii:enclii_dev@postgres:5432/enclii_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=enclii
+      - POSTGRES_PASSWORD=enclii_dev
+      - POSTGRES_DB=enclii_dev
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U enclii -d enclii_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  postgres-data:
