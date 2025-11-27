@@ -1,110 +1,147 @@
-# Enclii Terraform Variables Example
-# Copy this file to terraform.tfvars and fill in your values
-# NEVER commit terraform.tfvars to version control
-
 # =============================================================================
-# REQUIRED - Provider Credentials
+# Enclii Production Infrastructure - Terraform Variables
 # =============================================================================
-
-# Hetzner Cloud API token
-# Get from: https://console.hetzner.cloud/projects/<project>/security/tokens
-hetzner_token = "your-hetzner-api-token"
-
-# Cloudflare API token (needs Zone:Edit, Tunnel:Edit, R2:Edit permissions)
-# Create at: https://dash.cloudflare.com/profile/api-tokens
-cloudflare_api_token = "your-cloudflare-api-token"
-
-# Cloudflare account ID
-# Found at: https://dash.cloudflare.com/ (right sidebar)
-cloudflare_account_id = "your-account-id"
-
-# =============================================================================
-# REQUIRED - R2 Storage Credentials
+#
+# SETUP INSTRUCTIONS:
+# 1. Copy this file to terraform.tfvars
+# 2. Fill in ALL required values below
+# 3. Run: terraform init
+# 4. Run: terraform plan
+# 5. Run: terraform apply
+#
+# SECURITY: Never commit terraform.tfvars to git!
 # =============================================================================
 
-# R2 API credentials (S3-compatible)
-# Create at: https://dash.cloudflare.com/<account>/r2/api-tokens
-r2_access_key_id     = "your-r2-access-key"
-r2_secret_access_key = "your-r2-secret-key"
-
 # =============================================================================
-# REQUIRED - Domain Configuration
+# PROVIDER CREDENTIALS (REQUIRED)
 # =============================================================================
 
-# Your domain managed in Cloudflare
-domain = "enclii.dev"
+# Hetzner Cloud API Token
+# Get from: https://console.hetzner.cloud/projects → Security → API Tokens
+# Permissions needed: Read & Write
+hetzner_token = "YOUR_HETZNER_API_TOKEN"
 
-# Subdomains
-subdomain_api = "api"  # api.enclii.dev
-subdomain_app = "app"  # app.enclii.dev
+# Cloudflare API Token
+# Get from: https://dash.cloudflare.com/profile/api-tokens
+# Required permissions: Zone:DNS:Edit, Zone:Zone:Read, Account:Cloudflare Tunnel:Edit, Account:R2:Edit
+cloudflare_api_token = "YOUR_CLOUDFLARE_API_TOKEN"
 
-# =============================================================================
-# REQUIRED - Security
-# =============================================================================
-
-# IP addresses allowed to SSH and access Kubernetes API
-# Add your office/home IPs here
-management_ips = [
-  "203.0.113.50/32",  # Example: Your home IP
-  "198.51.100.0/24",  # Example: Office network
-]
-
-# Email domain for Zero Trust Access
-allowed_email_domain = "enclii.dev"
+# Cloudflare Account ID
+# Get from: https://dash.cloudflare.com → any zone → Overview (right sidebar)
+cloudflare_account_id = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 
 # =============================================================================
-# OPTIONAL - Infrastructure Sizing
+# R2 STORAGE CREDENTIALS (REQUIRED)
 # =============================================================================
 
-# Datacenter location
-# Options: nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki),
-#          ash (Ashburn), hil (Hillsboro)
-location = "nbg1"
+# Cloudflare R2 Access Keys
+# Get from: https://dash.cloudflare.com → R2 → Manage R2 API Tokens
+r2_access_key_id     = "YOUR_R2_ACCESS_KEY_ID"
+r2_secret_access_key = "YOUR_R2_SECRET_ACCESS_KEY"
 
-# Control plane nodes (1 for dev, 3 for HA production)
-control_plane_count = 1
-control_plane_type  = "cx21"  # 2 vCPU, 4GB RAM, ~€5/mo
-
-# Worker nodes
-worker_count = 2
-worker_type  = "cx31"  # 2 vCPU, 8GB RAM, ~€10/mo
-
-# Storage volumes (GB)
-postgres_volume_size    = 50
-build_cache_volume_size = 100
-redis_volume_size       = 10
-
-# =============================================================================
-# OPTIONAL - Features
-# =============================================================================
-
-# Enable floating IP for stable egress
-enable_floating_ip = false
-
-# Environment tag
-environment = "production"
-
-# R2 bucket names
+# R2 Bucket names (can customize or use defaults)
 r2_bucket_backups   = "enclii-backups"
 r2_bucket_artifacts = "enclii-artifacts"
 
 # =============================================================================
-# Cost Estimate (Monthly)
+# DOMAIN CONFIGURATION (REQUIRED)
 # =============================================================================
-# With default settings:
-# - 1x cx21 control plane:  €5.18
-# - 2x cx31 workers:        €19.84
-# - 50GB volume:            €2.35
-# - 100GB volume:           €4.70
-# - 10GB volume:            €0.47
-# - Network:                ~€1.00
-# - Cloudflare:             Free (with Pro for WAF)
-# ---------------------------------
-# Total:                    ~€34/month
+
+# Your primary domain (must be added to Cloudflare)
+domain = "enclii.dev"
+
+# Subdomains for services
+subdomain_api = "api"   # → api.enclii.dev
+subdomain_app = "app"   # → app.enclii.dev
+
+# Email domain allowed for Zero Trust Access (for monitoring dashboards)
+allowed_email_domain = "enclii.dev"
+
+# =============================================================================
+# HETZNER COMPUTE CONFIGURATION
+# =============================================================================
+
+# Datacenter location
+# Options: nbg1 (Nuremberg), fsn1 (Falkenstein), hel1 (Helsinki), ash (Ashburn US), hil (Hillsboro US)
+# Recommendation: Use EU (nbg1/fsn1) for 20TB bandwidth vs US (ash/hil) 3TB cap
+location = "nbg1"
+
+# Control plane configuration
+# For production HA: 3 nodes (odd number required for etcd quorum)
+# For staging/dev: 1 node
+control_plane_count = 1
+control_plane_type  = "cx21"  # 2 vCPU, 4GB RAM, €5.18/mo
+
+# Worker node configuration
+# Recommendation: Start with 2, scale based on workload
+worker_count = 2
+worker_type  = "cx31"  # 2 vCPU, 8GB RAM, €9.92/mo
+
+# =============================================================================
+# STORAGE CONFIGURATION
+# =============================================================================
+
+# PostgreSQL data volume size (GB)
+# Recommendation: Start with 50GB, can expand later
+postgres_volume_size = 50
+
+# Build cache volume size (GB)
+# Used for faster container builds
+build_cache_volume_size = 100
+
+# Redis data volume size (GB)
+redis_volume_size = 10
+
+# =============================================================================
+# NETWORK SECURITY (REQUIRED)
+# =============================================================================
+
+# IP addresses allowed for SSH and Kubernetes API access
+# CRITICAL: Add your office/home IP addresses here
+# Format: CIDR notation ["x.x.x.x/32", "y.y.y.y/24"]
+# Get your IP: curl ifconfig.me
+management_ips = [
+  # "YOUR_IP_ADDRESS/32",    # Your home/office IP
+  # "TEAM_MEMBER_IP/32",     # Team member IP
+]
+
+# =============================================================================
+# OPTIONAL FEATURES
+# =============================================================================
+
+# Enable floating IP for stable egress (adds ~€4/mo)
+enable_floating_ip = false
+
+# =============================================================================
+# ENVIRONMENT
+# =============================================================================
+
+# Deployment environment: development, staging, production
+environment = "production"
+
+# Resource tags
+tags = {
+  project    = "enclii"
+  managed_by = "terraform"
+  owner      = "platform-team"
+}
+
+# =============================================================================
+# COST ESTIMATE (based on above defaults)
+# =============================================================================
 #
-# For HA (3 control planes, 3 workers):
-# - 3x cx21 control plane:  €15.54
-# - 3x cx31 workers:        €29.76
-# - Volumes + Network:      ~€10
-# ---------------------------------
-# Total:                    ~€55/month
+# Control Plane: 1x cx21 = €5.18/mo
+# Workers: 2x cx31 = €19.84/mo
+# Volumes: 160GB total = ~€6.40/mo
+# Cloudflare: $0 (tunnel, R2 free tier, DNS)
+# Network: $0 (private network included)
+#
+# TOTAL: ~€31/mo (~$34/mo) for starter setup
+#
+# Production recommendation (3 CP + 3 workers):
+# Control Plane: 3x cx21 = €15.54/mo
+# Workers: 3x cx31 = €29.76/mo
+# Volumes: 160GB = €6.40/mo
+# TOTAL: ~€52/mo (~$57/mo)
+#
+# =============================================================================

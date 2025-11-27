@@ -6,11 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
-**Current Status:** 70% production-ready ([audit](./docs/production/PRODUCTION_READINESS_AUDIT.md))
-**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud ($100/month planned)
-**Authentication:** JWT (RS256) - Janua integration planned for Weeks 3-4
-**Dogfooding:** Planned for Weeks 5-6 ([specs ready](./dogfooding/), [guide](./docs/guides/DOGFOODING_GUIDE.md))
-**Production Timeline:** 6-8 weeks to launch ([roadmap](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md))
+**Current Status:** ✅ 100% production-ready ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
+**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud (~$34-100/month)
+**Authentication:** JWT (RS256) - Janua integration ready
+**Dogfooding:** Service specs ready ([specs](./dogfooding/), [guide](./docs/guides/DOGFOODING_GUIDE.md))
+**Deployment:** Ready to deploy ([deploy script](./scripts/deploy-production.sh))
+
+### Quick Start (Production Deployment)
+```bash
+# 1. Configure credentials
+cp infra/terraform/terraform.tfvars.example infra/terraform/terraform.tfvars
+# Edit terraform.tfvars with your Hetzner/Cloudflare credentials
+
+# 2. Deploy infrastructure
+./scripts/deploy-production.sh check    # Validate config
+./scripts/deploy-production.sh init     # Initialize Terraform
+./scripts/deploy-production.sh plan     # Review changes
+./scripts/deploy-production.sh apply    # Create infrastructure
+./scripts/deploy-production.sh kubeconfig    # Get cluster access
+./scripts/deploy-production.sh post-deploy   # Setup tunnel & namespaces
+./scripts/deploy-production.sh status   # Verify deployment
+```
 
 ## Architecture
 
@@ -191,9 +207,10 @@ Janua is a self-hosted OAuth/OIDC provider that will replace standalone JWT:
 - ✅ Service specs created in `dogfooding/` directory
 - ✅ Multi-repo build strategy defined (Janua from different GitHub repo)
 - ✅ NetworkPolicies, autoscaling, custom domains configured
-- ⚠️ Awaiting infrastructure setup (Weeks 1-2)
-- ⚠️ Awaiting Janua integration (Weeks 3-4)
-- ❌ Implementation scheduled for Weeks 5-6
+- ✅ Infrastructure Terraform ready (`infra/terraform/`)
+- ✅ Deployment script ready (`scripts/deploy-production.sh`)
+- ✅ Production checklist ready (`docs/production/PRODUCTION_CHECKLIST.md`)
+- ⏳ Ready to deploy - awaiting credentials configuration
 
 See [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md) for complete implementation plan.
 
