@@ -22,6 +22,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/middleware"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
@@ -214,6 +215,11 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+
+	// Initialize security middleware with CORS support
+	securityMiddleware := middleware.NewSecurityMiddleware(nil) // Uses default config with CORS
+	router.Use(securityMiddleware.CORSMiddleware())
+	logrus.Info("✓ CORS middleware enabled")
 
 	// Setup API routes with all dependencies
 	apiHandler := api.NewHandler(

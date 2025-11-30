@@ -1,7 +1,9 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState, useEffect } from "react";
+import Link from "next/link";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 interface DashboardStats {
   healthy_services: number;
@@ -15,7 +17,7 @@ interface RecentActivity {
   type: string;
   message: string;
   timestamp: string;
-  status: 'success' | 'running' | 'failed' | 'pending';
+  status: "success" | "running" | "failed" | "pending";
   metadata?: any;
 }
 
@@ -24,9 +26,15 @@ interface ServiceOverview {
   name: string;
   project_name: string;
   environment: string;
-  status: 'healthy' | 'unhealthy' | 'unknown';
+  status: "healthy" | "unhealthy" | "unknown";
   version: string;
   replicas: string;
+}
+
+interface DashboardResponse {
+  stats: DashboardStats;
+  activities: RecentActivity[];
+  services: ServiceOverview[];
 }
 
 export default function Dashboard() {
@@ -34,93 +42,40 @@ export default function Dashboard() {
     healthy_services: 0,
     deployments_today: 0,
     active_projects: 0,
-    avg_deploy_time: '0m'
+    avg_deploy_time: "N/A",
   });
   const [activities, setActivities] = useState<RecentActivity[]>([]);
   const [services, setServices] = useState<ServiceOverview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchDashboardData = async () => {
     try {
-      // In a real implementation, these would be API calls
-      // For now, we'll use mock data since the API endpoints might not be fully set up
-      
-      // Mock stats
-      setStats({
-        healthy_services: 12,
-        deployments_today: 8,
-        active_projects: 3,
-        avg_deploy_time: '2.3m'
-      });
+      setError(null);
+      const response = await fetch(`${API_BASE_URL}/v1/dashboard/stats`);
 
-      // Mock recent activities
-      setActivities([
-        {
-          id: '1',
-          type: 'deployment',
-          message: 'Deployed api to production',
-          timestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
-          status: 'success',
-          metadata: { version: 'v2024.01.15-14.02' }
-        },
-        {
-          id: '2',
-          type: 'environment',
-          message: 'Created preview environment',
-          timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-          status: 'running',
-          metadata: { environment: 'preview-feature-auth' }
-        },
-        {
-          id: '3',
-          type: 'build',
-          message: 'Build completed for worker service',
-          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-          status: 'success'
-        }
-      ]);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} ${response.statusText}`);
+      }
 
-      // Mock services overview
-      setServices([
-        {
-          id: '1',
-          name: 'api',
-          project_name: 'core-platform',
-          environment: 'production',
-          status: 'healthy',
-          version: 'v2024.01.15-14.02',
-          replicas: '2/2'
-        },
-        {
-          id: '2',
-          name: 'worker',
-          project_name: 'core-platform',
-          environment: 'staging',
-          status: 'healthy',
-          version: 'v2024.01.15-13.45',
-          replicas: '1/1'
-        },
-        {
-          id: '3',
-          name: 'frontend',
-          project_name: 'web-app',
-          environment: 'production',
-          status: 'healthy',
-          version: 'v2024.01.15-12.30',
-          replicas: '3/3'
-        }
-      ]);
-      
+      const data: DashboardResponse = await response.json();
+
+      setStats(data.stats);
+      setActivities(data.activities || []);
+      setServices(data.services || []);
       setLoading(false);
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
+    } catch (err) {
+      console.error("Failed to fetch dashboard data:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch dashboard data",
+      );
       setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchDashboardData();
-    
+
     // Refresh data every 30 seconds
     const interval = setInterval(fetchDashboardData, 30000);
     return () => clearInterval(interval);
@@ -130,18 +85,18 @@ export default function Dashboard() {
     const now = new Date();
     const time = new Date(timestamp);
     const diffInSeconds = Math.floor((now.getTime() - time.getTime()) / 1000);
-    
+
     if (diffInSeconds < 60) {
       return `${diffInSeconds} seconds ago`;
     } else if (diffInSeconds < 3600) {
       const minutes = Math.floor(diffInSeconds / 60);
-      return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+      return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
     } else if (diffInSeconds < 86400) {
       const hours = Math.floor(diffInSeconds / 3600);
-      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+      return `${hours} hour${hours > 1 ? "s" : ""} ago`;
     } else {
       const days = Math.floor(diffInSeconds / 86400);
-      return `${days} day${days > 1 ? 's' : ''} ago`;
+      return `${days} day${days > 1 ? "s" : ""} ago`;
     }
   };
 
@@ -164,19 +119,46 @@ export default function Dashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-red-800 mb-2">
+            Error Loading Dashboard
+          </h2>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={fetchDashboardData}
+            className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Dashboard
-          </h1>
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
           <button
             onClick={fetchDashboardData}
             className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <svg
+              className="w-4 h-4 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
             </svg>
             Refresh
           </button>
@@ -293,28 +275,42 @@ export default function Dashboard() {
                 <li key={activity.id} className="px-4 py-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <div className={`w-2 h-2 rounded-full mr-3 ${
-                        activity.status === 'success' ? 'bg-green-500' :
-                        activity.status === 'running' ? 'bg-blue-500' :
-                        activity.status === 'failed' ? 'bg-red-500' :
-                        'bg-yellow-500'
-                      }`}></div>
+                      <div
+                        className={`w-2 h-2 rounded-full mr-3 ${
+                          activity.status === "success"
+                            ? "bg-green-500"
+                            : activity.status === "running"
+                              ? "bg-blue-500"
+                              : activity.status === "failed"
+                                ? "bg-red-500"
+                                : "bg-yellow-500"
+                        }`}
+                      ></div>
                       <div>
                         <p className="text-sm font-medium text-gray-900">
                           {activity.message}
                         </p>
                         <p className="text-sm text-gray-500">
-                          {activity.metadata?.version || activity.metadata?.environment || ''} • {formatTimeAgo(activity.timestamp)}
+                          {activity.metadata?.version ||
+                            activity.metadata?.environment ||
+                            ""}{" "}
+                          • {formatTimeAgo(activity.timestamp)}
                         </p>
                       </div>
                     </div>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      activity.status === 'success' ? 'bg-green-100 text-green-800' :
-                      activity.status === 'running' ? 'bg-blue-100 text-blue-800' :
-                      activity.status === 'failed' ? 'bg-red-100 text-red-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {activity.status.charAt(0).toUpperCase() + activity.status.slice(1)}
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        activity.status === "success"
+                          ? "bg-green-100 text-green-800"
+                          : activity.status === "running"
+                            ? "bg-blue-100 text-blue-800"
+                            : activity.status === "failed"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-yellow-100 text-yellow-800"
+                      }`}
+                    >
+                      {activity.status.charAt(0).toUpperCase() +
+                        activity.status.slice(1)}
                     </span>
                   </div>
                 </li>
@@ -357,7 +353,10 @@ export default function Dashboard() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {services.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    <td
+                      colSpan={5}
+                      className="px-6 py-8 text-center text-gray-500"
+                    >
                       No services found
                     </td>
                   </tr>
@@ -366,7 +365,7 @@ export default function Dashboard() {
                     <tr key={service.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <Link 
+                          <Link
                             href={`/services/${service.id}`}
                             className="text-sm font-medium text-gray-900 hover:text-enclii-blue"
                           >
@@ -378,20 +377,28 @@ export default function Dashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          service.environment === 'production' ? 'bg-green-100 text-green-800' :
-                          service.environment === 'staging' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-blue-100 text-blue-800'
-                        }`}>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            service.environment === "production"
+                              ? "bg-green-100 text-green-800"
+                              : service.environment === "staging"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : "bg-blue-100 text-blue-800"
+                          }`}
+                        >
                           {service.environment}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          service.status === 'healthy' ? 'bg-green-100 text-green-800' :
-                          service.status === 'unhealthy' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
+                        <span
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            service.status === "healthy"
+                              ? "bg-green-100 text-green-800"
+                              : service.status === "unhealthy"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
                           {service.status}
                         </span>
                       </td>
@@ -410,5 +417,5 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
-  )
+  );
 }

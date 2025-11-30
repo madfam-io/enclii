@@ -2,8 +2,6 @@ module github.com/madfam/enclii/apps/switchyard-api
 
 go 1.24.0
 
-toolchain go1.24.7
-
 require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-git/go-git/v5 v5.16.3

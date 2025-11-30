@@ -33,24 +33,24 @@ type SecurityConfig struct {
 	RateLimit       int           // requests per second
 	RateBurst       int           // burst capacity
 	RateWindowSize  time.Duration // time window for rate limiting
-	
+
 	// Security headers
 	EnableHSTS      bool
 	EnableCSP       bool
 	EnableXSSProtection bool
 	EnableNoSniff   bool
 	EnableFrameOptions bool
-	
+
 	// Request validation
 	MaxRequestSize  int64         // in bytes
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
-	
+
 	// IP filtering
 	AllowedIPs      []string      // CIDR blocks
 	BlockedIPs      []string      // CIDR blocks
 	TrustedProxies  []string      // for X-Forwarded-For header
-	
+
 	// CORS
 	AllowedOrigins  []string
 	AllowedMethods  []string
@@ -137,27 +137,27 @@ func (s *SecurityMiddleware) SecurityHeadersMiddleware() gin.HandlerFunc {
 		if s.config.EnableHSTS {
 			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
-		
+
 		if s.config.EnableCSP {
 			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'")
 		}
-		
+
 		if s.config.EnableXSSProtection {
 			c.Header("X-XSS-Protection", "1; mode=block")
 		}
-		
+
 		if s.config.EnableNoSniff {
 			c.Header("X-Content-Type-Options", "nosniff")
 		}
-		
+
 		if s.config.EnableFrameOptions {
 			c.Header("X-Frame-Options", "DENY")
 		}
-		
+
 		// Additional security headers
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
-		
+
 		c.Next()
 	}
 }
@@ -171,7 +171,7 @@ func (s *SecurityMiddleware) RequestSizeLimitMiddleware() gin.HandlerFunc {
 				"content_length": c.Request.ContentLength,
 				"max_size":       s.config.MaxRequestSize,
 			}).Warn("Request size too large")
-			
+
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{
 				"error": "Request size too large",
 				"max_size": s.config.MaxRequestSize,
@@ -179,7 +179,7 @@ func (s *SecurityMiddleware) RequestSizeLimitMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -196,7 +196,7 @@ func (s *SecurityMiddleware) IPFilteringMiddleware() gin.HandlerFunc {
 		}
 		allowedNets = append(allowedNets, ipNet)
 	}
-	
+
 	blockedNets := make([]*net.IPNet, 0, len(s.config.BlockedIPs))
 	for _, cidr := range s.config.BlockedIPs {
 		_, ipNet, err := net.ParseCIDR(cidr)
@@ -206,7 +206,7 @@ func (s *SecurityMiddleware) IPFilteringMiddleware() gin.HandlerFunc {
 		}
 		blockedNets = append(blockedNets, ipNet)
 	}
-	
+
 	return func(c *gin.Context) {
 		clientIP := net.ParseIP(s.getClientIP(c))
 		if clientIP == nil {
@@ -214,7 +214,7 @@ func (s *SecurityMiddleware) IPFilteringMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		
+
 		// Check blocked IPs first
 		for _, blockedNet := range blockedNets {
 			if blockedNet.Contains(clientIP) {
@@ -224,7 +224,7 @@ func (s *SecurityMiddleware) IPFilteringMiddleware() gin.HandlerFunc {
 				return
 			}
 		}
-		
+
 		// Check allowed IPs (if configured)
 		if len(allowedNets) > 0 {
 			allowed := false
@@ -234,7 +234,7 @@ func (s *SecurityMiddleware) IPFilteringMiddleware() gin.HandlerFunc {
 					break
 				}
 			}
-			
+
 			if !allowed {
 				logrus.WithField("client_ip", clientIP.String()).Warn("Non-whitelisted IP attempted access")
 				c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
@@ -242,7 +242,7 @@ func (s *SecurityMiddleware) IPFilteringMiddleware() gin.HandlerFunc {
 				return
 			}
 		}
-		
+
 		c.Next()
 	}
 }
@@ -251,46 +251,50 @@ func (s *SecurityMiddleware) IPFilteringMiddleware() gin.HandlerFunc {
 func (s *SecurityMiddleware) CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		
-		// Check if origin is allowed
-		if len(s.config.AllowedOrigins) > 0 {
-			allowed := false
-			for _, allowedOrigin := range s.config.AllowedOrigins {
-				if allowedOrigin == "*" || allowedOrigin == origin {
-					allowed = true
-					break
+
+		// Only apply CORS checks if Origin header is present (browser requests)
+		// Server-to-server requests (curl, etc.) don't send Origin header
+		if origin != "" {
+			// Check if origin is allowed
+			if len(s.config.AllowedOrigins) > 0 {
+				allowed := false
+				for _, allowedOrigin := range s.config.AllowedOrigins {
+					if allowedOrigin == "*" || allowedOrigin == origin {
+						allowed = true
+						break
+					}
 				}
+
+				if !allowed {
+					c.JSON(http.StatusForbidden, gin.H{"error": "Origin not allowed"})
+					c.Abort()
+					return
+				}
+
+				c.Header("Access-Control-Allow-Origin", origin)
+			} else {
+				c.Header("Access-Control-Allow-Origin", "*")
 			}
-			
-			if !allowed {
-				c.JSON(http.StatusForbidden, gin.H{"error": "Origin not allowed"})
-				c.Abort()
-				return
-			}
-			
-			c.Header("Access-Control-Allow-Origin", origin)
-		} else {
-			c.Header("Access-Control-Allow-Origin", "*")
 		}
-		
+
 		c.Header("Access-Control-Allow-Methods", strings.Join(s.config.AllowedMethods, ", "))
 		c.Header("Access-Control-Allow-Headers", strings.Join(s.config.AllowedHeaders, ", "))
-		
+
 		if s.config.AllowCredentials {
 			c.Header("Access-Control-Allow-Credentials", "true")
 		}
-		
+
 		if s.config.MaxAge > 0 {
 			c.Header("Access-Control-Max-Age", strconv.Itoa(s.config.MaxAge))
 		}
-		
+
 		// Handle preflight request
 		if c.Request.Method == "OPTIONS" {
 			c.Status(http.StatusNoContent)
 			c.Abort()
 			return
 		}
-		
+
 		c.Next()
 	}
 }
@@ -299,11 +303,11 @@ func (s *SecurityMiddleware) CORSMiddleware() gin.HandlerFunc {
 func (s *SecurityMiddleware) RequestLoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		
+
 		c.Next()
-		
+
 		duration := time.Since(start)
-		
+
 		// Log suspicious requests
 		if c.Writer.Status() >= 400 || duration > 5*time.Second {
 			logrus.WithFields(logrus.Fields{
@@ -327,7 +331,7 @@ func (s *SecurityMiddleware) ContentTypeValidationMiddleware() gin.HandlerFunc {
 		"multipart/form-data":               true,
 		"text/plain":                        true,
 	}
-	
+
 	return func(c *gin.Context) {
 		if c.Request.Method == "POST" || c.Request.Method == "PUT" || c.Request.Method == "PATCH" {
 			contentType := c.GetHeader("Content-Type")
@@ -335,14 +339,14 @@ func (s *SecurityMiddleware) ContentTypeValidationMiddleware() gin.HandlerFunc {
 				// Parse content type (remove charset, etc.)
 				parts := strings.Split(contentType, ";")
 				mainType := strings.TrimSpace(parts[0])
-				
+
 				if !allowedTypes[mainType] {
 					logrus.WithFields(logrus.Fields{
 						"client_ip":    s.getClientIP(c),
 						"content_type": contentType,
 						"path":         c.Request.URL.Path,
 					}).Warn("Invalid content type")
-					
+
 					c.JSON(http.StatusUnsupportedMediaType, gin.H{
 						"error": "Unsupported content type",
 						"allowed_types": []string{
@@ -357,7 +361,7 @@ func (s *SecurityMiddleware) ContentTypeValidationMiddleware() gin.HandlerFunc {
 				}
 			}
 		}
-		
+
 		c.Next()
 	}
 }
@@ -375,10 +379,10 @@ func (s *SecurityMiddleware) UserAgentValidationMiddleware() gin.HandlerFunc {
 		"wpscan",
 		"curl/7", // Be careful with this one - many legitimate tools use curl
 	}
-	
+
 	return func(c *gin.Context) {
 		userAgent := strings.ToLower(c.Request.UserAgent())
-		
+
 		for _, suspicious := range suspiciousAgents {
 			if strings.Contains(userAgent, suspicious) {
 				logrus.WithFields(logrus.Fields{
@@ -386,13 +390,13 @@ func (s *SecurityMiddleware) UserAgentValidationMiddleware() gin.HandlerFunc {
 					"user_agent": c.Request.UserAgent(),
 					"path":       c.Request.URL.Path,
 				}).Warn("Suspicious user agent detected")
-				
+
 				c.JSON(http.StatusForbidden, gin.H{"error": "Access denied"})
 				c.Abort()
 				return
 			}
 		}
-		
+
 		c.Next()
 	}
 }
@@ -408,18 +412,18 @@ func (s *SecurityMiddleware) getClientIP(c *gin.Context) string {
 			return strings.TrimSpace(ips[0])
 		}
 	}
-	
+
 	// Check X-Real-IP header
 	if realIP := c.Request.Header.Get("X-Real-IP"); realIP != "" {
 		return realIP
 	}
-	
+
 	// Fall back to remote address
 	ip, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 	if err != nil {
 		return c.Request.RemoteAddr
 	}
-	
+
 	return ip
 }
 
@@ -552,9 +556,13 @@ func getAllowedOrigins() []string {
 	// This is safe for local development with kind/docker-compose
 	return []string{
 		"http://localhost:3000",  // Next.js dev server
-		"http://localhost:8080",  // API dev server
+		"http://localhost:8030",  // Enclii UI (per PORT_REGISTRY)
+		"http://localhost:8080",  // API dev server (legacy)
+		"http://localhost:8001",  // Enclii API (per PORT_REGISTRY)
 		"http://127.0.0.1:3000",
+		"http://127.0.0.1:8030",
 		"http://127.0.0.1:8080",
+		"http://127.0.0.1:8001",
 	}
 }
 
@@ -581,7 +589,7 @@ func LogSecurityEvent(eventType, clientIP, userAgent, path, method, message stri
 		StatusCode: statusCode,
 		Message:    message,
 	}
-	
+
 	logrus.WithFields(logrus.Fields{
 		"security_event": event,
 	}).Warn("Security event logged")

@@ -245,8 +245,8 @@ make infra-dev       # Install NGINX Ingress, cert-manager, Prometheus
 make dns-dev         # Configure dev DNS
 
 # 3. Run the platform
-make run-switchyard  # Control plane API on :8080
-make run-ui          # Web UI on http://localhost:3000
+make run-switchyard  # Control plane API on :8001
+make run-ui          # Web UI on http://localhost:8030
 make run-reconcilers # Kubernetes controllers
 
 # 4. Try the CLI

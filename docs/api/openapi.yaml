@@ -1,0 +1,1019 @@
+openapi: 3.1.0
+info:
+  title: Enclii Platform API
+  description: |
+    Railway-style Platform-as-a-Service API for deploying and managing containerized applications.
+
+    ## Authentication
+    All endpoints (except `/health` and `/auth/login`) require JWT authentication.
+    Include the token in the `Authorization` header as `Bearer <token>`.
+
+    ## Rate Limiting
+    - Standard endpoints: 100 requests/minute
+    - Auth endpoints: 10 requests/minute
+    - Build endpoints: 20 requests/minute
+  version: 0.1.0
+  contact:
+    name: MADFAM Engineering
+    email: engineering@madfam.io
+    url: https://enclii.io
+  license:
+    name: AGPL-3.0
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+
+servers:
+  - url: https://api.enclii.io/v1
+    description: Production API
+  - url: https://api.staging.enclii.io/v1
+    description: Staging API
+  - url: http://localhost:8001/v1
+    description: Local development (port 8001 per PORT_REGISTRY)
+
+tags:
+  - name: Authentication
+    description: User authentication and session management
+  - name: Projects
+    description: Project management operations
+  - name: Services
+    description: Service deployment and configuration
+  - name: Deployments
+    description: Deployment operations and rollbacks
+  - name: Domains
+    description: Custom domain management
+  - name: Health
+    description: Health check endpoints
+  - name: Builds
+    description: Build pipeline operations (Roundhouse)
+  - name: Usage
+    description: Usage tracking and billing (Waybill)
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns the health status of the API
+      tags: [Health]
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /health/ready:
+    get:
+      summary: Readiness probe
+      description: Returns whether the service is ready to accept traffic
+      tags: [Health]
+      security: []
+      responses:
+        "200":
+          description: Service is ready
+        "503":
+          description: Service is not ready
+
+  /health/live:
+    get:
+      summary: Liveness probe
+      description: Returns whether the service is alive
+      tags: [Health]
+      security: []
+      responses:
+        "200":
+          description: Service is alive
+        "503":
+          description: Service is not alive
+
+  /dashboard/stats:
+    get:
+      summary: Dashboard statistics
+      description: Returns aggregated statistics for the dashboard including healthy services count, deployments today, active projects, and recent activity. This endpoint is public (no authentication required) for local development.
+      tags: [Health]
+      security: []
+      responses:
+        "200":
+          description: Dashboard statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+        "500":
+          description: Failed to retrieve dashboard statistics
+
+  /auth/register:
+    post:
+      summary: Register new user
+      description: Create a new user account
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: User already exists
+
+  /auth/login:
+    post:
+      summary: User login
+      description: Authenticate user and return JWT tokens
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/refresh:
+    post:
+      summary: Refresh tokens
+      description: Get new access token using refresh token
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      summary: User logout
+      description: Invalidate current session
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Logged out successfully
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/me:
+    get:
+      summary: Get current user
+      description: Returns the authenticated user's profile
+      tags: [Authentication]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /projects:
+    get:
+      summary: List projects
+      description: Get all projects for the authenticated user
+      tags: [Projects]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      summary: Create project
+      description: Create a new project
+      tags: [Projects]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /projects/{projectId}:
+    get:
+      summary: Get project
+      description: Get project details by ID
+      tags: [Projects]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      summary: Update project
+      description: Update project settings
+      tags: [Projects]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      summary: Delete project
+      description: Delete a project and all its resources
+      tags: [Projects]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "204":
+          description: Project deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{projectId}/services:
+    get:
+      summary: List services
+      description: Get all services in a project
+      tags: [Services]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: List of services
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      summary: Create service
+      description: Create a new service in a project
+      tags: [Services]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceRequest"
+      responses:
+        "201":
+          description: Service created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /projects/{projectId}/services/{serviceId}:
+    get:
+      summary: Get service
+      description: Get service details
+      tags: [Services]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/ServiceId"
+      responses:
+        "200":
+          description: Service details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Service"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      summary: Delete service
+      description: Delete a service
+      tags: [Services]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/ServiceId"
+      responses:
+        "204":
+          description: Service deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /projects/{projectId}/services/{serviceId}/deploy:
+    post:
+      summary: Deploy service
+      description: Trigger a new deployment for a service
+      tags: [Deployments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/ServiceId"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeployRequest"
+      responses:
+        "202":
+          description: Deployment started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deployment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /projects/{projectId}/services/{serviceId}/deployments:
+    get:
+      summary: List deployments
+      description: Get deployment history for a service
+      tags: [Deployments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/ServiceId"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: List of deployments
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeploymentList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /projects/{projectId}/services/{serviceId}/rollback:
+    post:
+      summary: Rollback service
+      description: Rollback to a previous deployment
+      tags: [Deployments]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/ServiceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [deployment_id]
+              properties:
+                deployment_id:
+                  type: string
+                  format: uuid
+      responses:
+        "202":
+          description: Rollback started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deployment"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /projects/{projectId}/domains:
+    get:
+      summary: List domains
+      description: Get all custom domains for a project
+      tags: [Domains]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: List of domains
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      summary: Add domain
+      description: Add a custom domain to a project
+      tags: [Domains]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDomainRequest"
+      responses:
+        "201":
+          description: Domain added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Domain"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token
+
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    ServiceId:
+      name: serviceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    LimitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    DashboardResponse:
+      type: object
+      required: [stats, activities, services]
+      properties:
+        stats:
+          $ref: "#/components/schemas/DashboardStats"
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentActivity"
+        services:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceOverview"
+
+    DashboardStats:
+      type: object
+      required:
+        [healthy_services, deployments_today, active_projects, avg_deploy_time]
+      properties:
+        healthy_services:
+          type: integer
+          description: Number of healthy services
+        deployments_today:
+          type: integer
+          description: Number of deployments today
+        active_projects:
+          type: integer
+          description: Number of active projects
+        avg_deploy_time:
+          type: string
+          description: Average deployment time (e.g., "2.3m")
+
+    RecentActivity:
+      type: object
+      required: [id, type, message, timestamp, status]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [deployment, environment, build]
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [success, running, failed, pending]
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ServiceOverview:
+      type: object
+      required: [id, name, project_name, environment, status, version, replicas]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        project_name:
+          type: string
+        environment:
+          type: string
+        status:
+          type: string
+          enum: [healthy, unhealthy, unknown]
+        version:
+          type: string
+        replicas:
+          type: string
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        version:
+          type: string
+        uptime:
+          type: integer
+        checks:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [ok, error]
+            redis:
+              type: string
+              enum: [ok, error]
+            kubernetes:
+              type: string
+              enum: [ok, error]
+
+    RegisterRequest:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+          minLength: 2
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      required: [access_token, refresh_token, user]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      required: [id, email, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, developer, viewer]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Project:
+      type: object
+      required: [id, name, owner_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+        environment:
+          type: string
+          enum: [development, staging, production]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProjectList:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 64
+        description:
+          type: string
+          maxLength: 256
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 64
+        description:
+          type: string
+          maxLength: 256
+
+    Service:
+      type: object
+      required: [id, name, project_id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, building, deploying, running, failed, stopped]
+        git_repo:
+          type: string
+        git_branch:
+          type: string
+        replicas:
+          type: integer
+        port:
+          type: integer
+        resources:
+          $ref: "#/components/schemas/Resources"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ServiceList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Service"
+
+    CreateServiceRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 64
+        git_repo:
+          type: string
+        git_branch:
+          type: string
+          default: main
+        dockerfile:
+          type: string
+          default: Dockerfile
+        port:
+          type: integer
+          default: 3000
+        replicas:
+          type: integer
+          default: 1
+          minimum: 1
+          maximum: 10
+        resources:
+          $ref: "#/components/schemas/Resources"
+        env_vars:
+          type: object
+          additionalProperties:
+            type: string
+
+    Resources:
+      type: object
+      properties:
+        cpu_request:
+          type: string
+          default: "100m"
+        cpu_limit:
+          type: string
+          default: "500m"
+        memory_request:
+          type: string
+          default: "128Mi"
+        memory_limit:
+          type: string
+          default: "512Mi"
+
+    Deployment:
+      type: object
+      required: [id, service_id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        service_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, building, deploying, succeeded, failed, rolled_back]
+        git_sha:
+          type: string
+        image_uri:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        logs_url:
+          type: string
+          format: uri
+
+    DeploymentList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Deployment"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    DeployRequest:
+      type: object
+      properties:
+        git_sha:
+          type: string
+          description: Specific commit to deploy (defaults to latest)
+        force:
+          type: boolean
+          default: false
+          description: Force deployment even if no changes detected
+
+    Domain:
+      type: object
+      required: [id, domain, project_id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        service_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, verifying, active, failed]
+        ssl_status:
+          type: string
+          enum: [pending, provisioning, active, failed]
+        created_at:
+          type: string
+          format: date-time
+
+    DomainList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Domain"
+
+    CreateDomainRequest:
+      type: object
+      required: [domain]
+      properties:
+        domain:
+          type: string
+          pattern: ^[a-zA-Z0-9][a-zA-Z0-9-_.]+[a-zA-Z0-9]$
+        service_id:
+          type: string
+          format: uuid
+
+security:
+  - bearerAuth: []

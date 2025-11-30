@@ -7,7 +7,7 @@
  * - SECURITY_AUDIT_COMPREHENSIVE_2025.md
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 // CSRF token cache
 let csrfToken: string | null = null;
@@ -20,26 +20,26 @@ let csrfToken: string | null = null;
  */
 function getAuthHeaders(includeCSRF: boolean = false): HeadersInit {
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   };
 
   // Get JWT token from localStorage
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('auth_token');
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("auth_token");
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers["Authorization"] = `Bearer ${token}`;
     } else {
       // Development fallback
       const devToken = process.env.NEXT_PUBLIC_API_TOKEN;
       if (devToken) {
-        headers['Authorization'] = `Bearer ${devToken}`;
+        headers["Authorization"] = `Bearer ${devToken}`;
       }
     }
   }
 
   // Add CSRF token for write operations
   if (includeCSRF && csrfToken) {
-    headers['X-CSRF-Token'] = csrfToken;
+    headers["X-CSRF-Token"] = csrfToken;
   }
 
   return headers;
@@ -51,17 +51,17 @@ function getAuthHeaders(includeCSRF: boolean = false): HeadersInit {
 async function fetchCSRFToken(): Promise<void> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/csrf`, {
-      credentials: 'include', // Include cookies
+      credentials: "include", // Include cookies
     });
 
     if (response.ok) {
-      const token = response.headers.get('X-CSRF-Token');
+      const token = response.headers.get("X-CSRF-Token");
       if (token) {
         csrfToken = token;
       }
     }
   } catch (error) {
-    console.error('Failed to fetch CSRF token:', error);
+    console.error("Failed to fetch CSRF token:", error);
   }
 }
 
@@ -74,11 +74,13 @@ async function fetchCSRFToken(): Promise<void> {
  */
 export async function apiRequest<T = any>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const method = options.method || 'GET';
-  const isWriteOperation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase());
+  const method = options.method || "GET";
+  const isWriteOperation = ["POST", "PUT", "DELETE", "PATCH"].includes(
+    method.toUpperCase(),
+  );
 
   // Fetch CSRF token for write operations if not cached
   if (isWriteOperation && !csrfToken) {
@@ -94,26 +96,29 @@ export async function apiRequest<T = any>(
     const response = await fetch(url, {
       ...options,
       headers,
-      credentials: 'include', // Include cookies for CSRF
+      credentials: "include", // Include cookies for CSRF
     });
 
     // Handle authentication errors
     if (response.status === 401) {
       // Clear invalid token
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('auth_token');
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("auth_token");
       }
-      throw new Error('Authentication required. Please log in again.');
+      throw new Error("Authentication required. Please log in again.");
     }
 
     if (response.status === 403) {
-      throw new Error('Access denied. You do not have permission to perform this action.');
+      throw new Error(
+        "Access denied. You do not have permission to perform this action.",
+      );
     }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(
-        error.message || `API request failed: ${response.status} ${response.statusText}`
+        error.message ||
+          `API request failed: ${response.status} ${response.statusText}`,
       );
     }
 
@@ -128,7 +133,7 @@ export async function apiRequest<T = any>(
  * GET request helper
  */
 export async function apiGet<T = any>(endpoint: string): Promise<T> {
-  return apiRequest<T>(endpoint, { method: 'GET' });
+  return apiRequest<T>(endpoint, { method: "GET" });
 }
 
 /**
@@ -136,10 +141,10 @@ export async function apiGet<T = any>(endpoint: string): Promise<T> {
  */
 export async function apiPost<T = any>(
   endpoint: string,
-  data: any
+  data: any,
 ): Promise<T> {
   return apiRequest<T>(endpoint, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify(data),
   });
 }
@@ -147,12 +152,9 @@ export async function apiPost<T = any>(
 /**
  * PUT request helper
  */
-export async function apiPut<T = any>(
-  endpoint: string,
-  data: any
-): Promise<T> {
+export async function apiPut<T = any>(endpoint: string, data: any): Promise<T> {
   return apiRequest<T>(endpoint, {
-    method: 'PUT',
+    method: "PUT",
     body: JSON.stringify(data),
   });
 }
@@ -161,7 +163,7 @@ export async function apiPut<T = any>(
  * DELETE request helper
  */
 export async function apiDelete<T = any>(endpoint: string): Promise<T> {
-  return apiRequest<T>(endpoint, { method: 'DELETE' });
+  return apiRequest<T>(endpoint, { method: "DELETE" });
 }
 
 /**
@@ -171,7 +173,7 @@ export interface PaginationParams {
   page?: number;
   limit?: number;
   sort?: string;
-  order?: 'asc' | 'desc';
+  order?: "asc" | "desc";
 }
 
 /**
@@ -194,18 +196,18 @@ export interface PaginatedResponse<T> {
  */
 export async function apiGetPaginated<T = any>(
   endpoint: string,
-  params?: PaginationParams
+  params?: PaginationParams,
 ): Promise<PaginatedResponse<T>> {
   const queryParams = new URLSearchParams();
 
-  if (params?.page) queryParams.append('page', params.page.toString());
-  if (params?.limit) queryParams.append('limit', params.limit.toString());
-  if (params?.sort) queryParams.append('sort', params.sort);
-  if (params?.order) queryParams.append('order', params.order);
+  if (params?.page) queryParams.append("page", params.page.toString());
+  if (params?.limit) queryParams.append("limit", params.limit.toString());
+  if (params?.sort) queryParams.append("sort", params.sort);
+  if (params?.order) queryParams.append("order", params.order);
 
   const url = queryParams.toString()
     ? `${endpoint}?${queryParams.toString()}`
     : endpoint;
 
-  return apiRequest<PaginatedResponse<T>>(url, { method: 'GET' });
+  return apiRequest<PaginatedResponse<T>>(url, { method: "GET" });
 }

@@ -111,6 +111,9 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	router.GET("/health", h.Health)
 	router.GET("/v1/build/status", h.GetBuildStatus)
 
+	// Dashboard stats (public endpoint for local development)
+	router.GET("/v1/dashboard/stats", h.GetDashboardStats)
+
 	// API v1 routes
 	v1 := router.Group("/v1")
 	{
@@ -177,13 +180,13 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/topology/services/:id/impact", h.GetServiceImpact)
 			protected.GET("/topology/path", h.FindDependencyPath)
 
-			// Custom Domains
-			protected.POST("/services/:service_id/domains", h.auth.RequireRole(string(types.RoleDeveloper)), h.AddCustomDomain)
-			protected.GET("/services/:service_id/domains", h.ListCustomDomains)
-			protected.GET("/services/:service_id/domains/:domain_id", h.GetCustomDomain)
-			protected.PATCH("/services/:service_id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateCustomDomain)
-			protected.DELETE("/services/:service_id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteCustomDomain)
-			protected.POST("/services/:service_id/domains/:domain_id/verify", h.auth.RequireRole(string(types.RoleDeveloper)), h.VerifyCustomDomain)
+			// Custom Domains (use :id to match other service routes)
+			protected.POST("/services/:id/domains", h.auth.RequireRole(string(types.RoleDeveloper)), h.AddCustomDomain)
+			protected.GET("/services/:id/domains", h.ListCustomDomains)
+			protected.GET("/services/:id/domains/:domain_id", h.GetCustomDomain)
+			protected.PATCH("/services/:id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateCustomDomain)
+			protected.DELETE("/services/:id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteCustomDomain)
+			protected.POST("/services/:id/domains/:domain_id/verify", h.auth.RequireRole(string(types.RoleDeveloper)), h.VerifyCustomDomain)
 		}
 	}
 }

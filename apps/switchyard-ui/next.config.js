@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: "standalone",
   env: {
-    ENCLII_API_URL: process.env.ENCLII_API_URL || 'http://localhost:8080',
+    ENCLII_API_URL: process.env.ENCLII_API_URL || "http://localhost:8001",
   },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;

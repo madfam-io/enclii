@@ -1,0 +1,314 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  GO_VERSION: '1.24'
+  NODE_VERSION: '20'
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.55.2
+
+      - name: Run golangci-lint on switchyard-api
+        working-directory: apps/switchyard-api
+        run: golangci-lint run ./...
+
+      - name: Run golangci-lint on roundhouse
+        working-directory: apps/roundhouse
+        run: golangci-lint run ./...
+
+      - name: Run golangci-lint on waybill
+        working-directory: apps/waybill
+        run: golangci-lint run ./...
+
+      - name: Run golangci-lint on CLI
+        working-directory: packages/cli
+        run: golangci-lint run ./...
+
+      - name: Check Go formatting
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Go files are not formatted:"
+            gofmt -l .
+            exit 1
+          fi
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: enclii
+          POSTGRES_PASSWORD: enclii_test
+          POSTGRES_DB: enclii_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run switchyard-api tests
+        working-directory: apps/switchyard-api
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+        env:
+          DATABASE_URL: postgres://enclii:enclii_test@localhost:5432/enclii_test?sslmode=disable
+          REDIS_URL: redis://localhost:6379/0
+          JWT_SECRET: test-secret-key
+          ENV: test
+
+      - name: Run roundhouse tests
+        working-directory: apps/roundhouse
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+        env:
+          REDIS_URL: redis://localhost:6379/0
+          ENV: test
+
+      - name: Run waybill tests
+        working-directory: apps/waybill
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+        env:
+          DATABASE_URL: postgres://enclii:enclii_test@localhost:5432/enclii_test?sslmode=disable
+          ENV: test
+
+      - name: Run CLI tests
+        working-directory: packages/cli
+        run: go test -v -race ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./apps/switchyard-api/coverage.out,./apps/roundhouse/coverage.out,./apps/waybill/coverage.out
+          flags: unit
+          name: enclii-coverage
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build switchyard-api
+        working-directory: apps/switchyard-api
+        run: go build -o ../../bin/switchyard-api ./cmd/api
+
+      - name: Build roundhouse
+        working-directory: apps/roundhouse
+        run: go build -o ../../bin/roundhouse ./cmd/main.go
+
+      - name: Build waybill
+        working-directory: apps/waybill
+        run: go build -o ../../bin/waybill ./cmd/main.go
+
+      - name: Build CLI
+        working-directory: packages/cli
+        run: go build -o ../../bin/enclii .
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: enclii-binaries
+          path: bin/
+          retention-days: 7
+
+  ui-tests:
+    name: UI Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: apps/switchyard-ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/switchyard-ui
+        run: npm ci
+
+      - name: Run linting
+        working-directory: apps/switchyard-ui
+        run: npm run lint
+
+      - name: Run tests
+        working-directory: apps/switchyard-ui
+        run: npm test -- --coverage
+
+      - name: Build UI
+        working-directory: apps/switchyard-ui
+        run: npm run build
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec on switchyard-api
+        working-directory: apps/switchyard-api
+        run: gosec -exclude-generated ./...
+        continue-on-error: true
+
+      - name: Run gosec on roundhouse
+        working-directory: apps/roundhouse
+        run: gosec -exclude-generated ./...
+        continue-on-error: true
+
+      - name: Run gosec on waybill
+        working-directory: apps/waybill
+        run: gosec -exclude-generated ./...
+        continue-on-error: true
+
+      - name: Check for vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd apps/switchyard-api && govulncheck ./... || true
+          cd ../roundhouse && govulncheck ./... || true
+          cd ../waybill && govulncheck ./... || true
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [build, ui-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push switchyard-api
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/switchyard-api/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/switchyard-api:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push switchyard-ui
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/switchyard-ui
+          push: true
+          tags: ghcr.io/${{ github.repository }}/switchyard-ui:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push roundhouse
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/roundhouse/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/roundhouse:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push waybill
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/waybill/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/waybill:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [lint, unit-tests, ui-tests, security-scan]
+    if: always()
+
+    steps:
+      - name: Check all jobs
+        run: |
+          if [ "${{ needs.lint.result }}" != "success" ]; then
+            echo "❌ Lint failed"
+            exit 1
+          fi
+          if [ "${{ needs.unit-tests.result }}" != "success" ]; then
+            echo "❌ Unit tests failed"
+            exit 1
+          fi
+          if [ "${{ needs.ui-tests.result }}" != "success" ]; then
+            echo "❌ UI tests failed"
+            exit 1
+          fi
+          echo "✅ All CI checks passed!"
