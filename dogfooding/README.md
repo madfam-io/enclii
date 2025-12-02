@@ -32,11 +32,27 @@ These service specs will demonstrate:
   - 2 replicas
   - Autoscaling: 2-8 pods
 
-- **`janua.yaml`** - Authentication service (OAuth/OIDC)
-  - Built from: `github.com/madfam-io/janua` ⭐ **Separate repository**
-  - Exposed at: `auth.enclii.io`
+### Janua (Authentication Platform)
+
+- **`janua-api.yaml`** - Authentication API (OAuth/OIDC)
+  - Built from: `github.com/madfam-io/janua` → `apps/api`
+  - Exposed at: `api.janua.dev`
+  - Port: 8000 (per PORT_REGISTRY.md)
   - 3 replicas (auth is critical)
   - Autoscaling: 3-10 pods
+
+- **`janua-dashboard.yaml`** - Authentication Dashboard UI
+  - Built from: `github.com/madfam-io/janua` → `apps/dashboard`
+  - Exposed at: `app.janua.dev`
+  - Port: 3002 (per PORT_REGISTRY.md)
+  - 2 replicas
+  - Autoscaling: 2-5 pods
+
+- **`janua-landing.yaml`** - Janua Marketing Site
+  - Built from: `github.com/madfam-io/janua` → `apps/landing`
+  - Exposed at: `janua.dev`, `www.janua.dev`
+  - Port: 3001 (per PORT_REGISTRY.md)
+  - 2 replicas
 
 ### Public Services
 
@@ -74,7 +90,9 @@ See [DOGFOODING_GUIDE.md](../DOGFOODING_GUIDE.md) for full instructions.
 # Import service specs
 ./bin/enclii service create --file dogfooding/switchyard-api.yaml
 ./bin/enclii service create --file dogfooding/switchyard-ui.yaml
-./bin/enclii service create --file dogfooding/janua.yaml
+./bin/enclii service create --file dogfooding/janua-api.yaml
+./bin/enclii service create --file dogfooding/janua-dashboard.yaml
+./bin/enclii service create --file dogfooding/janua-landing.yaml
 ./bin/enclii service create --file dogfooding/landing-page.yaml
 ./bin/enclii service create --file dogfooding/docs-site.yaml
 ./bin/enclii service create --file dogfooding/status-page.yaml
@@ -82,7 +100,9 @@ See [DOGFOODING_GUIDE.md](../DOGFOODING_GUIDE.md) for full instructions.
 # Deploy to production
 ./bin/enclii deploy --service switchyard-api --env production
 ./bin/enclii deploy --service switchyard-ui --env production
-./bin/enclii deploy --service janua --env production
+./bin/enclii deploy --service janua-api --env production
+./bin/enclii deploy --service janua-dashboard --env production
+./bin/enclii deploy --service janua-landing --env production
 ./bin/enclii deploy --service landing-page --env production
 ./bin/enclii deploy --service docs-site --env production
 ./bin/enclii deploy --service status-page --env production
@@ -204,7 +224,8 @@ Grafana dashboards available at: `grafana.enclii.io`
 Public status page monitors:
 - ✅ Control Plane API (`api.enclii.io/health`)
 - ✅ Web Dashboard (`app.enclii.io/api/health`)
-- ✅ Authentication (`auth.enclii.io/health`)
+- ✅ Janua API (`api.janua.dev/health`)
+- ✅ Janua Dashboard (`app.janua.dev/api/health`)
 - ✅ Documentation (`docs.enclii.io`)
 
 View at: https://status.enclii.io

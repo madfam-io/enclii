@@ -1,4 +1,4 @@
-# Janua Authentication Service Specification
+# Janua API Service Specification
 # Self-hosted OAuth 2.0 / OIDC provider for Enclii platform
 #
 # Janua provides:
@@ -9,15 +9,17 @@
 # - Multi-tenant support
 #
 # Repository: https://github.com/madfam-io/janua
+# Path: apps/api
+# Port: 8000 (per PORT_REGISTRY.md)
 # License: AGPL v3
 
 apiVersion: enclii.io/v1
 kind: Service
 metadata:
-  name: janua
+  name: janua-api
   namespace: enclii-platform
   labels:
-    app: janua
+    app: janua-api
     tier: authentication
     criticality: high
   annotations:
@@ -71,12 +73,12 @@ spec:
 
     # Container configuration
     container:
-      port: 5556
+      port: 8000  # Per PORT_REGISTRY.md
 
       # Health checks - stricter for auth
       healthCheck:
         path: /health
-        port: 5556
+        port: 8000
         initialDelaySeconds: 10
         periodSeconds: 5
         timeoutSeconds: 3
@@ -86,7 +88,7 @@ spec:
       # Readiness check
       readinessCheck:
         path: /ready
-        port: 5556
+        port: 8000
         initialDelaySeconds: 5
         periodSeconds: 3
         timeoutSeconds: 2
@@ -118,7 +120,7 @@ spec:
         version: "${BUILD_VERSION}"
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "5556"
+        prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
 
       # Anti-affinity for HA
@@ -171,7 +173,7 @@ spec:
   networking:
     # Primary domain for auth
     domains:
-      - name: auth.janua.dev
+      - name: api.janua.dev
         primary: true
         tls:
           enabled: true
@@ -180,8 +182,8 @@ spec:
     # Internal service
     service:
       type: ClusterIP
-      port: 5556
-      targetPort: 5556
+      port: 8000  # Per PORT_REGISTRY.md
+      targetPort: 8000
 
     # Ingress rules
     ingress:
@@ -211,13 +213,13 @@ spec:
 
     # Server configuration
     - name: PORT
-      value: "5556"
+      value: "8000"
     - name: HOST
       value: "0.0.0.0"
 
     # Issuer URL (critical for OIDC)
     - name: ISSUER_URL
-      value: "https://auth.janua.dev"
+      value: "https://api.janua.dev"
 
     # Database (from secret)
     - name: DATABASE_URL
@@ -386,7 +388,7 @@ spec:
     prometheus:
       enabled: true
       path: /metrics
-      port: 5556
+      port: 8000
 
     # Custom metrics for auth
     customMetrics:
