@@ -73,7 +73,7 @@ func Load() (*Config, error) {
 	// Port 4200 per PORT_ALLOCATION.md in solarpunk-foundry (Enclii block: 4200-4299)
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("port", "4200")
-	viper.SetDefault("database-url", "postgres://postgres:postgres@localhost:5432/enclii_dev?sslmode=require")
+	viper.SetDefault("database-url", "postgres://janua:janua_dev@localhost:5432/enclii_dev?sslmode=disable")
 	viper.SetDefault("log-level", "info")
 	viper.SetDefault("registry", "ghcr.io/madfam")
 	viper.SetDefault("auth-mode", "local") // Default to local bootstrap mode
