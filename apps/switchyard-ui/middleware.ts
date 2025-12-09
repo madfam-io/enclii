@@ -86,7 +86,7 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
       "font-src 'self' data:",
       // API endpoints: localhost for dev, api.enclii.dev for production
       // auth.madfam.io is MADFAM shared SSO (Janua)
-      "connect-src 'self' http://localhost:8001 https://api.enclii.dev https://auth.madfam.io",
+      "connect-src 'self' http://localhost:4200 https://api.enclii.dev https://auth.madfam.io",
       "frame-ancestors 'none'",
     ].join("; "),
 

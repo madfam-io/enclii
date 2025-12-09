@@ -75,9 +75,21 @@ func (h *Handler) DeployService(c *gin.Context) {
 		return
 	}
 
-	// TODO: Look up or create environment based on req.EnvironmentName
-	// For now, using a placeholder UUID - this needs proper environment lookup
-	environmentID := uuid.New() // FIXME: Should lookup actual environment by name
+	// Look up environment by project and name
+	env, err := h.repos.Environments.GetByProjectAndName(service.ProjectID, req.EnvironmentName)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get environment",
+			logging.String("environment_name", req.EnvironmentName),
+			logging.String("project_id", service.ProjectID.String()),
+			logging.Error("db_error", err))
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":       "Environment not found",
+			"environment": req.EnvironmentName,
+			"hint":        "Create the environment first using POST /v1/projects/{project_id}/environments",
+		})
+		return
+	}
+	environmentID := env.ID
 
 	// Create deployment record
 	deployment := &types.Deployment{

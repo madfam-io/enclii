@@ -7,7 +7,7 @@
  * - SECURITY_AUDIT_COMPREHENSIVE_2025.md
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4200";
 
 // CSRF token cache
 let csrfToken: string | null = null;

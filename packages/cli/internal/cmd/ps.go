@@ -10,7 +10,6 @@ import (
 
 	"github.com/madfam/enclii/packages/cli/internal/client"
 	"github.com/madfam/enclii/packages/cli/internal/config"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
 func NewPsCommand(cfg *config.Config) *cobra.Command {
@@ -70,7 +69,7 @@ func listServices(cfg *config.Config, environment string) error {
 		}
 
 		// Get latest deployment
-		deploymentResp, err := apiClient.GetLatestDeployment(ctx, svc.ID)
+		deploymentResp, err := apiClient.GetLatestDeployment(ctx, svc.ID.String())
 		if err == nil && deploymentResp.Deployment != nil {
 			deployment := deploymentResp.Deployment
 

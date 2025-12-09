@@ -14,7 +14,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build arguments for public env vars
-ARG NEXT_PUBLIC_API_URL=http://localhost:8001
+ARG NEXT_PUBLIC_API_URL=http://localhost:4200
 ARG NEXT_PUBLIC_AUTH_MODE=local
 ARG NEXT_PUBLIC_JANUA_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL

@@ -67,7 +67,7 @@ interface AuthContextType {
 // CONFIGURATION
 // =============================================================================
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4200";
 const AUTH_MODE = (process.env.NEXT_PUBLIC_AUTH_MODE || "local") as
   | "local"
   | "oidc";

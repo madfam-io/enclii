@@ -21,6 +21,7 @@ type ProjectRepositoryInterface interface {
 type EnvironmentRepositoryInterface interface {
 	Create(env *types.Environment) error
 	GetByID(ctx context.Context, id uuid.UUID) (*types.Environment, error)
+	GetByProjectAndName(projectID uuid.UUID, name string) (*types.Environment, error)
 	ListByProject(projectID uuid.UUID) ([]*types.Environment, error)
 }
 

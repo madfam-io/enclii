@@ -46,7 +46,7 @@ ENCLII_EXTERNAL_ISSUER=https://auth.madfam.io
 
 ```bash
 # .env.local
-NEXT_PUBLIC_API_URL=http://localhost:8001
+NEXT_PUBLIC_API_URL=http://localhost:4200
 NEXT_PUBLIC_AUTH_MODE=local
 ```
 

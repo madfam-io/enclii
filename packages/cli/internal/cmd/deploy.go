@@ -3,9 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -56,13 +54,13 @@ func deployService(cfg *config.Config, environment string, wait bool) error {
 		return fmt.Errorf("failed to parse service.yaml: %w", err)
 	}
 
-	fmt.Printf("🔧 Service: %s (project: %s)\n", serviceSpec.Name, serviceSpec.Project)
+	fmt.Printf("🔧 Service: %s (project: %s)\n", serviceSpec.Metadata.Name, serviceSpec.Metadata.Project)
 
 	// 2. Create API client
-	apiClient := client.NewAPIClient(cfg.APIBaseURL, cfg.Token)
+	apiClient := client.NewAPIClient(cfg.APIEndpoint, cfg.APIToken)
 
 	// 3. Ensure project exists
-	project, err := ensureProject(ctx, apiClient, serviceSpec.Project)
+	project, err := ensureProject(ctx, apiClient, serviceSpec.Metadata.Project)
 	if err != nil {
 		return fmt.Errorf("failed to ensure project: %w", err)
 	}
@@ -75,7 +73,7 @@ func deployService(cfg *config.Config, environment string, wait bool) error {
 
 	// 5. Trigger build
 	fmt.Println("🏗️  Building service...")
-	release, err := apiClient.BuildService(ctx, service.ID, gitSHA)
+	release, err := apiClient.BuildService(ctx, service.ID.String(), gitSHA)
 	if err != nil {
 		return fmt.Errorf("failed to build service: %w", err)
 	}
@@ -83,34 +81,34 @@ func deployService(cfg *config.Config, environment string, wait bool) error {
 	fmt.Printf("📦 Build initiated: %s\n", release.Version)
 
 	// 6. Wait for build completion (simplified polling)
-	if err := waitForBuild(ctx, apiClient, service.ID, release.ID); err != nil {
+	if err := waitForBuild(ctx, apiClient, service.ID.String(), release.ID.String()); err != nil {
 		return fmt.Errorf("build failed: %w", err)
 	}
 
 	// 7. Deploy to environment
 	fmt.Println("🚀 Deploying to Kubernetes...")
 	deployReq := client.DeployRequest{
-		ReleaseID:   release.ID,
+		ReleaseID:   release.ID.String(),
 		Environment: map[string]string{"ENV": environment},
 		Replicas:    1,
 	}
 
-	deployment, err := apiClient.DeployService(ctx, service.ID, deployReq)
+	_, err = apiClient.DeployService(ctx, service.ID.String(), deployReq)
 	if err != nil {
 		return fmt.Errorf("failed to deploy service: %w", err)
 	}
 
 	if wait {
 		fmt.Println("⏳ Waiting for deployment...")
-		if err := waitForDeployment(ctx, apiClient, service.ID); err != nil {
+		if err := waitForDeployment(ctx, apiClient, service.ID.String()); err != nil {
 			return fmt.Errorf("deployment failed: %w", err)
 		}
 		fmt.Println("✅ Deployment successful!")
-		fmt.Printf("🌐 Service available at: https://%s.%s.%s.enclii.dev\n", 
-			serviceSpec.Name, serviceSpec.Project, environment)
+		fmt.Printf("🌐 Service available at: https://%s.%s.%s.enclii.dev\n",
+			serviceSpec.Metadata.Name, serviceSpec.Metadata.Project, environment)
 	} else {
 		fmt.Println("✅ Deployment initiated")
-		fmt.Printf("📊 Monitor progress: enclii logs %s -f\n", serviceSpec.Name)
+		fmt.Printf("📊 Monitor progress: enclii logs %s -f\n", serviceSpec.Metadata.Name)
 	}
 
 	return nil
@@ -150,19 +148,19 @@ func ensureService(ctx context.Context, apiClient *client.APIClient, project *ty
 
 	// Check if service already exists
 	for _, svc := range services {
-		if svc.Name == serviceSpec.Name {
+		if svc.Name == serviceSpec.Metadata.Name {
 			return svc, nil
 		}
 	}
 
 	// Create new service
-	fmt.Printf("Creating service: %s\n", serviceSpec.Name)
+	fmt.Printf("Creating service: %s\n", serviceSpec.Metadata.Name)
 	newService := &types.Service{
 		ProjectID: project.ID,
-		Name:      serviceSpec.Name,
+		Name:      serviceSpec.Metadata.Name,
 		GitRepo:   getCurrentGitRepo(),
 		BuildConfig: types.BuildConfig{
-			Type:       "buildpacks", // Default for now
+			Type:       types.BuildTypeBuildpack, // Default for now
 			Dockerfile: "",
 		},
 	}
@@ -195,7 +193,7 @@ func waitForBuild(ctx context.Context, apiClient *client.APIClient, serviceID, r
 			}
 
 			for _, release := range releases {
-				if release.ID == releaseID {
+				if release.ID.String() == releaseID {
 					switch release.Status {
 					case types.ReleaseStatusReady:
 						fmt.Println("✅ Build completed successfully")

@@ -27,6 +27,7 @@ Learn more at https://enclii.dev`,
 	rootCmd.AddCommand(NewPsCommand(cfg))
 	rootCmd.AddCommand(NewRollbackCommand(cfg))
 	rootCmd.AddCommand(NewVersionCommand())
+	rootCmd.AddCommand(NewLocalCommand(cfg))
 
 	return rootCmd
 }

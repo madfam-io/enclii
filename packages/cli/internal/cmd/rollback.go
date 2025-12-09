@@ -81,7 +81,7 @@ func rollbackService(cfg *config.Config, serviceName, environment, releaseID str
 
 	// Step 3: Get current deployment
 	fmt.Println("🔍 Getting current deployment...")
-	currentDeployment, err := apiClient.GetLatestDeployment(ctx, targetService.ID)
+	currentDeployment, err := apiClient.GetLatestDeployment(ctx, targetService.ID.String())
 	if err != nil {
 		fmt.Printf("❌ Failed to get current deployment: %v\n", err)
 		return err
@@ -105,7 +105,7 @@ func rollbackService(cfg *config.Config, serviceName, environment, releaseID str
 		req.ToRelease = releaseID
 	}
 
-	err = apiClient.RollbackDeployment(ctx, currentDeployment.Deployment.ID, req)
+	err = apiClient.RollbackDeployment(ctx, currentDeployment.Deployment.ID.String(), req)
 	if err != nil {
 		fmt.Printf("❌ Rollback failed: %v\n", err)
 		return err
