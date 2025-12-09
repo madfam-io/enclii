@@ -1,22 +1,22 @@
 version: "3.8"
 
 services:
-  # Enclii Switchyard API (Go) - port 8001 per PORT_REGISTRY
+  # Enclii Switchyard API (Go) - port 4200 per PORT_ALLOCATION.md (Enclii block: 4200-4299)
   api:
     build:
       context: .
       dockerfile: Dockerfile
       target: development
     ports:
-      - "8001:8001"
+      - "4200:4200"
       - "9091:9091" # gRPC
     environment:
       - ENVIRONMENT=development
-      - HTTP_PORT=8001
+      - ENCLII_PORT=4200
       - GRPC_PORT=9091
       - DATABASE_URL=postgresql://enclii:enclii_dev@postgres:5432/enclii_dev
       - REDIS_URL=redis://redis:6379/0
-      - JANUA_URL=http://host.docker.internal:8000
+      - JANUA_URL=http://host.docker.internal:4100
       - JANUA_CLIENT_ID=enclii-switchyard
       - JANUA_CLIENT_SECRET=dev-secret
       - DOCKER_HOST=unix:///var/run/docker.sock
@@ -32,19 +32,19 @@ services:
     networks:
       - enclii-network
 
-  # Enclii UI (Next.js) - port 8030 per PORT_REGISTRY (platform services range)
+  # Enclii UI (Next.js) - port 4201 per PORT_ALLOCATION.md (Enclii Web +01)
   ui:
     build:
       context: ./ui
       dockerfile: Dockerfile
       target: development
     ports:
-      - "8030:8030"
+      - "4201:4201"
     environment:
       - NODE_ENV=development
-      - PORT=8030
-      - NEXT_PUBLIC_API_URL=http://localhost:8001
-      - NEXT_PUBLIC_JANUA_URL=http://localhost:8000
+      - PORT=4201
+      - NEXT_PUBLIC_API_URL=http://localhost:4200
+      - NEXT_PUBLIC_JANUA_URL=http://localhost:4100
       - NEXT_PUBLIC_JANUA_CLIENT_ID=enclii-ui
     volumes:
       - ./ui:/app

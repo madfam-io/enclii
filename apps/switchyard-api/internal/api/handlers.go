@@ -12,6 +12,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/middleware"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
@@ -114,36 +115,40 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	// Dashboard stats (public endpoint for local development)
 	router.GET("/v1/dashboard/stats", h.GetDashboardStats)
 
+	// Rate limiters for auth endpoints
+	authRateLimiter := middleware.NewAuthRateLimiter()       // 10 req/min per IP
+	strictAuthRateLimiter := middleware.NewStrictAuthRateLimiter() // 5 req/min per IP
+
 	// API v1 routes
 	v1 := router.Group("/v1")
 	{
 		// Auth routes - Different endpoints based on auth mode
 		if h.config.AuthMode == "oidc" {
 			// ===== OIDC Mode (Production with Janua) =====
-			// Redirect to OIDC provider for login
-			v1.GET("/auth/login", h.OIDCLogin)
+			// Redirect to OIDC provider for login (rate limited)
+			v1.GET("/auth/login", authRateLimiter.Middleware(), h.OIDCLogin)
 
-			// OAuth callback from OIDC provider
-			v1.GET("/auth/callback", h.OIDCCallback)
+			// OAuth callback from OIDC provider (rate limited)
+			v1.GET("/auth/callback", authRateLimiter.Middleware(), h.OIDCCallback)
 
 			// Registration is handled by OIDC provider (Janua)
 			// POST /auth/register is not available in OIDC mode
 
 		} else {
 			// ===== Local Mode (Bootstrap) =====
-			// Local user registration
-			v1.POST("/auth/register", h.auditMiddleware.AuditMiddleware(), h.Register)
+			// Local user registration (strict rate limit - abuse prevention)
+			v1.POST("/auth/register", strictAuthRateLimiter.Middleware(), h.auditMiddleware.AuditMiddleware(), h.Register)
 
-			// Local login with email/password
-			v1.POST("/auth/login", h.auditMiddleware.AuditMiddleware(), h.Login)
+			// Local login with email/password (strict rate limit - brute force prevention)
+			v1.POST("/auth/login", strictAuthRateLimiter.Middleware(), h.auditMiddleware.AuditMiddleware(), h.Login)
 
 			// JWKS endpoint for external services to verify our tokens
 			v1.GET("/auth/jwks", h.JWKS)
 		}
 
-		// Common auth endpoints (both modes)
-		v1.POST("/auth/refresh", h.RefreshToken)
-		v1.POST("/auth/logout", h.auth.AuthMiddleware(), h.auditMiddleware.AuditMiddleware(), h.Logout)
+		// Common auth endpoints (both modes) - rate limited
+		v1.POST("/auth/refresh", authRateLimiter.Middleware(), h.RefreshToken)
+		v1.POST("/auth/logout", authRateLimiter.Middleware(), h.auth.AuthMiddleware(), h.auditMiddleware.AuditMiddleware(), h.Logout)
 
 		// Protected routes (require authentication + audit)
 		// These work the same way in both local and OIDC modes

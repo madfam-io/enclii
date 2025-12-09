@@ -40,9 +40,10 @@ WORKDIR /root/
 # Copy the binary from builder stage
 COPY --from=builder /app/switchyard-api .
 
-EXPOSE 8001
+EXPOSE 4200
 
+# Port 4200 per PORT_ALLOCATION.md in solarpunk-foundry (Enclii block: 4200-4299)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD wget -q --spider http://localhost:8001/health || exit 1
+  CMD wget -q --spider http://localhost:4200/health || exit 1
 
 CMD ["./switchyard-api"]

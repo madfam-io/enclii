@@ -225,11 +225,12 @@ dig app.enclii.dev
 
 ### Node Not Joining Cluster
 ```bash
-# SSH to node
-ssh -i ~/.ssh/enclii root@<node-ip>
+# SSH to server (via Cloudflare Zero Trust tunnel)
+ssh ssh.madfam.io
+# User: solarpunk (use sudo for admin commands)
 
 # Check k3s status
-systemctl status k3s-agent
+sudo systemctl status k3s-agent
 
 # View k3s logs
 journalctl -u k3s-agent -f

@@ -11,7 +11,7 @@ func (h *Handler) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
 		"service": "switchyard-api",
-		"version": "1.0.0",
+		"version": "0.1.0",
 	})
 }
 

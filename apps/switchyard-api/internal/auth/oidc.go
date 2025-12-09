@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -22,7 +23,7 @@ type OIDCManager struct {
 	verifier     *oidc.IDTokenVerifier
 	oauth2Config *oauth2.Config
 	repos        *db.Repositories
-	jwtManager   *JWTManager // Used for issuing local session tokens
+	jwtManager   *JWTManager // Used for issuing local session tokens AND validating external tokens
 }
 
 // NewOIDCManager creates a new OIDC authentication manager
@@ -34,6 +35,23 @@ func NewOIDCManager(
 	redirectURL string,
 	repos *db.Repositories,
 	cache SessionRevoker,
+) (*OIDCManager, error) {
+	return NewOIDCManagerWithExternalJWKS(ctx, issuer, clientID, clientSecret, redirectURL, repos, cache, "", "", 0)
+}
+
+// NewOIDCManagerWithExternalJWKS creates an OIDC manager with external JWKS validation support
+// This allows CLI/API clients to authenticate directly with external tokens (e.g., Janua)
+func NewOIDCManagerWithExternalJWKS(
+	ctx context.Context,
+	issuer string,
+	clientID string,
+	clientSecret string,
+	redirectURL string,
+	repos *db.Repositories,
+	cache SessionRevoker,
+	externalJWKSURL string,
+	externalIssuer string,
+	jwksCacheTTL time.Duration,
 ) (*OIDCManager, error) {
 	// Discover OIDC provider configuration
 	provider, err := oidc.NewProvider(ctx, issuer)
@@ -55,14 +73,26 @@ func NewOIDCManager(
 		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
 	}
 
-	// Create JWT manager for local session tokens
-	// Even in OIDC mode, we issue local JWT tokens for API access
-	jwtManager, err := NewJWTManager(
-		15*time.Minute,  // access token duration
-		7*24*time.Hour,  // refresh token duration
-		repos,
-		cache,
-	)
+	// Create JWT manager with external JWKS support
+	var jwtManager *JWTManager
+	if externalJWKSURL != "" {
+		jwtManager, err = NewJWTManagerWithExternalJWKS(
+			15*time.Minute,  // access token duration
+			7*24*time.Hour,  // refresh token duration
+			repos,
+			cache,
+			externalJWKSURL,
+			externalIssuer,
+			jwksCacheTTL,
+		)
+	} else {
+		jwtManager, err = NewJWTManager(
+			15*time.Minute,  // access token duration
+			7*24*time.Hour,  // refresh token duration
+			repos,
+			cache,
+		)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create JWT manager: %w", err)
 	}
@@ -225,10 +255,178 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 }
 
 // AuthMiddleware returns a Gin middleware for OIDC authentication
+// Implements dual-mode validation: local tokens first, then external tokens
 func (o *OIDCManager) AuthMiddleware() gin.HandlerFunc {
-	// In OIDC mode, we still validate local JWT session tokens
-	// The OIDC flow issues these tokens after successful OAuth callback
-	return o.jwtManager.AuthMiddleware()
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(401, gin.H{"error": "Authorization header is required"})
+			c.Abort()
+			return
+		}
+
+		bearerToken := strings.Split(authHeader, " ")
+		if len(bearerToken) != 2 || bearerToken[0] != "Bearer" {
+			c.JSON(401, gin.H{"error": "Invalid authorization header format"})
+			c.Abort()
+			return
+		}
+
+		tokenString := bearerToken[1]
+
+		// Try local token validation first
+		localClaims, localErr := o.jwtManager.ValidateToken(tokenString)
+		if localErr == nil {
+			// Local token valid - set context and continue
+			c.Set("user_id", localClaims.UserID)
+			c.Set("user_email", localClaims.Email)
+			c.Set("user_role", localClaims.Role)
+			c.Set("project_ids", localClaims.ProjectIDs)
+			c.Set("claims", localClaims)
+			c.Set("token_source", "local")
+
+			// Audit: Log successful local token validation
+			LogTokenValidated(localClaims.UserID, localClaims.Email, "local")
+
+			c.Next()
+			return
+		}
+
+		// Local validation failed - try external JWKS if configured
+		if o.jwtManager.HasExternalJWKS() {
+			externalClaims, externalErr := o.jwtManager.ValidateExternalToken(tokenString)
+			if externalErr == nil {
+				// External token valid - get or create user
+				user, isNew, err := o.getOrCreateUserFromExternalTokenWithStatus(c.Request.Context(), externalClaims)
+				if err != nil {
+					logrus.WithError(err).Error("Failed to get/create user from external token")
+					c.JSON(401, gin.H{"error": "Failed to process external token"})
+					c.Abort()
+					return
+				}
+
+				// Set context with user info from external token
+				c.Set("user_id", user.ID)
+				c.Set("user_email", user.Email)
+				c.Set("user_role", user.Role)
+				c.Set("project_ids", user.ProjectIDs)
+				c.Set("token_source", "external")
+				c.Set("external_issuer", externalClaims.Issuer)
+
+				// Audit: Log external token validation and user creation/linking
+				LogExternalTokenValidated(user.ID, user.Email, externalClaims.Issuer)
+				if isNew {
+					LogExternalUserCreated(user.ID, user.Email, externalClaims.Issuer)
+				}
+
+				logrus.WithFields(logrus.Fields{
+					"user_id":  user.ID,
+					"email":    user.Email,
+					"issuer":   externalClaims.Issuer,
+				}).Info("User authenticated via external token")
+
+				c.Next()
+				return
+			}
+
+			logrus.WithFields(logrus.Fields{
+				"local_error":    localErr.Error(),
+				"external_error": externalErr.Error(),
+			}).Debug("Both local and external token validation failed")
+		}
+
+		// Both validations failed
+		logrus.Warnf("Token validation failed: %v", localErr)
+		c.JSON(401, gin.H{"error": "Invalid or expired token"})
+		c.Abort()
+	}
+}
+
+// getOrCreateUserFromExternalToken creates or updates a user from external token claims
+func (o *OIDCManager) getOrCreateUserFromExternalToken(ctx context.Context, claims *ExternalClaims) (*User, error) {
+	user, _, err := o.getOrCreateUserFromExternalTokenWithStatus(ctx, claims)
+	return user, err
+}
+
+// getOrCreateUserFromExternalTokenWithStatus creates or updates a user from external token claims
+// Returns the user, whether a new user was created, and any error
+func (o *OIDCManager) getOrCreateUserFromExternalTokenWithStatus(ctx context.Context, claims *ExternalClaims) (*User, bool, error) {
+	issuer := claims.Issuer
+
+	// Try to find user by OIDC identity
+	user, err := o.repos.Users.GetByOIDCIdentity(ctx, issuer, claims.Subject)
+	if err == nil {
+		return &User{
+			ID:         user.ID,
+			Email:      user.Email,
+			Name:       user.Name,
+			Role:       user.Role,
+			ProjectIDs: []string{},
+			Active:     user.Active,
+		}, false, nil
+	}
+
+	// Try to find by email
+	user, err = o.repos.Users.GetByEmail(ctx, claims.Email)
+	if err == nil {
+		// Link existing user to external identity
+		user.OIDCSubject = &claims.Subject
+		user.OIDCIssuer = &issuer
+		if err := o.repos.Users.Update(ctx, user); err != nil {
+			return nil, false, fmt.Errorf("failed to link external identity: %w", err)
+		}
+
+		// Audit: Log user linking
+		LogExternalUserLinked(user.ID, claims.Email, issuer)
+
+		logrus.WithFields(logrus.Fields{
+			"user_id": user.ID,
+			"email":   claims.Email,
+			"issuer":  issuer,
+		}).Info("Linked existing user to external identity")
+
+		return &User{
+			ID:         user.ID,
+			Email:      user.Email,
+			Name:       user.Name,
+			Role:       user.Role,
+			ProjectIDs: []string{},
+			Active:     user.Active,
+		}, false, nil
+	}
+
+	// Create new user
+	newUser := &types.User{
+		ID:           uuid.New(),
+		Email:        claims.Email,
+		Name:         claims.Name,
+		Role:         "developer",
+		Active:       true,
+		OIDCSubject:  &claims.Subject,
+		OIDCIssuer:   &issuer,
+		PasswordHash: "",
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := o.repos.Users.Create(ctx, newUser); err != nil {
+		return nil, false, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"user_id": newUser.ID,
+		"email":   claims.Email,
+		"issuer":  issuer,
+	}).Info("Created user from external token")
+
+	return &User{
+		ID:         newUser.ID,
+		Email:      newUser.Email,
+		Name:       newUser.Name,
+		Role:       newUser.Role,
+		ProjectIDs: []string{},
+		Active:     newUser.Active,
+	}, true, nil
 }
 
 // RequireRole returns a middleware that requires specific roles

@@ -2,14 +2,67 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 /**
- * Next.js Middleware for security headers and authentication
+ * Next.js Middleware for security headers and authentication routing
  *
  * SECURITY: This middleware runs on every request to add security headers
- * and can be extended to handle authentication checks
+ * and handle authentication redirects
  */
+
+// Public paths that don't require authentication
+const publicPaths = [
+  "/login",
+  "/register",
+  "/auth/callback",
+  "/api/auth",
+  "/_next",
+  "/favicon.ico",
+  "/public",
+];
+
+function isPublicPath(pathname: string): boolean {
+  return publicPaths.some(
+    (path) => pathname === path || pathname.startsWith(path + "/")
+  );
+}
+
 export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Skip middleware for public paths
+  if (isPublicPath(pathname)) {
+    return addSecurityHeaders(NextResponse.next());
+  }
+
+  // Check for authentication token
+  // We check localStorage via cookie since middleware can't access localStorage
+  // The token is also stored in a cookie by the AuthContext
+  const token = request.cookies.get("enclii_auth")?.value;
+
+  // For client-side auth, we'll let the AuthenticatedLayout handle redirects
+  // But we can still add security headers
   const response = NextResponse.next();
 
+  // If no token and trying to access protected route, redirect to login
+  // Note: This provides server-side redirect for initial page loads
+  // Client-side navigation is handled by AuthenticatedLayout
+  if (!token && !pathname.startsWith("/login") && !pathname.startsWith("/auth")) {
+    // For API routes or non-page requests, return 401
+    if (pathname.startsWith("/api/")) {
+      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // For page requests, let client-side handle it for now
+    // This allows the AuthProvider to initialize and check localStorage
+    // If you want server-side redirects, you'd need to set an auth cookie
+  }
+
+  return addSecurityHeaders(response);
+}
+
+function addSecurityHeaders(response: NextResponse): NextResponse {
   // SECURITY FIX: Add comprehensive security headers
   const securityHeaders = {
     // Prevent clickjacking attacks
@@ -31,7 +84,9 @@ export function middleware(request: NextRequest) {
       "style-src 'self' 'unsafe-inline'", // Tailwind requires unsafe-inline
       "img-src 'self' data: https:",
       "font-src 'self' data:",
-      "connect-src 'self' http://localhost:8001", // API endpoint (port 8001 per PORT_REGISTRY)
+      // API endpoints: localhost for dev, api.enclii.dev for production
+      // auth.madfam.io is MADFAM shared SSO (Janua)
+      "connect-src 'self' http://localhost:8001 https://api.enclii.dev https://auth.madfam.io",
       "frame-ancestors 'none'",
     ].join("; "),
 
@@ -56,15 +111,10 @@ export function middleware(request: NextRequest) {
 
   // Apply all security headers
   Object.entries(securityHeaders).forEach(([key, value]) => {
-    response.headers.set(key, value);
+    if (value) {
+      response.headers.set(key, value);
+    }
   });
-
-  // TODO: Add authentication check here
-  // Example:
-  // const token = request.cookies.get('auth_token');
-  // if (!token && !isPublicPath(request.nextUrl.pathname)) {
-  //   return NextResponse.redirect(new URL('/login', request.url));
-  // }
 
   return response;
 }

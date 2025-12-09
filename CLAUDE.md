@@ -6,11 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
-**Current Status:** ✅ 100% production-ready ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
+**Current Status:** 🟡 v0.1.0 - Production Alpha ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
 **Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud (~$34-100/month)
 **Authentication:** JWT (RS256) - Janua integration ready
 **Dogfooding:** Service specs ready ([specs](./dogfooding/), [guide](./docs/guides/DOGFOODING_GUIDE.md))
 **Deployment:** Ready to deploy ([deploy script](./scripts/deploy-production.sh))
+
+### Port Allocation
+
+Per [PORT_ALLOCATION.md](https://github.com/madfam-io/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Enclii uses the 4200-4299 block.
+
+| Service | Port | Container | Public Domain |
+|---------|------|-----------|---------------|
+| Switchyard API | 4200 | enclii-api | api.enclii.dev |
+| Web UI | 4201 | enclii-ui | app.enclii.dev |
+| Agent | 4202 | enclii-agent | - |
+| Metrics | 4290 | enclii-metrics | - |
 
 ### Quick Start (Production Deployment)
 ```bash

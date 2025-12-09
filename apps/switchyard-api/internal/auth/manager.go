@@ -45,9 +45,11 @@ func NewAuthManager(
 	case "oidc":
 		// Production mode - OIDC authentication (after Janua is deployed)
 		logrus.WithFields(logrus.Fields{
-			"issuer":       cfg.OIDCIssuer,
-			"client_id":    cfg.OIDCClientID,
-			"redirect_url": cfg.OIDCRedirectURL,
+			"issuer":            cfg.OIDCIssuer,
+			"client_id":         cfg.OIDCClientID,
+			"redirect_url":      cfg.OIDCRedirectURL,
+			"external_jwks_url": cfg.ExternalJWKSURL,
+			"external_issuer":   cfg.ExternalIssuer,
 		}).Info("Using OIDC authentication (production mode)")
 
 		if cfg.OIDCIssuer == "" {
@@ -60,7 +62,9 @@ func NewAuthManager(
 			return nil, fmt.Errorf("OIDC mode requires ENCLII_OIDC_CLIENT_SECRET")
 		}
 
-		return NewOIDCManager(
+		// Use external JWKS validation if configured (for CLI/API direct access)
+		jwksCacheTTL := time.Duration(cfg.ExternalJWKSCacheTTL) * time.Second
+		return NewOIDCManagerWithExternalJWKS(
 			ctx,
 			cfg.OIDCIssuer,
 			cfg.OIDCClientID,
@@ -68,6 +72,9 @@ func NewAuthManager(
 			cfg.OIDCRedirectURL,
 			repos,
 			cache,
+			cfg.ExternalJWKSURL,
+			cfg.ExternalIssuer,
+			jwksCacheTTL,
 		)
 
 	default:

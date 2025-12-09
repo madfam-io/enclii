@@ -263,7 +263,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setIsLoading(true);
 
     try {
-      const response = await apiRequest("/api/v1/auth/login", {
+      const response = await apiRequest("/v1/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
@@ -307,7 +307,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setIsLoading(true);
 
     try {
-      const response = await apiRequest("/api/v1/auth/register", {
+      const response = await apiRequest("/v1/auth/register", {
         method: "POST",
         body: JSON.stringify({ email, password, name }),
       });
@@ -355,7 +355,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Redirect to backend OIDC login endpoint
     // The backend will redirect to the OIDC provider (Janua)
-    window.location.href = `${API_BASE_URL}/api/v1/auth/oidc/login`;
+    // Note: In OIDC mode, the API registers GET /v1/auth/login for OIDC redirect
+    window.location.href = `${API_BASE_URL}/v1/auth/login`;
   };
 
   const handleOAuthCallback = async (
@@ -373,7 +374,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/auth/oidc/callback?${params.toString()}`,
+        `${API_BASE_URL}/v1/auth/callback?${params.toString()}`,
         {
           method: "GET",
           credentials: "include", // Include cookies for state verification
@@ -421,7 +422,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       // Call backend logout endpoint to revoke session
       if (tokens?.accessToken) {
-        await apiRequest("/api/v1/auth/logout", {
+        await apiRequest("/v1/auth/logout", {
           method: "POST",
         }).catch(() => {
           // Ignore errors - we're logging out anyway
@@ -448,7 +449,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+      const response = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

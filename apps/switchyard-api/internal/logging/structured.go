@@ -458,7 +458,7 @@ func DefaultLogConfig() *LogConfig {
 		Format:          "json",
 		Output:          "stdout",
 		ServiceName:     "enclii-switchyard",
-		Version:         "1.0.0",
+		Version:         "0.1.0",
 		Environment:     "development",
 		TracingEnabled:  true,
 		JaegerEndpoint:  "http://localhost:14268/api/traces",

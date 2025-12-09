@@ -50,7 +50,7 @@ function getAuthHeaders(includeCSRF: boolean = false): HeadersInit {
  */
 async function fetchCSRFToken(): Promise<void> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/csrf`, {
+    const response = await fetch(`${API_BASE_URL}/v1/csrf`, {
       credentials: "include", // Include cookies
     });
 
@@ -68,7 +68,7 @@ async function fetchCSRFToken(): Promise<void> {
 /**
  * Make an authenticated API request with CSRF protection
  *
- * @param endpoint - API endpoint path (e.g., '/api/v1/projects')
+ * @param endpoint - API endpoint path (e.g., '/v1/projects')
  * @param options - Fetch options (method, body, etc.)
  * @returns Promise with the response
  */

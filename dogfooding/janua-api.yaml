@@ -10,7 +10,7 @@
 #
 # Repository: https://github.com/madfam-io/janua
 # Path: apps/api
-# Port: 8000 (per PORT_REGISTRY.md)
+# Port: 4100 (per PORT_ALLOCATION.md in solarpunk-foundry)
 # License: AGPL v3
 
 apiVersion: enclii.io/v1
@@ -73,12 +73,12 @@ spec:
 
     # Container configuration
     container:
-      port: 8000  # Per PORT_REGISTRY.md
+      port: 4100  # Per PORT_ALLOCATION.md
 
       # Health checks - stricter for auth
       healthCheck:
         path: /health
-        port: 8000
+        port: 4100
         initialDelaySeconds: 10
         periodSeconds: 5
         timeoutSeconds: 3
@@ -88,7 +88,7 @@ spec:
       # Readiness check
       readinessCheck:
         path: /ready
-        port: 8000
+        port: 4100
         initialDelaySeconds: 5
         periodSeconds: 3
         timeoutSeconds: 2
@@ -120,7 +120,7 @@ spec:
         version: "${BUILD_VERSION}"
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8000"
+        prometheus.io/port: "4100"
         prometheus.io/path: "/metrics"
 
       # Anti-affinity for HA
@@ -182,8 +182,8 @@ spec:
     # Internal service
     service:
       type: ClusterIP
-      port: 8000  # Per PORT_REGISTRY.md
-      targetPort: 8000
+      port: 4100  # Per PORT_ALLOCATION.md
+      targetPort: 4100
 
     # Ingress rules
     ingress:
@@ -213,7 +213,7 @@ spec:
 
     # Server configuration
     - name: PORT
-      value: "8000"
+      value: "4100"
     - name: HOST
       value: "0.0.0.0"
 
@@ -388,7 +388,7 @@ spec:
     prometheus:
       enabled: true
       path: /metrics
-      port: 8000
+      port: 4100
 
     # Custom metrics for auth
     customMetrics:

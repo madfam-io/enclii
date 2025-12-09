@@ -26,6 +26,11 @@ type Config struct {
 	OIDCClientSecret string
 	OIDCRedirectURL  string
 
+	// External Token Validation (for CLI/API direct access)
+	ExternalJWKSURL    string // JWKS URL for validating external tokens (e.g., Janua)
+	ExternalIssuer     string // Expected issuer for external tokens
+	ExternalJWKSCacheTTL int  // Cache TTL in seconds for external JWKS
+
 	// Kubernetes
 	KubeConfig  string
 	KubeContext string
@@ -65,8 +70,9 @@ func Load() (*Config, error) {
 	// Set defaults for development ONLY
 	// SECURITY WARNING: These defaults are for local development only.
 	// Production deployments MUST override these via environment variables.
+	// Port 4200 per PORT_ALLOCATION.md in solarpunk-foundry (Enclii block: 4200-4299)
 	viper.SetDefault("environment", "development")
-	viper.SetDefault("port", "8080")
+	viper.SetDefault("port", "4200")
 	viper.SetDefault("database-url", "postgres://postgres:postgres@localhost:5432/enclii_dev?sslmode=require")
 	viper.SetDefault("log-level", "info")
 	viper.SetDefault("registry", "ghcr.io/madfam")
@@ -74,7 +80,10 @@ func Load() (*Config, error) {
 	viper.SetDefault("oidc-issuer", "http://localhost:5556")
 	viper.SetDefault("oidc-client-id", "enclii")
 	viper.SetDefault("oidc-client-secret", "")
-	viper.SetDefault("oidc-redirect-url", "http://localhost:8080/v1/auth/callback")
+	viper.SetDefault("oidc-redirect-url", "http://localhost:4200/v1/auth/callback")
+	viper.SetDefault("external-jwks-url", "")           // Empty = disabled
+	viper.SetDefault("external-issuer", "")             // Expected issuer for external tokens
+	viper.SetDefault("external-jwks-cache-ttl", 300)    // 5 minutes default
 	viper.SetDefault("kube-config", os.Getenv("HOME")+"/.kube/config")
 	viper.SetDefault("kube-context", "kind-enclii")
 	viper.SetDefault("buildkit-addr", "docker://")
@@ -106,6 +115,9 @@ func Load() (*Config, error) {
 		OIDCClientID:              viper.GetString("oidc-client-id"),
 		OIDCClientSecret:          viper.GetString("oidc-client-secret"),
 		OIDCRedirectURL:           viper.GetString("oidc-redirect-url"),
+		ExternalJWKSURL:           viper.GetString("external-jwks-url"),
+		ExternalIssuer:            viper.GetString("external-issuer"),
+		ExternalJWKSCacheTTL:      viper.GetInt("external-jwks-cache-ttl"),
 		KubeConfig:                viper.GetString("kube-config"),
 		KubeContext:               viper.GetString("kube-context"),
 		BuildkitAddr:              viper.GetString("buildkit-addr"),
