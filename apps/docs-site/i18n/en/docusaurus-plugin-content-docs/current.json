@@ -1,0 +1,46 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.docsSidebar.category.Getting Started": {
+    "message": "Getting Started",
+    "description": "The label for category Getting Started in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.Architecture": {
+    "message": "Architecture",
+    "description": "The label for category Architecture in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.Guides": {
+    "message": "Guides",
+    "description": "The label for category Guides in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.Production": {
+    "message": "Production",
+    "description": "The label for category Production in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.Audits": {
+    "message": "Audits",
+    "description": "The label for category Audits in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.Security": {
+    "message": "Security",
+    "description": "The label for category Security in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.Codebase": {
+    "message": "Codebase",
+    "description": "The label for category Codebase in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.UI": {
+    "message": "UI",
+    "description": "The label for category UI in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.Implementation": {
+    "message": "Implementation",
+    "description": "The label for category Implementation in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.doc.Overview": {
+    "message": "Overview",
+    "description": "The label for the doc item Overview in sidebar docsSidebar, linking to the doc README"
+  }
+}

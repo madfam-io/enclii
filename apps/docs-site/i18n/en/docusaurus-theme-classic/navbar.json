@@ -1,0 +1,22 @@
+{
+  "title": {
+    "message": "Enclii",
+    "description": "The title in the navbar"
+  },
+  "logo.alt": {
+    "message": "Enclii Logo",
+    "description": "The alt text of navbar logo"
+  },
+  "item.label.Documentation": {
+    "message": "Documentation",
+    "description": "Navbar item with label Documentation"
+  },
+  "item.label.Dashboard": {
+    "message": "Dashboard",
+    "description": "Navbar item with label Dashboard"
+  },
+  "item.label.GitHub": {
+    "message": "GitHub",
+    "description": "Navbar item with label GitHub"
+  }
+}
