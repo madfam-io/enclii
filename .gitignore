@@ -62,3 +62,11 @@ temp/
 
 # Docker
 .dockerignore
+
+# Secrets (NEVER commit)
+infra/k8s/production/oidc-secrets.yaml
+*-secrets.yaml
+!*-secrets.example.yaml
+
+# CLI binary artifacts
+packages/cli/enclii
