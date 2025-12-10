@@ -1,27 +1,28 @@
-# Enclii Documentation Site - docs.enclii.io
+# Enclii Documentation Site - docs.enclii.dev
 # Technical documentation deployed on Enclii (dogfooding)
+# Version: 0.1.0
 
 apiVersion: enclii.dev/v1
 kind: Service
 metadata:
   name: docs-site
   project: enclii-platform
-  description: Documentation site (Docusaurus or similar)
+  description: Docusaurus documentation site for Enclii
 
 spec:
   build:
-    type: nixpacks  # Auto-detect Node.js static site
+    type: dockerfile
+    dockerfile: apps/docs-site/Dockerfile
     context: .
     source:
       git:
         repository: https://github.com/madfam-io/enclii
         branch: main
-        path: docs  # Assuming docs live here
         autoDeploy: true
 
   runtime:
-    port: 3000
-    replicas: 2
+    port: 4203
+    replicas: 1
     resources:
       requests:
         cpu: "50m"
@@ -30,18 +31,17 @@ spec:
         cpu: "200m"
         memory: "128Mi"
 
-  env:
-    - name: NODE_ENV
-      value: production
-    - name: NEXT_PUBLIC_APP_URL
-      value: https://app.enclii.io
+  healthCheck:
+    path: /health
+    intervalSeconds: 30
+    timeoutSeconds: 5
 
   domains:
-    - domain: docs.enclii.io
+    - domain: docs.enclii.dev
       tls: true
       tlsIssuer: cloudflare
 
-  # Aggressive caching for docs
+  # Aggressive caching for static docs
   caching:
     enabled: true
     ttl: 3600  # 1 hour
@@ -49,7 +49,4 @@ spec:
       - "Cache-Control: public, max-age=3600"
 
   autoscaling:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 4
-    targetCPUUtilizationPercentage: 70
+    enabled: false  # Static site, single replica sufficient

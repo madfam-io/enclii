@@ -14,6 +14,7 @@ import (
 
 	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
@@ -406,20 +407,22 @@ func (h *Handler) RollbackDeployment(c *gin.Context) {
 		return
 	}
 
-	// TODO: Trigger rollback in Kubernetes (reconciler.Rollback not yet implemented)
-	// namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
-	// if err := h.reconciler.Rollback(ctx, namespace, service.Name); err != nil {
-	//  	h.logger.Error(ctx, "Failed to rollback in Kubernetes", logging.Error("k8s_error", err))
-	//  	c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rollback deployment"})
-	//  	return
-	// }
+	// Trigger rollback in Kubernetes
+	if h.serviceReconciler != nil {
+		namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
+		if err := h.serviceReconciler.Rollback(ctx, namespace, service.Name); err != nil {
+			h.logger.Error(ctx, "Failed to rollback in Kubernetes", logging.Error("k8s_error", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rollback deployment"})
+			return
+		}
+	}
 
 	// Clear cache
 	cacheKey := fmt.Sprintf("service:status:%s", service.ID.String())
 	h.cache.Del(ctx, cacheKey)
 
-	// TODO: Record metrics (RecordRollback not yet implemented)
-	// h.metrics.RecordRollback(service.Name)
+	// Record rollback metrics
+	monitoring.RecordDeployment("production", "rollback", 0)
 
 	h.logger.Info(ctx, "Deployment rolled back",
 		logging.String("deployment_id", deployment.ID.String()),

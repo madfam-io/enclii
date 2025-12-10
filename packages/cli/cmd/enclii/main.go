@@ -4,7 +4,6 @@ import (
 	"os"
 
 	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
 
 	"github.com/madfam/enclii/packages/cli/internal/cmd"
 	"github.com/madfam/enclii/packages/cli/internal/config"

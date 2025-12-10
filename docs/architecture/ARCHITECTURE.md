@@ -1,3 +1,7 @@
+---
+slug: ARCHITECTURE
+---
+
 # Enclii Platform Architecture
 
 ## Table of Contents

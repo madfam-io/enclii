@@ -75,6 +75,31 @@ const AUTH_MODE = (process.env.NEXT_PUBLIC_AUTH_MODE || "local") as
 // Token refresh buffer - refresh 5 minutes before expiry
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
+/**
+ * Safely parse error response, handling both JSON and plain text responses.
+ * Returns the error message from the response body.
+ */
+async function parseErrorResponse(
+  response: Response,
+  fallbackMessage: string,
+): Promise<string> {
+  const contentType = response.headers.get("content-type");
+  const text = await response.text();
+
+  // Try to parse as JSON if content-type suggests it or if it looks like JSON
+  if (contentType?.includes("application/json") || text.startsWith("{")) {
+    try {
+      const json = JSON.parse(text);
+      return json.error || json.message || json.detail || fallbackMessage;
+    } catch {
+      // JSON parsing failed, fall through to use text
+    }
+  }
+
+  // Return plain text error if not empty, otherwise fallback
+  return text.trim() || fallbackMessage;
+}
+
 // =============================================================================
 // CONTEXT
 // =============================================================================
@@ -269,8 +294,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Login failed");
+        const errorMessage = await parseErrorResponse(response, "Login failed");
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -313,8 +338,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Registration failed");
+        const errorMessage = await parseErrorResponse(
+          response,
+          "Registration failed",
+        );
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -382,8 +410,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       );
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "OAuth callback failed");
+        const errorMessage = await parseErrorResponse(
+          response,
+          "OAuth callback failed",
+        );
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();

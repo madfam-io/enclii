@@ -23,13 +23,22 @@ function getAuthHeaders(includeCSRF: boolean = false): HeadersInit {
     "Content-Type": "application/json",
   };
 
-  // Get JWT token from localStorage
+  // Get JWT token from localStorage - matches AuthContext storage key
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem("auth_token");
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    } else {
-      // Development fallback
+    const storedTokens = localStorage.getItem("enclii_tokens");
+    if (storedTokens) {
+      try {
+        const tokens = JSON.parse(storedTokens);
+        if (tokens.accessToken) {
+          headers["Authorization"] = `Bearer ${tokens.accessToken}`;
+        }
+      } catch {
+        // Invalid JSON, ignore
+      }
+    }
+
+    // Development fallback
+    if (!headers["Authorization"]) {
       const devToken = process.env.NEXT_PUBLIC_API_TOKEN;
       if (devToken) {
         headers["Authorization"] = `Bearer ${devToken}`;
@@ -101,9 +110,10 @@ export async function apiRequest<T = any>(
 
     // Handle authentication errors
     if (response.status === 401) {
-      // Clear invalid token
+      // Clear invalid tokens - matches AuthContext storage key
       if (typeof window !== "undefined") {
-        localStorage.removeItem("auth_token");
+        localStorage.removeItem("enclii_tokens");
+        localStorage.removeItem("enclii_user");
       }
       throw new Error("Authentication required. Please log in again.");
     }

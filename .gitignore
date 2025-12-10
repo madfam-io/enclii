@@ -52,6 +52,8 @@ yarn-error.log*
 # Kubernetes
 kubeconfig
 *.kubeconfig
+*.local.yaml
+*-secrets.local.yaml
 
 # Temporary files
 tmp/
