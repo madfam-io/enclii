@@ -66,26 +66,27 @@ func (h *Handler) ListPreviews(c *gin.Context) {
 }
 
 // ListProjectPreviews returns all preview environments for a project
-// GET /v1/projects/:id/previews
+// GET /v1/projects/:slug/previews
 func (h *Handler) ListProjectPreviews(c *gin.Context) {
-	projectID := c.Param("id")
-	if projectID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "project_id is required"})
+	slug := c.Param("slug")
+	if slug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "project slug is required"})
 		return
 	}
 
 	ctx := c.Request.Context()
 
-	projectUUID, err := uuid.Parse(projectID)
+	// Get project by slug
+	project, err := h.repos.Projects.GetBySlug(slug)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid project_id format"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
 		return
 	}
 
-	previews, err := h.repos.PreviewEnvironments.ListByProject(ctx, projectUUID)
+	previews, err := h.repos.PreviewEnvironments.ListByProject(ctx, project.ID)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to list project preview environments",
-			logging.String("project_id", projectID),
+			logging.String("project_slug", slug),
 			logging.Error("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list previews"})
 		return

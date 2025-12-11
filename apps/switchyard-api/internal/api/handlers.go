@@ -254,7 +254,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 
 			// Preview Environments (PR-based ephemeral deployments)
 			protected.GET("/services/:id/previews", h.ListPreviews)
-			protected.GET("/projects/:id/previews", h.ListProjectPreviews)
+			protected.GET("/projects/:slug/previews", h.ListProjectPreviews)
 			protected.GET("/previews/:id", h.GetPreview)
 			protected.POST("/previews", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreatePreview)
 			protected.POST("/previews/:id/close", h.auth.RequireRole(string(types.RoleDeveloper)), h.ClosePreview)
