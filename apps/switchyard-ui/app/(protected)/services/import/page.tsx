@@ -125,7 +125,7 @@ export default function ImportRepositoryPage() {
             <Button
               onClick={() => {
                 const redirectUri = encodeURIComponent(window.location.href);
-                window.location.href = `${januaUrl}/api/v1/oauth/link/github?redirect_uri=${redirectUri}`;
+                window.location.href = `${januaUrl}/api/v1/auth/oauth/link/github?redirect_uri=${redirectUri}`;
               }}
               className="inline-flex items-center gap-2"
             >
