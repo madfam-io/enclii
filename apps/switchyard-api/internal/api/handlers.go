@@ -107,6 +107,7 @@ func NewHandler(
 // - deployment_handlers.go: Deployment operations
 // - domain_handlers.go: Custom domain management
 // - topology_handlers.go: Service dependency graph
+// - webhook_handlers.go: GitHub webhook handlers
 func SetupRoutes(router *gin.Engine, h *Handler) {
 	// Health check (no auth required)
 	router.GET("/health", h.Health)
@@ -114,6 +115,10 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 
 	// Dashboard stats (public endpoint for local development)
 	router.GET("/v1/dashboard/stats", h.GetDashboardStats)
+
+	// GitHub webhook (no auth required - uses HMAC signature verification)
+	// Endpoint for GitHub to send push events for auto-deployments
+	router.POST("/v1/webhooks/github", h.GitHubWebhook)
 
 	// Rate limiters for auth endpoints
 	authRateLimiter := middleware.NewAuthRateLimiter()       // 10 req/min per IP
@@ -161,6 +166,11 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/projects", h.ListProjects)
 			protected.GET("/projects/:slug", h.GetProject)
 
+			// Environments
+			protected.POST("/projects/:slug/environments", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateEnvironment)
+			protected.GET("/projects/:slug/environments", h.ListEnvironments)
+			protected.GET("/projects/:slug/environments/:env_name", h.GetEnvironment)
+
 			// Services
 			protected.POST("/projects/:slug/services", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateService)
 			protected.GET("/projects/:slug/services", h.ListServices)
@@ -192,6 +202,10 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.PATCH("/services/:id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateCustomDomain)
 			protected.DELETE("/services/:id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteCustomDomain)
 			protected.POST("/services/:id/domains/:domain_id/verify", h.auth.RequireRole(string(types.RoleDeveloper)), h.VerifyCustomDomain)
+
+			// Integrations (GitHub via Janua OAuth tokens)
+			protected.GET("/integrations/github/status", h.GetGitHubStatus)
+			protected.GET("/integrations/github/repos", h.ListGitHubRepos)
 		}
 	}
 }
