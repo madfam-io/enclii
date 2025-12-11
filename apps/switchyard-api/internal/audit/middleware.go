@@ -70,9 +70,13 @@ func (m *Middleware) AuditMiddleware() gin.HandlerFunc {
 		statusCode := c.Writer.Status()
 		outcome := determineOutcome(statusCode)
 
-		// Build audit log
+		// Build audit log - use nil for OIDC users (no local user row)
+		var actorIDPtr *uuid.UUID
+		if actorID != uuid.Nil {
+			actorIDPtr = &actorID
+		}
 		auditLog := &types.AuditLog{
-			ActorID:      actorID,
+			ActorID:      actorIDPtr,
 			ActorEmail:   actorEmail,
 			ActorRole:    actorRole,
 			Action:       buildAction(c.Request.Method, c.FullPath()),

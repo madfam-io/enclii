@@ -207,6 +207,13 @@ func main() {
 	)
 	logrus.Info("✓ DeploymentService initialized")
 
+	deploymentGroupService := services.NewDeploymentGroupService(
+		repos,
+		deploymentService,
+		logrus.StandardLogger(),
+	)
+	logrus.Info("✓ DeploymentGroupService initialized")
+
 	// Setup HTTP server
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -241,6 +248,7 @@ func main() {
 		authService,
 		projectService,
 		deploymentService,
+		deploymentGroupService,
 	)
 	api.SetupRoutes(router, apiHandler)
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -375,6 +376,112 @@ func (c *Client) GetDeploymentStatusInfo(ctx context.Context, namespace, name st
 	}
 
 	return status, nil
+}
+
+// LogStreamOptions configures log streaming behavior
+type LogStreamOptions struct {
+	Namespace     string
+	LabelSelector string
+	TailLines     int64
+	Follow        bool
+	Timestamps    bool
+}
+
+// LogLine represents a single log line with metadata
+type LogLine struct {
+	Pod       string    `json:"pod"`
+	Container string    `json:"container"`
+	Timestamp time.Time `json:"timestamp"`
+	Message   string    `json:"message"`
+}
+
+// StreamLogs streams logs from pods matching the label selector to a channel
+func (c *Client) StreamLogs(ctx context.Context, opts LogStreamOptions, logChan chan<- LogLine, errChan chan<- error) {
+	defer close(logChan)
+	defer close(errChan)
+
+	// Get pods matching the label selector
+	pods, err := c.ListPods(ctx, opts.Namespace, opts.LabelSelector)
+	if err != nil {
+		errChan <- fmt.Errorf("failed to list pods: %w", err)
+		return
+	}
+
+	if len(pods.Items) == 0 {
+		errChan <- fmt.Errorf("no pods found matching selector: %s", opts.LabelSelector)
+		return
+	}
+
+	// Create a wait group to track all goroutines
+	var wg sync.WaitGroup
+
+	// Stream logs from each pod
+	for _, pod := range pods.Items {
+		for _, container := range pod.Spec.Containers {
+			wg.Add(1)
+			go func(podName, containerName string) {
+				defer wg.Done()
+				c.streamPodLogs(ctx, opts, podName, containerName, logChan, errChan)
+			}(pod.Name, container.Name)
+		}
+	}
+
+	wg.Wait()
+}
+
+// streamPodLogs streams logs from a specific pod/container
+func (c *Client) streamPodLogs(ctx context.Context, opts LogStreamOptions, podName, containerName string, logChan chan<- LogLine, errChan chan<- error) {
+	podLogOpts := &corev1.PodLogOptions{
+		Container:  containerName,
+		Follow:     opts.Follow,
+		Timestamps: opts.Timestamps,
+	}
+
+	if opts.TailLines > 0 {
+		podLogOpts.TailLines = &opts.TailLines
+	}
+
+	req := c.Clientset.CoreV1().Pods(opts.Namespace).GetLogs(podName, podLogOpts)
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		errChan <- fmt.Errorf("failed to get log stream for pod %s: %w", podName, err)
+		return
+	}
+	defer stream.Close()
+
+	scanner := bufio.NewScanner(stream)
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			line := scanner.Text()
+			logLine := LogLine{
+				Pod:       podName,
+				Container: containerName,
+				Timestamp: time.Now(),
+				Message:   line,
+			}
+
+			// Parse timestamp if present (format: 2006-01-02T15:04:05.999999999Z message)
+			if opts.Timestamps && len(line) > 30 {
+				if ts, err := time.Parse(time.RFC3339Nano, line[:30]); err == nil {
+					logLine.Timestamp = ts
+					logLine.Message = strings.TrimPrefix(line[30:], " ")
+				}
+			}
+
+			select {
+			case logChan <- logLine:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		errChan <- fmt.Errorf("error reading logs for pod %s: %w", podName, err)
+	}
 }
 
 // RollingRestart triggers a rolling restart of a deployment by updating the restart annotation

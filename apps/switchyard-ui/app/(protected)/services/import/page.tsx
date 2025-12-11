@@ -54,6 +54,7 @@ export default function ImportRepositoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [githubStatus, setGithubStatus] = useState<IntegrationStatus | null>(null);
+  const [linkingGitHub, setLinkingGitHub] = useState(false);
 
   // Check GitHub integration status first
   useEffect(() => {
@@ -90,8 +91,74 @@ export default function ImportRepositoryPage() {
   };
 
   const handleSelectRepo = (repo: GitHubRepository) => {
-    // Navigate to service creation with repo context
-    router.push(`/services/new?repo=${encodeURIComponent(repo.clone_url)}&name=${repo.name}&branch=${repo.default_branch}`);
+    // Navigate to the analyze step which will detect services in the repo
+    router.push(`/services/import/${repo.owner.login}/${repo.name}?branch=${repo.default_branch}`);
+  };
+
+  // Handle GitHub OAuth linking via Janua
+  const handleConnectGitHub = async () => {
+    const januaUrl = process.env.NEXT_PUBLIC_JANUA_URL || 'https://auth.madfam.io';
+    const redirectUri = window.location.href;
+
+    setLinkingGitHub(true);
+    setError(null);
+
+    try {
+      // Get tokens from localStorage
+      const storedTokens = localStorage.getItem("enclii_tokens");
+      if (!storedTokens) {
+        throw new Error("Not authenticated. Please log in again.");
+      }
+
+      const tokens = JSON.parse(storedTokens);
+
+      // Use IDP token (Janua token) for calling Janua APIs
+      // Fall back to accessToken for backwards compatibility (won't work with Janua but might work locally)
+      const idpToken = tokens.idpToken || tokens.accessToken;
+      if (!idpToken) {
+        throw new Error("No authentication token found. Please log in again.");
+      }
+
+      // If we don't have an IDP token, the user needs to re-authenticate via OIDC
+      if (!tokens.idpToken) {
+        console.warn("No IDP token available - user may need to re-authenticate via OIDC to get Janua token");
+        // Try anyway with access token - it will fail if Janua doesn't accept it
+      }
+
+      // Call Janua's OAuth link endpoint (POST)
+      const response = await fetch(
+        `${januaUrl}/api/v1/auth/oauth/link/github?redirect_uri=${encodeURIComponent(redirectUri)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${idpToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        // If we get 401 and don't have IDP token, suggest re-login
+        if (response.status === 401 && !tokens.idpToken) {
+          throw new Error("Session expired. Please log out and log back in to refresh your authentication.");
+        }
+        throw new Error(errorData.detail || errorData.message || `Failed to initiate GitHub linking: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.authorization_url) {
+        // Redirect to GitHub OAuth
+        window.location.href = data.authorization_url;
+      } else {
+        throw new Error("No authorization URL returned from server");
+      }
+    } catch (err) {
+      console.error("Failed to connect GitHub:", err);
+      setError(err instanceof Error ? err.message : "Failed to connect GitHub");
+      setLinkingGitHub(false);
+    }
   };
 
   const filteredRepos = repos.filter(repo =>
@@ -102,7 +169,6 @@ export default function ImportRepositoryPage() {
 
   // GitHub not connected state
   if (!loading && githubStatus && !githubStatus.linked) {
-    const januaUrl = process.env.NEXT_PUBLIC_JANUA_URL || 'https://auth.madfam.io';
     return (
       <div className="container mx-auto py-8 max-w-4xl">
         <div className="mb-6">
@@ -123,15 +189,28 @@ export default function ImportRepositoryPage() {
               Link your GitHub account to import repositories and enable auto-deployments.
             </p>
             <Button
-              onClick={() => {
-                const redirectUri = encodeURIComponent(window.location.href);
-                window.location.href = `${januaUrl}/api/v1/auth/oauth/link/github?redirect_uri=${redirectUri}`;
-              }}
+              onClick={handleConnectGitHub}
+              disabled={linkingGitHub}
               className="inline-flex items-center gap-2"
             >
-              <GithubIcon />
-              Connect GitHub via Janua
+              {linkingGitHub ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Connecting...
+                </>
+              ) : (
+                <>
+                  <GithubIcon />
+                  Connect GitHub via Janua
+                </>
+              )}
             </Button>
+            {error && (
+              <p className="text-red-600 text-sm mt-4">{error}</p>
+            )}
           </CardContent>
         </Card>
       </div>

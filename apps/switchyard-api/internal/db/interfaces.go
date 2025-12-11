@@ -31,6 +31,8 @@ type ServiceRepositoryInterface interface {
 	GetByID(id uuid.UUID) (*types.Service, error)
 	ListAll(ctx context.Context) ([]*types.Service, error)
 	ListByProject(projectID uuid.UUID) ([]*types.Service, error)
+	Update(ctx context.Context, service *types.Service) error
+	Delete(ctx context.Context, id uuid.UUID) error
 }
 
 // ReleaseRepositoryInterface defines operations for releases

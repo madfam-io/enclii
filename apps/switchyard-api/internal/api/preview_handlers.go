@@ -1,0 +1,580 @@
+package api
+
+import (
+	"database/sql"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+
+	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+)
+
+// CreatePreviewRequest defines the request body for creating a preview environment
+type CreatePreviewRequest struct {
+	ServiceID    string `json:"service_id" binding:"required"`
+	PRNumber     int    `json:"pr_number" binding:"required"`
+	PRTitle      string `json:"pr_title,omitempty"`
+	PRURL        string `json:"pr_url,omitempty"`
+	PRAuthor     string `json:"pr_author,omitempty"`
+	PRBranch     string `json:"pr_branch" binding:"required"`
+	PRBaseBranch string `json:"pr_base_branch,omitempty"`
+	CommitSHA    string `json:"commit_sha" binding:"required"`
+}
+
+// CreatePreviewComment defines the request body for creating a comment
+type CreatePreviewCommentRequest struct {
+	Content   string `json:"content" binding:"required"`
+	Path      string `json:"path,omitempty"`
+	XPosition *int   `json:"x_position,omitempty"`
+	YPosition *int   `json:"y_position,omitempty"`
+}
+
+// ListPreviews returns all preview environments for a service
+// GET /v1/services/:id/previews
+func (h *Handler) ListPreviews(c *gin.Context) {
+	serviceID := c.Param("id")
+	if serviceID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "service_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	serviceUUID, err := uuid.Parse(serviceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service_id format"})
+		return
+	}
+
+	previews, err := h.repos.PreviewEnvironments.ListByService(ctx, serviceUUID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list preview environments",
+			logging.String("service_id", serviceID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list previews"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"previews": previews,
+		"count":    len(previews),
+	})
+}
+
+// ListProjectPreviews returns all preview environments for a project
+// GET /v1/projects/:id/previews
+func (h *Handler) ListProjectPreviews(c *gin.Context) {
+	projectID := c.Param("id")
+	if projectID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "project_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	projectUUID, err := uuid.Parse(projectID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid project_id format"})
+		return
+	}
+
+	previews, err := h.repos.PreviewEnvironments.ListByProject(ctx, projectUUID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list project preview environments",
+			logging.String("project_id", projectID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list previews"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"previews": previews,
+		"count":    len(previews),
+	})
+}
+
+// GetPreview returns a single preview environment
+// GET /v1/previews/:id
+func (h *Handler) GetPreview(c *gin.Context) {
+	previewID := c.Param("id")
+	if previewID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preview_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	previewUUID, err := uuid.Parse(previewID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid preview_id format"})
+		return
+	}
+
+	preview, err := h.repos.PreviewEnvironments.GetByID(ctx, previewUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "preview environment not found"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get preview environment",
+			logging.String("preview_id", previewID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get preview"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"preview": preview,
+	})
+}
+
+// CreatePreview creates a new preview environment for a PR
+// POST /v1/previews
+func (h *Handler) CreatePreview(c *gin.Context) {
+	var req CreatePreviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Parse service ID
+	serviceUUID, err := uuid.Parse(req.ServiceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid service_id format"})
+		return
+	}
+
+	// Get the service to verify it exists and get project info
+	service, err := h.repos.Services.GetByID(serviceUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "service not found"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get service", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get service"})
+		return
+	}
+
+	// Check if preview already exists for this PR
+	existing, err := h.repos.PreviewEnvironments.GetByServiceAndPR(ctx, serviceUUID, req.PRNumber)
+	if err != nil && err != sql.ErrNoRows {
+		h.logger.Error(ctx, "Failed to check existing preview", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check existing preview"})
+		return
+	}
+
+	if existing != nil {
+		// Update existing preview with new commit
+		if err := h.repos.PreviewEnvironments.UpdateCommit(ctx, existing.ID, req.CommitSHA); err != nil {
+			h.logger.Error(ctx, "Failed to update preview commit", logging.Error("error", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update preview"})
+			return
+		}
+
+		// Fetch updated preview
+		existing, _ = h.repos.PreviewEnvironments.GetByID(ctx, existing.ID)
+		c.JSON(http.StatusOK, gin.H{
+			"preview": existing,
+			"message": "Preview environment updated with new commit",
+			"action":  "updated",
+		})
+		return
+	}
+
+	// Generate preview subdomain: pr-{number}-{service-slug}.preview.enclii.app
+	serviceSlug := strings.ToLower(strings.ReplaceAll(service.Name, " ", "-"))
+	subdomain := fmt.Sprintf("pr-%d-%s", req.PRNumber, serviceSlug)
+	previewURL := fmt.Sprintf("https://%s.preview.enclii.app", subdomain)
+
+	// Set default base branch if not provided
+	baseBranch := req.PRBaseBranch
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+
+	// Create new preview environment
+	preview := &types.PreviewEnvironment{
+		ProjectID:        service.ProjectID,
+		ServiceID:        serviceUUID,
+		PRNumber:         req.PRNumber,
+		PRTitle:          req.PRTitle,
+		PRURL:            req.PRURL,
+		PRAuthor:         req.PRAuthor,
+		PRBranch:         req.PRBranch,
+		PRBaseBranch:     baseBranch,
+		CommitSHA:        req.CommitSHA,
+		PreviewSubdomain: subdomain,
+		PreviewURL:       previewURL,
+		Status:           types.PreviewStatusPending,
+		AutoSleepAfter:   30, // 30 minutes default
+	}
+
+	if err := h.repos.PreviewEnvironments.Create(ctx, preview); err != nil {
+		h.logger.Error(ctx, "Failed to create preview environment",
+			logging.String("service_id", req.ServiceID),
+			logging.Int("pr_number", req.PRNumber),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create preview"})
+		return
+	}
+
+	h.logger.Info(ctx, "Preview environment created",
+		logging.String("preview_id", preview.ID.String()),
+		logging.String("service_id", req.ServiceID),
+		logging.Int("pr_number", req.PRNumber),
+		logging.String("preview_url", previewURL))
+
+	// TODO: Trigger build for the preview environment
+	// This would be done by calling the builder service
+
+	c.JSON(http.StatusCreated, gin.H{
+		"preview": preview,
+		"message": "Preview environment created",
+		"action":  "created",
+	})
+}
+
+// ClosePreview closes a preview environment (PR closed/merged)
+// POST /v1/previews/:id/close
+func (h *Handler) ClosePreview(c *gin.Context) {
+	previewID := c.Param("id")
+	if previewID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preview_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	previewUUID, err := uuid.Parse(previewID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid preview_id format"})
+		return
+	}
+
+	// Verify preview exists
+	preview, err := h.repos.PreviewEnvironments.GetByID(ctx, previewUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "preview environment not found"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get preview", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get preview"})
+		return
+	}
+
+	// Close the preview
+	if err := h.repos.PreviewEnvironments.Close(ctx, previewUUID); err != nil {
+		h.logger.Error(ctx, "Failed to close preview",
+			logging.String("preview_id", previewID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to close preview"})
+		return
+	}
+
+	// TODO: Cleanup Kubernetes resources for this preview
+
+	h.logger.Info(ctx, "Preview environment closed",
+		logging.String("preview_id", previewID),
+		logging.Int("pr_number", preview.PRNumber))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Preview environment closed",
+	})
+}
+
+// WakePreview wakes up a sleeping preview environment
+// POST /v1/previews/:id/wake
+func (h *Handler) WakePreview(c *gin.Context) {
+	previewID := c.Param("id")
+	if previewID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preview_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	previewUUID, err := uuid.Parse(previewID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid preview_id format"})
+		return
+	}
+
+	// Verify preview exists and is sleeping
+	preview, err := h.repos.PreviewEnvironments.GetByID(ctx, previewUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "preview environment not found"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get preview", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get preview"})
+		return
+	}
+
+	if preview.Status != types.PreviewStatusSleeping {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":          "preview is not sleeping",
+			"current_status": preview.Status,
+		})
+		return
+	}
+
+	// Wake the preview
+	if err := h.repos.PreviewEnvironments.Wake(ctx, previewUUID); err != nil {
+		h.logger.Error(ctx, "Failed to wake preview",
+			logging.String("preview_id", previewID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to wake preview"})
+		return
+	}
+
+	// TODO: Scale up Kubernetes deployment
+
+	h.logger.Info(ctx, "Preview environment woken up",
+		logging.String("preview_id", previewID),
+		logging.Int("pr_number", preview.PRNumber))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Preview environment is waking up",
+	})
+}
+
+// DeletePreview permanently deletes a preview environment
+// DELETE /v1/previews/:id
+func (h *Handler) DeletePreview(c *gin.Context) {
+	previewID := c.Param("id")
+	if previewID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preview_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	previewUUID, err := uuid.Parse(previewID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid preview_id format"})
+		return
+	}
+
+	// Delete the preview
+	if err := h.repos.PreviewEnvironments.Delete(ctx, previewUUID); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "preview environment not found"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to delete preview",
+			logging.String("preview_id", previewID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete preview"})
+		return
+	}
+
+	// TODO: Cleanup Kubernetes resources
+
+	h.logger.Info(ctx, "Preview environment deleted",
+		logging.String("preview_id", previewID))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Preview environment deleted",
+	})
+}
+
+// ListPreviewComments returns comments for a preview environment
+// GET /v1/previews/:id/comments
+func (h *Handler) ListPreviewComments(c *gin.Context) {
+	previewID := c.Param("id")
+	if previewID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preview_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	previewUUID, err := uuid.Parse(previewID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid preview_id format"})
+		return
+	}
+
+	comments, err := h.repos.PreviewComments.ListByPreview(ctx, previewUUID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list preview comments",
+			logging.String("preview_id", previewID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list comments"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"comments": comments,
+		"count":    len(comments),
+	})
+}
+
+// CreatePreviewComment creates a new comment on a preview
+// POST /v1/previews/:id/comments
+func (h *Handler) CreatePreviewComment(c *gin.Context) {
+	previewID := c.Param("id")
+	if previewID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preview_id is required"})
+		return
+	}
+
+	var req CreatePreviewCommentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	previewUUID, err := uuid.Parse(previewID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid preview_id format"})
+		return
+	}
+
+	// Verify preview exists
+	_, err = h.repos.PreviewEnvironments.GetByID(ctx, previewUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "preview environment not found"})
+			return
+		}
+		h.logger.Error(ctx, "Failed to get preview", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get preview"})
+		return
+	}
+
+	// Get user from context
+	userID, _ := c.Get("user_id")
+	userEmail, _ := c.Get("user_email")
+	userName, _ := c.Get("user_name")
+
+	userUUID, _ := uuid.Parse(fmt.Sprintf("%v", userID))
+	email := fmt.Sprintf("%v", userEmail)
+	name := ""
+	if userName != nil {
+		name = fmt.Sprintf("%v", userName)
+	}
+
+	comment := &types.PreviewComment{
+		PreviewID: previewUUID,
+		UserID:    userUUID,
+		UserEmail: email,
+		UserName:  name,
+		Content:   req.Content,
+		Path:      req.Path,
+		XPosition: req.XPosition,
+		YPosition: req.YPosition,
+	}
+
+	if err := h.repos.PreviewComments.Create(ctx, comment); err != nil {
+		h.logger.Error(ctx, "Failed to create preview comment",
+			logging.String("preview_id", previewID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create comment"})
+		return
+	}
+
+	h.logger.Info(ctx, "Preview comment created",
+		logging.String("preview_id", previewID),
+		logging.String("comment_id", comment.ID.String()))
+
+	c.JSON(http.StatusCreated, gin.H{
+		"comment": comment,
+		"message": "Comment created",
+	})
+}
+
+// ResolvePreviewComment marks a comment as resolved
+// POST /v1/previews/:id/comments/:comment_id/resolve
+func (h *Handler) ResolvePreviewComment(c *gin.Context) {
+	commentID := c.Param("comment_id")
+	if commentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "comment_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	commentUUID, err := uuid.Parse(commentID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid comment_id format"})
+		return
+	}
+
+	// Get user from context
+	userID, _ := c.Get("user_id")
+	userUUID, _ := uuid.Parse(fmt.Sprintf("%v", userID))
+
+	if err := h.repos.PreviewComments.Resolve(ctx, commentUUID, userUUID); err != nil {
+		h.logger.Error(ctx, "Failed to resolve comment",
+			logging.String("comment_id", commentID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve comment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Comment resolved",
+	})
+}
+
+// RecordPreviewAccess records an access to a preview (for analytics/auto-sleep)
+// POST /v1/previews/:id/access
+func (h *Handler) RecordPreviewAccess(c *gin.Context) {
+	previewID := c.Param("id")
+	if previewID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "preview_id is required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	previewUUID, err := uuid.Parse(previewID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid preview_id format"})
+		return
+	}
+
+	// Update last accessed time
+	if err := h.repos.PreviewEnvironments.MarkAccessed(ctx, previewUUID); err != nil {
+		h.logger.Warn(ctx, "Failed to mark preview accessed",
+			logging.String("preview_id", previewID),
+			logging.Error("error", err))
+		// Don't fail the request
+	}
+
+	// Log access (optional - get from request context)
+	accessLog := &types.PreviewAccessLog{
+		PreviewID: previewUUID,
+		Path:      c.Query("path"),
+		UserAgent: c.GetHeader("User-Agent"),
+		IPAddress: c.ClientIP(),
+	}
+
+	// Optional user context
+	if userID, exists := c.Get("user_id"); exists {
+		if uid, err := uuid.Parse(fmt.Sprintf("%v", userID)); err == nil {
+			accessLog.UserID = &uid
+		}
+	}
+
+	// Log in background (don't block response)
+	go func() {
+		_ = h.repos.PreviewAccessLogs.Log(ctx, accessLog)
+	}()
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Access recorded",
+	})
+}

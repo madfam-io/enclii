@@ -162,3 +162,13 @@ func (r *RouteRepository) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
+
+// DeleteByServiceID deletes all routes for a service
+func (r *RouteRepository) DeleteByServiceID(ctx context.Context, serviceID string) error {
+	query := `DELETE FROM routes WHERE service_id = $1`
+	_, err := r.db.ExecContext(ctx, query, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to delete routes for service: %w", err)
+	}
+	return nil
+}

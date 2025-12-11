@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -18,25 +19,27 @@ import (
 func NewDeployCommand(cfg *config.Config) *cobra.Command {
 	var environment string
 	var wait bool
+	var specFile string
 
 	cmd := &cobra.Command{
 		Use:   "deploy",
 		Short: "Build and deploy service",
 		Long:  "Build the current service and deploy it to the specified environment",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return deployService(cfg, environment, wait)
+			return deployService(cfg, environment, wait, specFile)
 		},
 	}
 
 	cmd.Flags().StringVarP(&environment, "env", "e", "dev", "Environment to deploy to (dev, staging, prod)")
 	cmd.Flags().BoolVarP(&wait, "wait", "w", false, "Wait for deployment to complete")
+	cmd.Flags().StringVarP(&specFile, "file", "f", "service.yaml", "Path to service.yaml specification file")
 
 	return cmd
 }
 
-func deployService(cfg *config.Config, environment string, wait bool) error {
+func deployService(cfg *config.Config, environment string, wait bool, specFile string) error {
 	ctx := context.Background()
-	
+
 	fmt.Printf("🚂 Deploying to %s environment...\n", environment)
 
 	// Check if we're in a git repository and get current commit
@@ -49,9 +52,9 @@ func deployService(cfg *config.Config, environment string, wait bool) error {
 
 	// 1. Parse service.yaml
 	parser := spec.NewParser()
-	serviceSpec, err := parser.ParseServiceSpec("service.yaml")
+	serviceSpec, err := parser.ParseServiceSpec(specFile)
 	if err != nil {
-		return fmt.Errorf("failed to parse service.yaml: %w", err)
+		return fmt.Errorf("failed to parse %s: %w", specFile, err)
 	}
 
 	fmt.Printf("🔧 Service: %s (project: %s)\n", serviceSpec.Metadata.Name, serviceSpec.Metadata.Project)
@@ -130,9 +133,10 @@ func ensureProject(ctx context.Context, apiClient *client.APIClient, projectName
 		return project, nil
 	}
 
-	// Create new project if not found
-	if apiErr, ok := err.(client.APIError); ok && apiErr.StatusCode == 404 {
-		fmt.Printf("Creating project: %s\n", projectName)
+	// Create new project if not found (use errors.As to unwrap wrapped errors)
+	var apiErr client.APIError
+	if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+		fmt.Printf("📁 Creating project: %s\n", projectName)
 		return apiClient.CreateProject(ctx, projectName, projectName)
 	}
 

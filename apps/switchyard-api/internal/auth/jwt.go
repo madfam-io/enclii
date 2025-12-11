@@ -13,6 +13,7 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,9 @@ type JWTManager struct {
 	externalJWKSURL    string
 	externalIssuer     string
 	externalJWKSCache  *jwksCache
+
+	// Admin email mapping for external tokens (grants admin role based on email)
+	adminEmails map[string]bool
 }
 
 // jwksCache caches external JWKS keys with TTL and stale-while-revalidate support
@@ -72,6 +76,11 @@ type TokenPair struct {
 	RefreshToken string    `json:"refresh_token"`
 	ExpiresAt    time.Time `json:"expires_at"`
 	TokenType    string    `json:"token_type"`
+	// IDPToken is the access token from the identity provider (e.g., Janua)
+	// Used for calling IDP-specific APIs like OAuth account linking
+	IDPToken     string    `json:"idp_token,omitempty"`
+	// IDPTokenExpiresAt is when the IDP token expires
+	IDPTokenExpiresAt *time.Time `json:"idp_token_expires_at,omitempty"`
 }
 
 type User struct {
@@ -126,6 +135,19 @@ func NewJWTManagerWithExternalJWKS(
 			"jwks_url": externalJWKSURL,
 			"issuer":   externalIssuer,
 		}).Info("External JWKS validation enabled")
+	}
+
+	// Load admin emails from environment variable (comma-separated)
+	// This grants admin role to users with these emails from external tokens
+	manager.adminEmails = make(map[string]bool)
+	if adminEmailsEnv := os.Getenv("ENCLII_ADMIN_EMAILS"); adminEmailsEnv != "" {
+		for _, email := range strings.Split(adminEmailsEnv, ",") {
+			email = strings.TrimSpace(email)
+			if email != "" {
+				manager.adminEmails[email] = true
+				logrus.WithField("email", email).Info("Registered admin email for external tokens")
+			}
+		}
 	}
 
 	return manager, nil
@@ -316,22 +338,66 @@ func (j *JWTManager) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		claims, err := j.ValidateToken(bearerToken[1])
-		if err != nil {
-			logrus.Warnf("Token validation failed: %v", err)
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
-			c.Abort()
+		tokenString := bearerToken[1]
+
+		// Try local token validation first
+		claims, err := j.ValidateToken(tokenString)
+		if err == nil {
+			// Local token validated successfully
+			c.Set("user_id", claims.UserID)
+			c.Set("user_email", claims.Email)
+			c.Set("user_role", claims.Role)
+			c.Set("project_ids", claims.ProjectIDs)
+			c.Set("claims", claims)
+			c.Next()
 			return
 		}
 
-		// Store claims in context
-		c.Set("user_id", claims.UserID)
-		c.Set("user_email", claims.Email)
-		c.Set("user_role", claims.Role)
-		c.Set("project_ids", claims.ProjectIDs)
-		c.Set("claims", claims)
+		// Local token validation failed - try external JWKS validation if configured
+		if j.HasExternalJWKS() {
+			externalClaims, externalErr := j.ValidateExternalToken(tokenString)
+			if externalErr == nil {
+				// External token validated successfully
+				logrus.WithFields(logrus.Fields{
+					"email":  externalClaims.Email,
+					"issuer": externalClaims.Issuer,
+				}).Debug("User authenticated via external token")
 
-		c.Next()
+				// Parse the subject UUID
+				userID := uuid.Nil
+				if externalClaims.Subject != "" {
+					if parsed, parseErr := uuid.Parse(externalClaims.Subject); parseErr == nil {
+						userID = parsed
+					}
+				}
+
+				// Determine role - default to developer, but check admin email mapping
+				userRole := "developer"
+				if j.adminEmails != nil && j.adminEmails[externalClaims.Email] {
+					userRole = "admin"
+					logrus.WithFields(logrus.Fields{
+						"email":         externalClaims.Email,
+						"original_role": "developer",
+						"new_role":      "admin",
+					}).Info("Applied admin role based on email mapping")
+				}
+
+				c.Set("user_id", userID)
+				c.Set("user_email", externalClaims.Email)
+				c.Set("user_role", userRole)
+				c.Set("project_ids", []string{})
+				c.Set("external_token", true)
+
+				c.Next()
+				return
+			}
+			logrus.WithError(externalErr).Debug("External token validation also failed")
+		}
+
+		// Both validations failed
+		logrus.Warnf("Token validation failed: %v", err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+		c.Abort()
 	}
 }
 
@@ -351,10 +417,23 @@ func (j *JWTManager) RequireRole(roles ...string) gin.HandlerFunc {
 			return
 		}
 
-		// Check if user has required role
+		// Check if user has required role with hierarchy support
+		// Role hierarchy: admin > developer > viewer
+		// admin can do anything developer or viewer can do
+		// developer can do anything viewer can do
 		hasRole := false
 		for _, role := range roles {
 			if roleStr == role {
+				hasRole = true
+				break
+			}
+			// Apply role hierarchy: admin has all permissions
+			if roleStr == "admin" {
+				hasRole = true
+				break
+			}
+			// developer can do viewer tasks
+			if roleStr == "developer" && role == "viewer" {
 				hasRole = true
 				break
 			}

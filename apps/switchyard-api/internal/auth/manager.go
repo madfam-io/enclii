@@ -33,7 +33,25 @@ func NewAuthManager(
 
 	switch cfg.AuthMode {
 	case "local", "":
-		// Bootstrap mode - local JWT authentication
+		// Bootstrap mode - local JWT authentication with optional external JWKS validation
+		if cfg.ExternalJWKSURL != "" {
+			// External JWKS configured - use enhanced JWT manager with external token support
+			logrus.WithFields(logrus.Fields{
+				"external_jwks_url": cfg.ExternalJWKSURL,
+				"external_issuer":   cfg.ExternalIssuer,
+			}).Info("Using local JWT authentication with external JWKS validation")
+			jwksCacheTTL := time.Duration(cfg.ExternalJWKSCacheTTL) * time.Second
+			return NewJWTManagerWithExternalJWKS(
+				15*time.Minute,  // access token duration
+				7*24*time.Hour,  // refresh token duration
+				repos,
+				cache,
+				cfg.ExternalJWKSURL,
+				cfg.ExternalIssuer,
+				jwksCacheTTL,
+			)
+		}
+		// No external JWKS - use basic local JWT
 		logrus.Info("Using local JWT authentication (bootstrap mode)")
 		return NewJWTManager(
 			15*time.Minute,  // access token duration

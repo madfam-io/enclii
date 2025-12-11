@@ -12,34 +12,52 @@ import (
 )
 
 type Repositories struct {
-	Projects          *ProjectRepository
-	Environments      *EnvironmentRepository
-	Services          *ServiceRepository
-	Releases          *ReleaseRepository
-	Deployments       *DeploymentRepository
-	Users             *UserRepository
-	ProjectAccess     *ProjectAccessRepository
-	AuditLogs         *AuditLogRepository
-	ApprovalRecords   *ApprovalRecordRepository
-	RotationAuditLogs *RotationAuditLogRepository
-	CustomDomains     *CustomDomainRepository
-	Routes            *RouteRepository
+	Projects            *ProjectRepository
+	Environments        *EnvironmentRepository
+	Services            *ServiceRepository
+	Releases            *ReleaseRepository
+	Deployments         *DeploymentRepository
+	Users               *UserRepository
+	ProjectAccess       *ProjectAccessRepository
+	AuditLogs           *AuditLogRepository
+	ApprovalRecords     *ApprovalRecordRepository
+	RotationAuditLogs   *RotationAuditLogRepository
+	CustomDomains       *CustomDomainRepository
+	Routes              *RouteRepository
+	DeploymentGroups    *DeploymentGroupRepository
+	ServiceDependencies *ServiceDependencyRepository
+	EnvVars             *EnvVarRepository
+	PreviewEnvironments *PreviewEnvironmentRepository
+	PreviewComments     *PreviewCommentRepository
+	PreviewAccessLogs   *PreviewAccessLogRepository
+	Teams               *TeamRepository
+	TeamMembers         *TeamMemberRepository
+	TeamInvitations     *TeamInvitationRepository
 }
 
 func NewRepositories(db *sql.DB) *Repositories {
 	return &Repositories{
-		Projects:          NewProjectRepository(db),
-		Environments:      NewEnvironmentRepository(db),
-		Services:          NewServiceRepository(db),
-		Releases:          NewReleaseRepository(db),
-		Deployments:       NewDeploymentRepository(db),
-		Users:             NewUserRepository(db),
-		ProjectAccess:     NewProjectAccessRepository(db),
-		AuditLogs:         NewAuditLogRepository(db),
-		ApprovalRecords:   NewApprovalRecordRepository(db),
-		RotationAuditLogs: NewRotationAuditLogRepository(db),
-		CustomDomains:     NewCustomDomainRepository(db),
-		Routes:            NewRouteRepository(db),
+		Projects:            NewProjectRepository(db),
+		Environments:        NewEnvironmentRepository(db),
+		Services:            NewServiceRepository(db),
+		Releases:            NewReleaseRepository(db),
+		Deployments:         NewDeploymentRepository(db),
+		Users:               NewUserRepository(db),
+		ProjectAccess:       NewProjectAccessRepository(db),
+		AuditLogs:           NewAuditLogRepository(db),
+		ApprovalRecords:     NewApprovalRecordRepository(db),
+		RotationAuditLogs:   NewRotationAuditLogRepository(db),
+		CustomDomains:       NewCustomDomainRepository(db),
+		Routes:              NewRouteRepository(db),
+		DeploymentGroups:    NewDeploymentGroupRepository(db),
+		ServiceDependencies: NewServiceDependencyRepository(db),
+		EnvVars:             NewEnvVarRepository(db),
+		PreviewEnvironments: NewPreviewEnvironmentRepository(db),
+		PreviewComments:     NewPreviewCommentRepository(db),
+		PreviewAccessLogs:   NewPreviewAccessLogRepository(db),
+		Teams:               NewTeamRepository(db),
+		TeamMembers:         NewTeamMemberRepository(db),
+		TeamInvitations:     NewTeamInvitationRepository(db),
 	}
 }
 
@@ -137,20 +155,119 @@ func (r *ServiceRepository) Create(service *types.Service) error {
 	}
 
 	query := `
-		INSERT INTO services (id, project_id, name, git_repo, build_config, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO services (id, project_id, name, git_repo, app_path, build_config, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
-	_, err = r.db.Exec(query, service.ID, service.ProjectID, service.Name, service.GitRepo, buildConfigJSON, service.CreatedAt, service.UpdatedAt)
+	_, err = r.db.Exec(query, service.ID, service.ProjectID, service.Name, service.GitRepo, service.AppPath, buildConfigJSON, service.CreatedAt, service.UpdatedAt)
 	return err
 }
 
 func (r *ServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 	service := &types.Service{}
 	var buildConfigJSON []byte
+	var appPath sql.NullString
 
-	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services WHERE id = $1`
+	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config, created_at, updated_at FROM services WHERE id = $1`
 
 	err := r.db.QueryRow(query, id).Scan(
+		&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
+		&appPath, &buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if appPath.Valid {
+		service.AppPath = appPath.String
+	}
+
+	if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
+	}
+
+	return service, nil
+}
+
+func (r *ServiceRepository) ListAll(ctx context.Context) ([]*types.Service, error) {
+	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config, created_at, updated_at FROM services ORDER BY created_at DESC`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var services []*types.Service
+	for rows.Next() {
+		service := &types.Service{}
+		var buildConfigJSON []byte
+		var appPath sql.NullString
+
+		err := rows.Scan(
+			&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
+			&appPath, &buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if appPath.Valid {
+			service.AppPath = appPath.String
+		}
+
+		if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
+		}
+
+		services = append(services, service)
+	}
+
+	return services, nil
+}
+
+func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service, error) {
+	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config, created_at, updated_at FROM services WHERE project_id = $1 ORDER BY created_at DESC`
+
+	rows, err := r.db.Query(query, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var services []*types.Service
+	for rows.Next() {
+		service := &types.Service{}
+		var buildConfigJSON []byte
+		var appPath sql.NullString
+
+		err := rows.Scan(&service.ID, &service.ProjectID, &service.Name, &service.GitRepo, &appPath, &buildConfigJSON, &service.CreatedAt, &service.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+
+		if appPath.Valid {
+			service.AppPath = appPath.String
+		}
+
+		if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
+		}
+
+		services = append(services, service)
+	}
+
+	return services, nil
+}
+
+// GetByGitRepo retrieves a service by its git repository URL
+// Used by GitHub webhooks to find the service to build when a push event is received
+func (r *ServiceRepository) GetByGitRepo(gitRepoURL string) (*types.Service, error) {
+	service := &types.Service{}
+	var buildConfigJSON []byte
+
+	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services WHERE git_repo = $1`
+
+	err := r.db.QueryRow(query, gitRepoURL).Scan(
 		&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
 		&buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
 	)
@@ -165,65 +282,56 @@ func (r *ServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 	return service, nil
 }
 
-func (r *ServiceRepository) ListAll(ctx context.Context) ([]*types.Service, error) {
-	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services ORDER BY created_at DESC`
+// Update updates an existing service
+func (r *ServiceRepository) Update(ctx context.Context, service *types.Service) error {
+	service.UpdatedAt = time.Now()
 
-	rows, err := r.db.QueryContext(ctx, query)
+	buildConfigJSON, err := json.Marshal(service.BuildConfig)
 	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var services []*types.Service
-	for rows.Next() {
-		service := &types.Service{}
-		var buildConfigJSON []byte
-
-		err := rows.Scan(
-			&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
-			&buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
-		}
-
-		services = append(services, service)
+		return fmt.Errorf("failed to marshal build config: %w", err)
 	}
 
-	return services, nil
+	query := `
+		UPDATE services
+		SET name = $1, git_repo = $2, app_path = $3, build_config = $4,
+		    auto_deploy = $5, auto_deploy_branch = $6, auto_deploy_env = $7, updated_at = $8
+		WHERE id = $9
+	`
+	result, err := r.db.ExecContext(ctx, query,
+		service.Name, service.GitRepo, service.AppPath, buildConfigJSON,
+		service.AutoDeploy, service.AutoDeployBranch, service.AutoDeployEnv, service.UpdatedAt, service.ID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
-func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service, error) {
-	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services WHERE project_id = $1 ORDER BY created_at DESC`
-
-	rows, err := r.db.Query(query, projectID)
+// Delete removes a service by ID
+func (r *ServiceRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	query := `DELETE FROM services WHERE id = $1`
+	result, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var services []*types.Service
-	for rows.Next() {
-		service := &types.Service{}
-		var buildConfigJSON []byte
-
-		err := rows.Scan(&service.ID, &service.ProjectID, &service.Name, &service.GitRepo, &buildConfigJSON, &service.CreatedAt, &service.UpdatedAt)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
-		}
-
-		services = append(services, service)
+		return err
 	}
 
-	return services, nil
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 // Environment Repository
@@ -261,6 +369,42 @@ func (r *EnvironmentRepository) GetByProjectAndName(projectID uuid.UUID, name st
 	}
 
 	return env, nil
+}
+
+func (r *EnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID) (*types.Environment, error) {
+	env := &types.Environment{}
+	query := `SELECT id, project_id, name, kube_namespace, created_at, updated_at FROM environments WHERE id = $1`
+
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&env.ID, &env.ProjectID, &env.Name, &env.KubeNamespace,
+		&env.CreatedAt, &env.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return env, nil
+}
+
+func (r *EnvironmentRepository) ListByProject(projectID uuid.UUID) ([]*types.Environment, error) {
+	query := `SELECT id, project_id, name, kube_namespace, created_at, updated_at FROM environments WHERE project_id = $1 ORDER BY name`
+
+	rows, err := r.db.Query(query, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var environments []*types.Environment
+	for rows.Next() {
+		env := &types.Environment{}
+		if err := rows.Scan(&env.ID, &env.ProjectID, &env.Name, &env.KubeNamespace, &env.CreatedAt, &env.UpdatedAt); err != nil {
+			return nil, err
+		}
+		environments = append(environments, env)
+	}
+
+	return environments, nil
 }
 
 // Release Repository
@@ -393,10 +537,10 @@ func (r *DeploymentRepository) Create(deployment *types.Deployment) error {
 	deployment.UpdatedAt = time.Now()
 
 	query := `
-		INSERT INTO deployments (id, release_id, environment_id, replicas, status, health, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO deployments (id, release_id, environment_id, group_id, deploy_order, replicas, status, health, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
-	_, err := r.db.Exec(query, deployment.ID, deployment.ReleaseID, deployment.EnvironmentID, deployment.Replicas, deployment.Status, deployment.Health, deployment.CreatedAt, deployment.UpdatedAt)
+	_, err := r.db.Exec(query, deployment.ID, deployment.ReleaseID, deployment.EnvironmentID, deployment.GroupID, deployment.DeployOrder, deployment.Replicas, deployment.Status, deployment.Health, deployment.CreatedAt, deployment.UpdatedAt)
 	return err
 }
 
@@ -474,7 +618,7 @@ func (r *DeploymentRepository) GetLatestByService(ctx context.Context, serviceID
 }
 
 func (r *DeploymentRepository) GetByStatus(ctx context.Context, status types.DeploymentStatus) ([]*types.Deployment, error) {
-	query := `SELECT id, release_id, environment_id, replicas, status, health, created_at, updated_at
+	query := `SELECT id, release_id, environment_id, group_id, deploy_order, replicas, status, health, created_at, updated_at
 	          FROM deployments WHERE status = $1 ORDER BY created_at ASC`
 
 	rows, err := r.db.QueryContext(ctx, query, status)
@@ -486,13 +630,53 @@ func (r *DeploymentRepository) GetByStatus(ctx context.Context, status types.Dep
 	var deployments []*types.Deployment
 	for rows.Next() {
 		deployment := &types.Deployment{}
+		var groupID sql.NullString
 		err := rows.Scan(
 			&deployment.ID, &deployment.ReleaseID, &deployment.EnvironmentID,
+			&groupID, &deployment.DeployOrder,
 			&deployment.Replicas, &deployment.Status, &deployment.Health,
 			&deployment.CreatedAt, &deployment.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
+		}
+		if groupID.Valid {
+			gid, _ := uuid.Parse(groupID.String)
+			deployment.GroupID = &gid
+		}
+		deployments = append(deployments, deployment)
+	}
+
+	return deployments, nil
+}
+
+// ListByGroup retrieves all deployments for a deployment group
+func (r *DeploymentRepository) ListByGroup(ctx context.Context, groupID uuid.UUID) ([]*types.Deployment, error) {
+	query := `SELECT id, release_id, environment_id, group_id, deploy_order, replicas, status, health, created_at, updated_at
+	          FROM deployments WHERE group_id = $1 ORDER BY deploy_order ASC`
+
+	rows, err := r.db.QueryContext(ctx, query, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var deployments []*types.Deployment
+	for rows.Next() {
+		deployment := &types.Deployment{}
+		var gid sql.NullString
+		err := rows.Scan(
+			&deployment.ID, &deployment.ReleaseID, &deployment.EnvironmentID,
+			&gid, &deployment.DeployOrder,
+			&deployment.Replicas, &deployment.Status, &deployment.Health,
+			&deployment.CreatedAt, &deployment.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if gid.Valid {
+			parsedGID, _ := uuid.Parse(gid.String)
+			deployment.GroupID = &parsedGID
 		}
 		deployments = append(deployments, deployment)
 	}

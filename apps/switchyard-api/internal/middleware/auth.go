@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rsa"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -15,16 +16,30 @@ type AuthMiddleware struct {
 	publicKey     *rsa.PublicKey
 	publicPaths   map[string]bool
 	requiredRoles map[string][]string // path -> required roles
+	adminEmails   map[string]bool     // email -> is admin (for OIDC fallback)
 }
 
 // NewAuthMiddleware creates a new authentication middleware
 // publicKey is used to validate RS256 JWT tokens
 func NewAuthMiddleware(publicKey *rsa.PublicKey) *AuthMiddleware {
-	return &AuthMiddleware{
+	am := &AuthMiddleware{
 		publicKey:     publicKey,
 		publicPaths:   make(map[string]bool),
 		requiredRoles: make(map[string][]string),
+		adminEmails:   make(map[string]bool),
 	}
+	// Load admin emails from environment variable (comma-separated)
+	// Example: ENCLII_ADMIN_EMAILS=admin@madfam.io,superuser@example.com
+	if adminEmailsEnv := os.Getenv("ENCLII_ADMIN_EMAILS"); adminEmailsEnv != "" {
+		for _, email := range strings.Split(adminEmailsEnv, ",") {
+			email = strings.TrimSpace(email)
+			if email != "" {
+				am.adminEmails[email] = true
+				logrus.WithField("email", email).Info("Registered admin email")
+			}
+		}
+	}
+	return am
 }
 
 // AddPublicPath adds a path that doesn't require authentication
@@ -146,18 +161,37 @@ func (a *AuthMiddleware) Middleware() gin.HandlerFunc {
 		if userID, ok := claims["sub"].(string); ok {
 			c.Set("user_id", userID)
 		}
+		var userEmail string
 		if email, ok := claims["email"].(string); ok {
+			userEmail = email
 			c.Set("user_email", email)
 		}
+
+		// Extract roles from JWT claims
+		var rolesStr []string
 		if roles, ok := claims["roles"].([]interface{}); ok {
-			rolesStr := make([]string, len(roles))
+			rolesStr = make([]string, len(roles))
 			for i, role := range roles {
 				if roleStr, ok := role.(string); ok {
 					rolesStr[i] = roleStr
 				}
 			}
-			c.Set("user_roles", rolesStr)
 		}
+
+		// If no roles in JWT but email matches admin list, grant admin+developer roles
+		// This enables OIDC providers (like Janua) that don't include roles in tokens
+		if len(rolesStr) == 0 && userEmail != "" && a.adminEmails[userEmail] {
+			rolesStr = []string{"admin", "developer"}
+			logrus.WithFields(logrus.Fields{
+				"email": userEmail,
+				"roles": rolesStr,
+			}).Debug("Applied admin roles based on email mapping")
+		} else if len(rolesStr) == 0 {
+			// Default to developer role for authenticated users
+			rolesStr = []string{"developer"}
+		}
+
+		c.Set("user_roles", rolesStr)
 
 		// Check role requirements for this path
 		if requiredRoles, exists := a.requiredRoles[path]; exists {

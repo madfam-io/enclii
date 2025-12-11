@@ -108,12 +108,12 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
             <div className="text-sm text-gray-500">
-              © 2024 Enclii Platform. Built with ❤️ for developers.
+              © {new Date().getFullYear()} Enclii Platform. Built with ❤️ for developers.
             </div>
             <div className="flex items-center space-x-4 text-sm text-gray-500">
-              <a href="#" className="hover:text-gray-700">Documentation</a>
-              <a href="#" className="hover:text-gray-700">API</a>
-              <a href="#" className="hover:text-gray-700">Status</a>
+              <a href="https://docs.enclii.dev" className="hover:text-gray-700">Documentation</a>
+              <a href="https://api.enclii.dev/docs" className="hover:text-gray-700">API</a>
+              <a href="https://status.enclii.dev" className="hover:text-gray-700">Status</a>
             </div>
           </div>
         </div>

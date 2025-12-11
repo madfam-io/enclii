@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/madfam/enclii/packages/cli/internal/config"
 )
@@ -10,15 +11,29 @@ func NewRootCommand(cfg *config.Config) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "enclii",
 		Short: "🚂 Enclii CLI - Control & orchestration for your cloud",
-		Long: `Enclii is a Railway-style platform that lets teams build, deploy, 
+		Long: `Enclii is a Railway-style platform that lets teams build, deploy,
 scale, and operate containerized services with guardrails.
 
 Learn more at https://enclii.dev`,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// Bind flags to viper and update config with flag values
+			if endpoint, _ := cmd.Flags().GetString("api-endpoint"); endpoint != "" {
+				cfg.APIEndpoint = endpoint
+			}
+			if token, _ := cmd.Flags().GetString("api-token"); token != "" {
+				cfg.APIToken = token
+			}
+		},
 	}
 
 	// Add global flags
 	rootCmd.PersistentFlags().String("api-endpoint", cfg.APIEndpoint, "API endpoint URL")
+	rootCmd.PersistentFlags().String("api-token", cfg.APIToken, "API authentication token (or set ENCLII_API_TOKEN)")
 	rootCmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
+
+	// Bind flags to viper for environment variable support
+	viper.BindPFlag("api-endpoint", rootCmd.PersistentFlags().Lookup("api-endpoint"))
+	viper.BindPFlag("api-token", rootCmd.PersistentFlags().Lookup("api-token"))
 
 	// Add subcommands
 	rootCmd.AddCommand(NewInitCommand(cfg))

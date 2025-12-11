@@ -28,9 +28,10 @@ type Handler struct {
 	repos *db.Repositories
 
 	// Service Layer (business logic)
-	authService       *services.AuthService
-	projectService    *services.ProjectService
-	deploymentService *services.DeploymentService
+	authService            *services.AuthService
+	projectService         *services.ProjectService
+	deploymentService      *services.DeploymentService
+	deploymentGroupService *services.DeploymentGroupService
 
 	// Infrastructure
 	config             *config.Config
@@ -69,15 +70,17 @@ func NewHandler(
 	authService *services.AuthService,
 	projectService *services.ProjectService,
 	deploymentService *services.DeploymentService,
+	deploymentGroupService *services.DeploymentGroupService,
 ) *Handler {
 	return &Handler{
 		// Repositories
 		repos: repos,
 
 		// Services
-		authService:       authService,
-		projectService:    projectService,
-		deploymentService: deploymentService,
+		authService:            authService,
+		projectService:         projectService,
+		deploymentService:      deploymentService,
+		deploymentGroupService: deploymentGroupService,
 
 		// Infrastructure
 		config:             config,
@@ -173,8 +176,12 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 
 			// Services
 			protected.POST("/projects/:slug/services", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateService)
+			protected.POST("/projects/:slug/services/bulk", h.auth.RequireRole(string(types.RoleDeveloper)), h.BulkCreateServices)
 			protected.GET("/projects/:slug/services", h.ListServices)
 			protected.GET("/services/:id", h.GetService)
+			protected.GET("/services/:id/settings", h.GetServiceSettings)
+			protected.PATCH("/services/:id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateService)
+			protected.DELETE("/services/:id", h.auth.RequireRole(string(types.RoleAdmin)), h.DeleteService)
 
 			// Build & Deploy
 			protected.POST("/services/:id/build", h.auth.RequireRole(string(types.RoleDeveloper)), h.BuildService)
@@ -189,23 +196,99 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/deployments/:id/logs", h.GetLogs)
 			protected.POST("/deployments/:id/rollback", h.auth.RequireRole(string(types.RoleDeveloper)), h.RollbackDeployment)
 
+			// Real-time Logs (WebSocket streaming)
+			protected.GET("/services/:id/logs/stream", h.StreamServiceLogsWS)
+			protected.GET("/services/:id/logs/history", h.GetLogsHistory)
+			protected.POST("/services/:id/logs/search", h.SearchLogs)
+			protected.GET("/deployments/:id/logs/stream", h.StreamLogsWS)
+			protected.GET("/services/:id/builds/:build_id/logs", h.GetBuildLogs)
+			protected.GET("/services/:id/builds/:build_id/logs/stream", h.StreamBuildLogsWS)
+
 			// Topology
 			protected.GET("/topology", h.GetTopology)
 			protected.GET("/topology/services/:id/dependencies", h.GetServiceDependencies)
 			protected.GET("/topology/services/:id/impact", h.GetServiceImpact)
 			protected.GET("/topology/path", h.FindDependencyPath)
 
-			// Custom Domains (use :id to match other service routes)
-			protected.POST("/services/:id/domains", h.auth.RequireRole(string(types.RoleDeveloper)), h.AddCustomDomain)
+			// Networking & Custom Domains
+			protected.GET("/services/:id/networking", h.GetServiceNetworking)
+			protected.POST("/services/:id/domains", h.auth.RequireRole(string(types.RoleDeveloper)), h.AddServiceDomain)
 			protected.GET("/services/:id/domains", h.ListCustomDomains)
 			protected.GET("/services/:id/domains/:domain_id", h.GetCustomDomain)
 			protected.PATCH("/services/:id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateCustomDomain)
 			protected.DELETE("/services/:id/domains/:domain_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteCustomDomain)
 			protected.POST("/services/:id/domains/:domain_id/verify", h.auth.RequireRole(string(types.RoleDeveloper)), h.VerifyCustomDomain)
+			protected.PUT("/domains/:domain_id/protection", h.auth.RequireRole(string(types.RoleDeveloper)), h.ToggleZeroTrust)
+
+			// Environments
+			protected.GET("/environments", h.GetEnvironments)
 
 			// Integrations (GitHub via Janua OAuth tokens)
 			protected.GET("/integrations/github/status", h.GetGitHubStatus)
 			protected.GET("/integrations/github/repos", h.ListGitHubRepos)
+			protected.POST("/integrations/github/link", h.LinkGitHub)
+			protected.GET("/integrations/github/repos/:owner/:repo/branches", h.GetRepositoryBranches)
+			protected.POST("/integrations/github/repos/:owner/:repo/analyze", h.AnalyzeRepository)
+
+			// Deployment Groups (coordinated multi-service deployments)
+			protected.POST("/projects/:slug/environments/:env_name/deployment-groups", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateDeploymentGroup)
+			protected.GET("/projects/:slug/deployment-groups", h.ListDeploymentGroups)
+			protected.GET("/projects/:slug/deployment-groups/:group_id", h.GetDeploymentGroup)
+			protected.POST("/projects/:slug/deployment-groups/:group_id/execute", h.auth.RequireRole(string(types.RoleDeveloper)), h.ExecuteDeploymentGroup)
+			protected.POST("/projects/:slug/deployment-groups/:group_id/rollback", h.auth.RequireRole(string(types.RoleDeveloper)), h.RollbackDeploymentGroup)
+
+			// Service Dependencies
+			protected.POST("/services/:id/dependencies", h.auth.RequireRole(string(types.RoleDeveloper)), h.AddServiceDependency)
+			protected.GET("/services/:id/dependencies", h.ListServiceDependencies)
+			protected.GET("/services/:id/dependents", h.ListServiceDependents)
+			protected.DELETE("/services/:id/dependencies/:depends_on_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.RemoveServiceDependency)
+
+			// Environment Variables
+			protected.GET("/services/:id/env-vars", h.ListEnvVars)
+			protected.POST("/services/:id/env-vars", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateEnvVar)
+			protected.GET("/services/:id/env-vars/:var_id", h.GetEnvVar)
+			protected.PUT("/services/:id/env-vars/:var_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateEnvVar)
+			protected.DELETE("/services/:id/env-vars/:var_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteEnvVar)
+			protected.POST("/services/:id/env-vars/bulk", h.auth.RequireRole(string(types.RoleDeveloper)), h.BulkUpsertEnvVars)
+			protected.POST("/services/:id/env-vars/:var_id/reveal", h.auth.RequireRole(string(types.RoleDeveloper)), h.RevealEnvVar)
+
+			// Preview Environments (PR-based ephemeral deployments)
+			protected.GET("/services/:id/previews", h.ListPreviews)
+			protected.GET("/projects/:id/previews", h.ListProjectPreviews)
+			protected.GET("/previews/:id", h.GetPreview)
+			protected.POST("/previews", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreatePreview)
+			protected.POST("/previews/:id/close", h.auth.RequireRole(string(types.RoleDeveloper)), h.ClosePreview)
+			protected.POST("/previews/:id/wake", h.auth.RequireRole(string(types.RoleDeveloper)), h.WakePreview)
+			protected.DELETE("/previews/:id", h.auth.RequireRole(string(types.RoleAdmin)), h.DeletePreview)
+			protected.POST("/previews/:id/access", h.RecordPreviewAccess)
+
+			// Preview Comments (collaborative feedback)
+			protected.GET("/previews/:id/comments", h.ListPreviewComments)
+			protected.POST("/previews/:id/comments", h.CreatePreviewComment)
+			protected.POST("/previews/:id/comments/:comment_id/resolve", h.ResolvePreviewComment)
+
+			// Teams (Railway/Vercel-style team management)
+			protected.POST("/teams", h.CreateTeam)
+			protected.GET("/teams", h.ListTeams)
+			protected.GET("/teams/:slug", h.GetTeam)
+			protected.PATCH("/teams/:slug", h.UpdateTeam)
+			protected.DELETE("/teams/:slug", h.DeleteTeam)
+
+			// Team Members
+			protected.GET("/teams/:slug/members", h.ListTeamMembers)
+			protected.PATCH("/teams/:slug/members/:member_id", h.UpdateMemberRole)
+			protected.DELETE("/teams/:slug/members/:member_id", h.RemoveTeamMember)
+
+			// Team Invitations (team admin operations)
+			protected.POST("/teams/:slug/invitations", h.InviteTeamMember)
+			protected.GET("/teams/:slug/invitations", h.ListTeamInvitations)
+			protected.DELETE("/teams/:slug/invitations/:invitation_id", h.CancelTeamInvitation)
+
+			// User Invitations (personal invitation management)
+			protected.GET("/invitations", h.ListMyInvitations)
+			protected.GET("/invitations/:token", h.GetInvitationByToken)
+			protected.POST("/invitations/:token/accept", h.AcceptInvitation)
+			protected.POST("/invitations/:token/decline", h.DeclineInvitation)
 		}
 	}
 }

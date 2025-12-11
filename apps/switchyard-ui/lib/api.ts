@@ -32,6 +32,10 @@ function getAuthHeaders(includeCSRF: boolean = false): HeadersInit {
         if (tokens.accessToken) {
           headers["Authorization"] = `Bearer ${tokens.accessToken}`;
         }
+        // Include IDP token for Janua API calls (e.g., GitHub integration status)
+        if (tokens.idpToken) {
+          headers["X-IDP-Token"] = tokens.idpToken;
+        }
       } catch {
         // Invalid JSON, ignore
       }
@@ -174,6 +178,16 @@ export async function apiPut<T = any>(endpoint: string, data: any): Promise<T> {
  */
 export async function apiDelete<T = any>(endpoint: string): Promise<T> {
   return apiRequest<T>(endpoint, { method: "DELETE" });
+}
+
+/**
+ * PATCH request helper
+ */
+export async function apiPatch<T = any>(endpoint: string, data: any): Promise<T> {
+  return apiRequest<T>(endpoint, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
 }
 
 /**

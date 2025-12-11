@@ -38,6 +38,9 @@ interface TokenInfo {
   refreshToken?: string;
   expiresAt: number; // Unix timestamp
   tokenType: string;
+  // IDP token from identity provider (e.g., Janua) for calling IDP-specific APIs
+  idpToken?: string;
+  idpTokenExpiresAt?: number; // Unix timestamp
 }
 
 interface AuthContextType {
@@ -61,6 +64,8 @@ interface AuthContextType {
 
   // Token access (for API calls)
   getAccessToken: () => string | null;
+  // IDP token access (for calling IDP-specific APIs like OAuth account linking)
+  getIDPToken: () => string | null;
 }
 
 // =============================================================================
@@ -424,6 +429,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         refreshToken: data.refresh_token,
         expiresAt: new Date(data.expires_at).getTime(),
         tokenType: data.token_type || "Bearer",
+        // Store IDP token for calling IDP-specific APIs (e.g., Janua OAuth linking)
+        idpToken: data.idp_token,
+        idpTokenExpiresAt: data.idp_token_expires_at
+          ? new Date(data.idp_token_expires_at).getTime()
+          : undefined,
       };
 
       // Extract user info from token
@@ -533,6 +543,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return currentTokens.accessToken;
   };
 
+  const getIDPToken = (): string | null => {
+    const currentTokens = tokens || storage.getTokens();
+
+    if (!currentTokens?.idpToken) {
+      return null;
+    }
+
+    // Check if IDP token is expired
+    if (
+      currentTokens.idpTokenExpiresAt &&
+      Date.now() >= currentTokens.idpTokenExpiresAt
+    ) {
+      // IDP token expired - user needs to re-authenticate
+      return null;
+    }
+
+    return currentTokens.idpToken;
+  };
+
   // ==========================================================================
   // CONTEXT VALUE
   // ==========================================================================
@@ -549,6 +578,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     logout,
     refreshTokens,
     getAccessToken,
+    getIDPToken,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

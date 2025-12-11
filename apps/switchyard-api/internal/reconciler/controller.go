@@ -196,12 +196,25 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 			Error:   err,
 		}
 	}
-	
+
+	// Get environment variables (decrypted) for this service and environment
+	var envVars map[string]string
+	if c.repositories.EnvVars != nil {
+		envVars, err = c.repositories.EnvVars.GetDecrypted(ctx, service.ID, deployment.EnvironmentID)
+		if err != nil {
+			logger.WithError(err).Warn("Failed to get environment variables, continuing without them")
+			envVars = make(map[string]string)
+		}
+	} else {
+		envVars = make(map[string]string)
+	}
+
 	// Create reconcile request
 	req := &ReconcileRequest{
 		Service:    service,
 		Release:    release,
 		Deployment: deployment,
+		EnvVars:    envVars,
 	}
 	
 	// Perform reconciliation

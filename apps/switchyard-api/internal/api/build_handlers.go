@@ -143,6 +143,57 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	// Record metrics
 	// TODO: Use proper metrics methods once available
 	// monitoring.RecordBuild("success", "git", buildResult.Duration)
+
+	// Auto-deploy if enabled for this service
+	if service.AutoDeploy && service.AutoDeployEnv != "" {
+		h.triggerAutoDeploy(ctx, service, release)
+	}
+}
+
+// triggerAutoDeploy creates a deployment for the successful build if auto-deploy is configured
+func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service, release *types.Release) {
+	h.logger.Info(ctx, "Auto-deploy triggered",
+		logging.String("service_id", service.ID.String()),
+		logging.String("service_name", service.Name),
+		logging.String("release_id", release.ID.String()),
+		logging.String("target_env", service.AutoDeployEnv))
+
+	// Look up the target environment
+	env, err := h.repos.Environments.GetByProjectAndName(service.ProjectID, service.AutoDeployEnv)
+	if err != nil {
+		h.logger.Error(ctx, "Auto-deploy failed: environment not found",
+			logging.String("environment", service.AutoDeployEnv),
+			logging.String("project_id", service.ProjectID.String()),
+			logging.Error("db_error", err))
+		return
+	}
+
+	// Create deployment record
+	deployment := &types.Deployment{
+		ID:            uuid.New(),
+		ReleaseID:     release.ID,
+		EnvironmentID: env.ID,
+		Replicas:      1, // Default to 1 replica for auto-deploy
+		Status:        types.DeploymentStatusPending,
+		Health:        types.HealthStatusUnknown,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	if err := h.repos.Deployments.Create(deployment); err != nil {
+		h.logger.Error(ctx, "Auto-deploy failed: could not create deployment",
+			logging.String("service_id", service.ID.String()),
+			logging.Error("db_error", err))
+		return
+	}
+
+	// Schedule deployment with reconciler (high priority)
+	h.reconciler.ScheduleReconciliation(deployment.ID.String(), 1)
+
+	h.logger.Info(ctx, "Auto-deploy scheduled successfully",
+		logging.String("deployment_id", deployment.ID.String()),
+		logging.String("service_name", service.Name),
+		logging.String("environment", service.AutoDeployEnv))
 }
 
 // ListReleases returns all releases for a given service

@@ -31,6 +31,9 @@ type Config struct {
 	ExternalIssuer     string // Expected issuer for external tokens
 	ExternalJWKSCacheTTL int  // Cache TTL in seconds for external JWKS
 
+	// Janua Integration (for OAuth token retrieval)
+	JanuaAPIURL string // Base URL for Janua API (e.g., https://api.janua.dev)
+
 	// Kubernetes
 	KubeConfig  string
 	KubeContext string
@@ -42,7 +45,8 @@ type Config struct {
 	BuildCacheDir string // Directory for buildpack layer cache
 
 	// Provenance / PR Approval
-	GitHubToken string // GitHub API token for PR verification
+	GitHubToken         string // GitHub API token for PR verification
+	GitHubWebhookSecret string // Secret for verifying GitHub webhook signatures
 
 	// Compliance Webhooks
 	ComplianceWebhooksEnabled bool
@@ -84,12 +88,14 @@ func Load() (*Config, error) {
 	viper.SetDefault("external-jwks-url", "")           // Empty = disabled
 	viper.SetDefault("external-issuer", "")             // Expected issuer for external tokens
 	viper.SetDefault("external-jwks-cache-ttl", 300)    // 5 minutes default
+	viper.SetDefault("janua-api-url", "https://api.janua.dev") // Janua API for OAuth tokens
 	viper.SetDefault("kube-config", os.Getenv("HOME")+"/.kube/config")
 	viper.SetDefault("kube-context", "kind-enclii")
 	viper.SetDefault("buildkit-addr", "docker://")
 	viper.SetDefault("build-timeout", 1800) // 30 minutes
 	viper.SetDefault("build-work-dir", "/tmp/enclii-builds")
 	viper.SetDefault("build-cache-dir", "/var/cache/enclii-buildpacks")
+	viper.SetDefault("github-webhook-secret", "") // Webhook disabled until secret configured
 	viper.SetDefault("compliance-webhooks-enabled", false)
 	viper.SetDefault("secret-rotation-enabled", false)
 	viper.SetDefault("vault-poll-interval", 60) // Poll every 60 seconds
@@ -118,6 +124,7 @@ func Load() (*Config, error) {
 		ExternalJWKSURL:           viper.GetString("external-jwks-url"),
 		ExternalIssuer:            viper.GetString("external-issuer"),
 		ExternalJWKSCacheTTL:      viper.GetInt("external-jwks-cache-ttl"),
+		JanuaAPIURL:               viper.GetString("janua-api-url"),
 		KubeConfig:                viper.GetString("kube-config"),
 		KubeContext:               viper.GetString("kube-context"),
 		BuildkitAddr:              viper.GetString("buildkit-addr"),
@@ -125,6 +132,7 @@ func Load() (*Config, error) {
 		BuildWorkDir:              viper.GetString("build-work-dir"),
 		BuildCacheDir:             viper.GetString("build-cache-dir"),
 		GitHubToken:               viper.GetString("github-token"),
+		GitHubWebhookSecret:       viper.GetString("github-webhook-secret"),
 		ComplianceWebhooksEnabled: viper.GetBool("compliance-webhooks-enabled"),
 		VantaWebhookURL:           viper.GetString("vanta-webhook-url"),
 		DrataWebhookURL:           viper.GetString("drata-webhook-url"),

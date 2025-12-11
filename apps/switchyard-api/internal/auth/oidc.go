@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ type OIDCManager struct {
 	oauth2Config *oauth2.Config
 	repos        *db.Repositories
 	jwtManager   *JWTManager // Used for issuing local session tokens AND validating external tokens
+	adminEmails  map[string]bool // email -> is admin (for OIDC fallback when tokens don't include roles)
 }
 
 // NewOIDCManager creates a new OIDC authentication manager
@@ -97,12 +99,26 @@ func NewOIDCManagerWithExternalJWKS(
 		return nil, fmt.Errorf("failed to create JWT manager: %w", err)
 	}
 
+	// Load admin emails from environment variable (comma-separated)
+	// Example: ENCLII_ADMIN_EMAILS=admin@madfam.io,superuser@example.com
+	adminEmails := make(map[string]bool)
+	if adminEmailsEnv := os.Getenv("ENCLII_ADMIN_EMAILS"); adminEmailsEnv != "" {
+		for _, email := range strings.Split(adminEmailsEnv, ",") {
+			email = strings.TrimSpace(email)
+			if email != "" {
+				adminEmails[email] = true
+				logrus.WithField("email", email).Info("Registered OIDC admin email")
+			}
+		}
+	}
+
 	return &OIDCManager{
 		provider:     provider,
 		verifier:     verifier,
 		oauth2Config: oauth2Config,
 		repos:        repos,
 		jwtManager:   jwtManager,
+		adminEmails:  adminEmails,
 	}, nil
 }
 
@@ -159,11 +175,21 @@ func (o *OIDCManager) HandleCallback(ctx context.Context, code string) (*TokenPa
 		return nil, fmt.Errorf("failed to generate session tokens: %w", err)
 	}
 
+	// Preserve the IDP access token for calling IDP-specific APIs
+	// (e.g., Janua's OAuth account linking endpoint)
+	if oauth2Token.AccessToken != "" {
+		tokens.IDPToken = oauth2Token.AccessToken
+		if !oauth2Token.Expiry.IsZero() {
+			tokens.IDPTokenExpiresAt = &oauth2Token.Expiry
+		}
+	}
+
 	logrus.WithFields(logrus.Fields{
-		"user_id":      user.ID,
-		"email":        user.Email,
-		"oidc_subject": claims.Sub,
-		"oidc_issuer":  idToken.Issuer,
+		"user_id":       user.ID,
+		"email":         user.Email,
+		"oidc_subject":  claims.Sub,
+		"oidc_issuer":   idToken.Issuer,
+		"has_idp_token": tokens.IDPToken != "",
 	}).Info("User authenticated via OIDC")
 
 	return tokens, nil
@@ -306,9 +332,21 @@ func (o *OIDCManager) AuthMiddleware() gin.HandlerFunc {
 				}
 
 				// Set context with user info from external token
-				c.Set("user_id", user.ID)
+				c.Set("user_id", user.ID.String())
 				c.Set("user_email", user.Email)
-				c.Set("user_role", user.Role)
+
+				// Apply admin email override if user's email is in adminEmails map
+				// This enables OIDC providers (like Janua) that don't include roles in tokens
+				userRole := user.Role
+				if o.adminEmails[user.Email] {
+					userRole = "admin"
+					logrus.WithFields(logrus.Fields{
+						"email":         user.Email,
+						"original_role": user.Role,
+						"new_role":      "admin",
+					}).Info("Applied admin role based on email mapping")
+				}
+				c.Set("user_role", userRole)
 				c.Set("project_ids", user.ProjectIDs)
 				c.Set("token_source", "external")
 				c.Set("external_issuer", externalClaims.Issuer)

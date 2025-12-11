@@ -195,7 +195,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <div className="text-center text-xs text-gray-400 mt-8">
-          <p>© 2024 Enclii Platform. Built with ❤️ for developers.</p>
+          <p>© {new Date().getFullYear()} Enclii Platform. Built with ❤️ for developers.</p>
         </div>
       </div>
     </div>

@@ -21,11 +21,15 @@ type LoginRequest struct {
 
 // LoginResponse represents a successful login response
 type LoginResponse struct {
-	User         *types.User `json:"user"`
-	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
-	ExpiresAt    time.Time   `json:"expires_at"`
-	TokenType    string      `json:"token_type"`
+	User              *types.User `json:"user"`
+	AccessToken       string      `json:"access_token"`
+	RefreshToken      string      `json:"refresh_token"`
+	ExpiresAt         time.Time   `json:"expires_at"`
+	TokenType         string      `json:"token_type"`
+	// IDPToken is the access token from the identity provider (e.g., Janua)
+	// Used for calling IDP-specific APIs like OAuth account linking
+	IDPToken          string      `json:"idp_token,omitempty"`
+	IDPTokenExpiresAt *time.Time  `json:"idp_token_expires_at,omitempty"`
 }
 
 // RefreshRequest represents a token refresh request
@@ -348,10 +352,12 @@ func (h *Handler) OIDCCallback(c *gin.Context) {
 
 	// Return tokens to client
 	c.JSON(http.StatusOK, LoginResponse{
-		AccessToken:  tokens.AccessToken,
-		RefreshToken: tokens.RefreshToken,
-		ExpiresAt:    tokens.ExpiresAt,
-		TokenType:    tokens.TokenType,
+		AccessToken:       tokens.AccessToken,
+		RefreshToken:      tokens.RefreshToken,
+		ExpiresAt:         tokens.ExpiresAt,
+		TokenType:         tokens.TokenType,
+		IDPToken:          tokens.IDPToken,
+		IDPTokenExpiresAt: tokens.IDPTokenExpiresAt,
 	})
 }
 

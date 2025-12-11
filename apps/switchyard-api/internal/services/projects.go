@@ -62,9 +62,8 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *CreateProjectRe
 		})
 	}
 
-	// Parse user ID
-	userID, err := uuid.Parse(req.UserID)
-	if err != nil {
+	// Validate user ID format (OIDC users don't have local user rows, so we don't use it for FK)
+	if _, err := uuid.Parse(req.UserID); err != nil {
 		return nil, errors.Wrap(err, errors.ErrInvalidInput)
 	}
 
@@ -87,9 +86,9 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *CreateProjectRe
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
-	// Audit log
+	// Audit log - ActorID is nil for OIDC users (no local user row)
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      userID,
+		ActorID:      nil,
 		ActorEmail:   req.UserEmail,
 		ActorRole:    types.Role(req.UserRole),
 		Action:       "project_created",
@@ -128,13 +127,15 @@ func (s *ProjectService) ListProjects(ctx context.Context) ([]*types.Project, er
 
 // CreateServiceRequest represents a request to create a service
 type CreateServiceRequest struct {
-	ProjectID   string
-	Name        string
-	GitRepo     string
-	BuildConfig types.BuildConfig
-	UserID      string
-	UserEmail   string
-	UserRole    string
+	ProjectID        string
+	Name             string
+	GitRepo          string
+	AppPath          string // Monorepo subdirectory path (e.g., "apps/api")
+	AutoDeployBranch string // Branch for auto-deploy (e.g., "main")
+	BuildConfig      types.BuildConfig
+	UserID           string
+	UserEmail        string
+	UserRole         string
 }
 
 // CreateServiceResponse represents the response from creating a service
@@ -161,9 +162,8 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 		return nil, err
 	}
 
-	// Parse user ID
-	userID, err := uuid.Parse(req.UserID)
-	if err != nil {
+	// Validate user ID format (OIDC users don't have local user rows, so we don't use it for FK)
+	if _, err := uuid.Parse(req.UserID); err != nil {
 		return nil, errors.Wrap(err, errors.ErrInvalidInput)
 	}
 
@@ -175,13 +175,15 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 
 	// Create service
 	service := &types.Service{
-		ID:          uuid.New(),
-		ProjectID:   projectID,
-		Name:        req.Name,
-		GitRepo:     req.GitRepo,
-		BuildConfig: req.BuildConfig,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		ID:               uuid.New(),
+		ProjectID:        projectID,
+		Name:             req.Name,
+		GitRepo:          req.GitRepo,
+		AppPath:          req.AppPath,
+		BuildConfig:      req.BuildConfig,
+		AutoDeployBranch: req.AutoDeployBranch,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
 	}
 
 	if err := s.repos.Services.Create(service); err != nil {
@@ -189,9 +191,9 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
-	// Audit log
+	// Audit log - OIDC users don't have local user row, use nil
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      userID,
+		ActorID:      nil,
 		ActorEmail:   req.UserEmail,
 		ActorRole:    types.Role(req.UserRole),
 		Action:       "service_created",

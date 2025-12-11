@@ -221,3 +221,13 @@ func (r *CustomDomainRepository) Exists(ctx context.Context, domain string) (boo
 
 	return exists, nil
 }
+
+// DeleteByServiceID deletes all custom domains for a service
+func (r *CustomDomainRepository) DeleteByServiceID(ctx context.Context, serviceID string) error {
+	query := `DELETE FROM custom_domains WHERE service_id = $1`
+	_, err := r.db.ExecContext(ctx, query, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to delete custom domains for service: %w", err)
+	}
+	return nil
+}

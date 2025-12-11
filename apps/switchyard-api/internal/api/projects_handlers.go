@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/madfam/enclii/apps/switchyard-api/internal/errors"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
 )
 
@@ -40,6 +41,7 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		} else if errors.Is(err, errors.ErrValidation) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		} else {
+			h.logger.Error(ctx, "Failed to create project", logging.Error("error", err), logging.String("user_email", createReq.UserEmail), logging.String("project_name", createReq.Name))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create project"})
 		}
 		return

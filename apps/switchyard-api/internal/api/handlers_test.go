@@ -31,6 +31,7 @@ func setupTestHandler() *Handler {
 		nil, // auth service
 		nil, // project service
 		nil, // deployment service
+		nil, // deployment group service
 	)
 
 	return handler

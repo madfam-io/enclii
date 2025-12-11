@@ -30,6 +30,7 @@ type ReconcileRequest struct {
 	Deployment    *types.Deployment
 	CustomDomains []types.CustomDomain
 	Routes        []types.Route
+	EnvVars       map[string]string // User-defined environment variables (decrypted)
 }
 
 type ReconcileResult struct {
@@ -216,6 +217,14 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 		{Name: "ENCLII_DEPLOYMENT_ID", Value: req.Deployment.ID.String()},
 		{Name: "PORT", Value: "8080"}, // Default port
 	}...)
+
+	// Add user-defined environment variables (from database)
+	for key, value := range req.EnvVars {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  key,
+			Value: value,
+		})
+	}
 
 	// Create deployment manifest
 	deployment := &appsv1.Deployment{

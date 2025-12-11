@@ -38,8 +38,15 @@ func (p *Parser) ParseServiceSpec(path string) (*types.ServiceSpec, error) {
 		return nil, fmt.Errorf("failed to parse service spec YAML: %w", err)
 	}
 
+	// Use current working directory as project root for validation
+	// This allows spec files to be placed anywhere while paths remain relative to project root
+	projectDir, err := os.Getwd()
+	if err != nil {
+		projectDir = filepath.Dir(path)
+	}
+
 	// Validate the spec
-	if err := p.ValidateServiceSpec(&spec, filepath.Dir(path)); err != nil {
+	if err := p.ValidateServiceSpec(&spec, projectDir); err != nil {
 		return nil, fmt.Errorf("service spec validation failed: %w", err)
 	}
 

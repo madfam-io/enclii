@@ -1,31 +1,228 @@
 'use client';
 
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiGet } from "@/lib/api";
+
+interface RecentActivity {
+  id: string;
+  type: string;
+  message: string;
+  timestamp: string;
+  status: "success" | "running" | "failed" | "pending";
+  metadata?: {
+    version?: string;
+    environment?: string;
+    service_name?: string;
+    project_name?: string;
+  };
+}
+
+interface DashboardResponse {
+  stats: any;
+  activities: RecentActivity[];
+  services: any[];
+}
 
 export default function DeploymentsPage() {
+  const [deployments, setDeployments] = useState<RecentActivity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchDeployments = async () => {
+    try {
+      setError(null);
+      const data = await apiGet<DashboardResponse>(`/v1/dashboard/stats`);
+      // Filter for deployment-related activities
+      const deploymentActivities = (data.activities || []).filter(
+        (a) => a.type === "deployment" || a.type === "deploy" || a.message.toLowerCase().includes("deploy")
+      );
+      setDeployments(deploymentActivities.length > 0 ? deploymentActivities : data.activities || []);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to fetch deployments:", err);
+      setError(err instanceof Error ? err.message : "Failed to fetch deployments");
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDeployments();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchDeployments, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatTimeAgo = (timestamp: string) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInSeconds = Math.floor((now.getTime() - time.getTime()) / 1000);
+
+    if (diffInSeconds < 60) {
+      return `${diffInSeconds} seconds ago`;
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      return `${hours} hour${hours > 1 ? "s" : ""} ago`;
+    } else {
+      const days = Math.floor(diffInSeconds / 86400);
+      return `${days} day${days > 1 ? "s" : ""} ago`;
+    }
+  };
+
+  const getStatusBadgeClass = (status: string) => {
+    switch (status) {
+      case "success":
+        return "bg-green-100 text-green-800";
+      case "running":
+        return "bg-blue-100 text-blue-800";
+      case "failed":
+        return "bg-red-100 text-red-800";
+      default:
+        return "bg-yellow-100 text-yellow-800";
+    }
+  };
+
+  const getStatusDotClass = (status: string) => {
+    switch (status) {
+      case "success":
+        return "bg-green-500";
+      case "running":
+        return "bg-blue-500 animate-pulse";
+      case "failed":
+        return "bg-red-500";
+      default:
+        return "bg-yellow-500";
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Deployments</h1>
+          <p className="text-muted-foreground mt-2">
+            Track and manage your deployment history
+          </p>
+        </div>
+        <Card>
+          <CardContent className="py-12">
+            <div className="flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-3 text-muted-foreground">Loading deployments...</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Deployments</h1>
+          <p className="text-muted-foreground mt-2">
+            Track and manage your deployment history
+          </p>
+        </div>
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-8">
+            <div className="text-center">
+              <p className="text-red-600 font-medium mb-4">{error}</p>
+              <button
+                onClick={fetchDeployments}
+                className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50"
+              >
+                Try Again
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Deployments</h1>
-        <p className="text-muted-foreground mt-2">
-          Track and manage your deployment history
-        </p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold">Deployments</h1>
+          <p className="text-muted-foreground mt-2">
+            Track and manage your deployment history
+          </p>
+        </div>
+        <button
+          onClick={fetchDeployments}
+          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+        >
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Refresh
+        </button>
       </div>
 
       <Card>
         <CardHeader>
           <CardTitle>Deployment History</CardTitle>
           <CardDescription>
-            View all deployments across your services
+            View all deployments across your services ({deployments.length} total)
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-12 text-muted-foreground">
-            <p className="text-lg">No deployments yet</p>
-            <p className="text-sm mt-2">
-              Deploy a service to see your deployment history here
-            </p>
-          </div>
+          {deployments.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p className="text-lg">No deployments yet</p>
+              <p className="text-sm mt-2">
+                Deploy a service to see your deployment history here
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {deployments.map((deployment) => (
+                <div
+                  key={deployment.id}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className={`w-3 h-3 rounded-full ${getStatusDotClass(deployment.status)}`}></div>
+                    <div>
+                      <p className="font-medium text-gray-900">{deployment.message}</p>
+                      <div className="flex items-center space-x-2 text-sm text-gray-500 mt-1">
+                        {deployment.metadata?.service_name && (
+                          <span className="font-medium">{deployment.metadata.service_name}</span>
+                        )}
+                        {deployment.metadata?.version && (
+                          <>
+                            <span>•</span>
+                            <span>{deployment.metadata.version}</span>
+                          </>
+                        )}
+                        {deployment.metadata?.environment && (
+                          <>
+                            <span>•</span>
+                            <span className="capitalize">{deployment.metadata.environment}</span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span>{formatTimeAgo(deployment.timestamp)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(deployment.status)}`}
+                  >
+                    {deployment.status.charAt(0).toUpperCase() + deployment.status.slice(1)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

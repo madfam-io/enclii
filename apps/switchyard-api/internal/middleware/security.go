@@ -529,7 +529,7 @@ func DefaultSecurityConfig() *SecurityConfig {
 		// Development: Defaults to localhost origins only
 		AllowedOrigins:  getAllowedOrigins(),
 		AllowedMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:  []string{"Authorization", "Content-Type", "X-Requested-With"},
+		AllowedHeaders:  []string{"Authorization", "Content-Type", "X-Requested-With", "X-IDP-Token", "X-CSRF-Token"},
 		AllowCredentials: true,
 		MaxAge:          86400, // 24 hours
 	}

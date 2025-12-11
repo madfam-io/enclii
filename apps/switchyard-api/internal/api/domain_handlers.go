@@ -326,6 +326,18 @@ func (h *Handler) triggerDomainReconciliation(ctx context.Context, serviceID, en
 		routes = []types.Route{} // Continue with empty routes
 	}
 
+	// Get environment variables (decrypted)
+	var envVars map[string]string
+	if h.repos.EnvVars != nil {
+		envVars, err = h.repos.EnvVars.GetDecrypted(ctx, serviceID, deployment.EnvironmentID)
+		if err != nil {
+			h.logger.Warn(ctx, "Failed to get environment variables", logging.Error("error", err))
+			envVars = make(map[string]string)
+		}
+	} else {
+		envVars = make(map[string]string)
+	}
+
 	// Reconcile
 	reconcileReq := &reconciler.ReconcileRequest{
 		Service:       service,
@@ -333,6 +345,7 @@ func (h *Handler) triggerDomainReconciliation(ctx context.Context, serviceID, en
 		Deployment:    deployment,
 		CustomDomains: domains,
 		Routes:        routes,
+		EnvVars:       envVars,
 	}
 
 	result := h.serviceReconciler.Reconcile(ctx, reconcileReq)

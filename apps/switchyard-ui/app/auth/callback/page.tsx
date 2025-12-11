@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -18,8 +18,18 @@ function AuthCallbackContent() {
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Guard against duplicate callback processing (React 18 Strict Mode, etc.)
+  const hasProcessedRef = useRef(false);
+
   useEffect(() => {
     async function processCallback() {
+      // Prevent duplicate processing of OAuth callback
+      // OAuth codes are single-use; processing twice causes errors
+      if (hasProcessedRef.current) {
+        return;
+      }
+      hasProcessedRef.current = true;
+
       // Check for error from OIDC provider
       const error = searchParams.get("error");
       const errorDescription = searchParams.get("error_description");

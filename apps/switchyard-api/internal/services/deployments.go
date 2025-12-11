@@ -67,9 +67,8 @@ func (s *DeploymentService) BuildService(ctx context.Context, req *BuildServiceR
 		"git_sha":    req.GitSHA,
 	}).Info("Starting service build")
 
-	// Parse user ID
-	userID, err := uuid.Parse(req.UserID)
-	if err != nil {
+	// Validate user ID format (OIDC users don't have local user rows)
+	if _, err := uuid.Parse(req.UserID); err != nil {
 		return nil, errors.Wrap(err, errors.ErrInvalidInput)
 	}
 
@@ -89,9 +88,9 @@ func (s *DeploymentService) BuildService(ctx context.Context, req *BuildServiceR
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
-	// Audit log
+	// Audit log - OIDC users don't have local user row, use nil
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      userID,
+		ActorID:      nil,
 		ActorEmail:   req.UserEmail,
 		ActorRole:    types.Role(req.UserRole),
 		Action:       "build_started",
@@ -136,8 +135,8 @@ func (s *DeploymentService) DeployService(ctx context.Context, req *DeployServic
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrInvalidInput)
 	}
-	userID, err := uuid.Parse(req.UserID)
-	if err != nil {
+	// Validate user ID format (OIDC users don't have local user rows)
+	if _, err := uuid.Parse(req.UserID); err != nil {
 		return nil, errors.Wrap(err, errors.ErrInvalidInput)
 	}
 
@@ -177,9 +176,9 @@ func (s *DeploymentService) DeployService(ctx context.Context, req *DeployServic
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
-	// Audit log
+	// Audit log - OIDC users don't have local user row, use nil
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      userID,
+		ActorID:      nil,
 		ActorEmail:   req.UserEmail,
 		ActorRole:    types.Role(req.UserRole),
 		Action:       "deployment_created",
@@ -256,9 +255,8 @@ func (s *DeploymentService) Rollback(ctx context.Context, req *RollbackRequest) 
 		"deployment_id":    deployment.ID,
 	}).Info("Rolling back deployment")
 
-	// Parse user ID
-	userID, err := uuid.Parse(req.UserID)
-	if err != nil {
+	// Validate user ID format (OIDC users don't have local user rows)
+	if _, err := uuid.Parse(req.UserID); err != nil {
 		return nil, errors.Wrap(err, errors.ErrInvalidInput)
 	}
 
@@ -278,9 +276,9 @@ func (s *DeploymentService) Rollback(ctx context.Context, req *RollbackRequest) 
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}
 
-	// Audit log
+	// Audit log - OIDC users don't have local user row, use nil
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      userID,
+		ActorID:      nil,
 		ActorEmail:   req.UserEmail,
 		ActorRole:    types.Role(req.UserRole),
 		Action:       "deployment_rollback",

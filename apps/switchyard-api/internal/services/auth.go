@@ -110,9 +110,9 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*Regi
 		return nil, errors.Wrap(err, errors.ErrInternal)
 	}
 
-	// Audit log
+	// Audit log - local users have a valid UUID
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      user.ID,
+		ActorID:      &user.ID,
 		ActorEmail:   user.Email,
 		ActorRole:    types.RoleViewer,
 		Action:       "user_register",
@@ -183,9 +183,9 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 
 	// Verify password
 	if err := auth.ComparePassword(user.PasswordHash, req.Password); err != nil {
-		// Log failed login attempt
+		// Log failed login attempt - local user has valid UUID
 		s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-			ActorID:      user.ID,
+			ActorID:      &user.ID,
 			ActorEmail:   user.Email,
 			ActorRole:    types.RoleViewer, // Unknown role at this point
 			Action:       "login_failed",
@@ -226,9 +226,9 @@ func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginRespo
 		// Non-fatal, continue
 	}
 
-	// Log successful login
+	// Log successful login - local user has valid UUID
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      user.ID,
+		ActorID:      &user.ID,
 		ActorEmail:   user.Email,
 		ActorRole:    types.Role(userRole),
 		Action:       "login_success",
@@ -297,9 +297,8 @@ type LogoutRequest struct {
 func (s *AuthService) Logout(ctx context.Context, req *LogoutRequest) error {
 	s.logger.WithField("user_id", req.UserID).Info("User logout")
 
-	// Parse user ID
-	userID, err := uuid.Parse(req.UserID)
-	if err != nil {
+	// Validate user ID format
+	if _, err := uuid.Parse(req.UserID); err != nil {
 		return errors.Wrap(err, errors.ErrInvalidInput)
 	}
 
@@ -310,9 +309,9 @@ func (s *AuthService) Logout(ctx context.Context, req *LogoutRequest) error {
 		// The token will still expire naturally
 	}
 
-	// Log logout event
+	// Log logout event - OIDC users may not have local user row, use nil
 	s.repos.AuditLogs.Log(ctx, &types.AuditLog{
-		ActorID:      userID,
+		ActorID:      nil,
 		ActorEmail:   req.UserEmail,
 		ActorRole:    types.Role(req.UserRole),
 		Action:       "logout",

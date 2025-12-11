@@ -49,6 +49,9 @@ spec:
               key: client-secret
         - name: ENCLII_OIDC_REDIRECT_URL
           value: "https://api.enclii.dev/v1/auth/callback"
+        # Admin email mapping for OIDC providers that don't include roles in JWT
+        - name: ENCLII_ADMIN_EMAILS
+          value: "admin@madfam.io"
         readinessProbe:
           httpGet:
             path: /health/ready
