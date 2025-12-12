@@ -31,11 +31,26 @@ COPY packages/sdk-go/ ./packages/sdk-go/
 WORKDIR /app/apps/switchyard-api
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/switchyard-api ./cmd/api
 
-# Final stage
+# Final stage - includes build tooling for CI/CD pipeline
 FROM alpine:3.20
 
-RUN apk --no-cache add ca-certificates tzdata wget
+# Install required packages:
+# - ca-certificates: for HTTPS connections
+# - tzdata: for timezone support
+# - wget: for health checks
+# - git: for cloning repositories
+# - docker-cli: for building and pushing images (requires Docker socket mount)
+# - curl: for downloading pack CLI
+RUN apk --no-cache add ca-certificates tzdata wget git docker-cli curl bash
+
+# Install Cloud Native Buildpacks pack CLI
+ENV PACK_VERSION=0.35.1
+RUN curl -sSL "https://github.com/buildpacks/pack/releases/download/v${PACK_VERSION}/pack-v${PACK_VERSION}-linux.tgz" | tar -xz -C /usr/local/bin
+
 WORKDIR /root/
+
+# Create build directories
+RUN mkdir -p /tmp/enclii-builds /var/cache/enclii-buildpacks
 
 # Copy the binary from builder stage
 COPY --from=builder /app/switchyard-api .
