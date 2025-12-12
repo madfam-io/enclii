@@ -167,11 +167,14 @@ func (r *ServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 	var buildConfigJSON []byte
 	var appPath sql.NullString
 
-	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config, created_at, updated_at FROM services WHERE id = $1`
+	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config,
+		auto_deploy, auto_deploy_branch, auto_deploy_env, created_at, updated_at
+		FROM services WHERE id = $1`
 
 	err := r.db.QueryRow(query, id).Scan(
 		&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
-		&appPath, &buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
+		&appPath, &buildConfigJSON, &service.AutoDeploy, &service.AutoDeployBranch,
+		&service.AutoDeployEnv, &service.CreatedAt, &service.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -189,7 +192,9 @@ func (r *ServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 }
 
 func (r *ServiceRepository) ListAll(ctx context.Context) ([]*types.Service, error) {
-	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config, created_at, updated_at FROM services ORDER BY created_at DESC`
+	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config,
+		auto_deploy, auto_deploy_branch, auto_deploy_env, created_at, updated_at
+		FROM services ORDER BY created_at DESC`
 
 	rows, err := r.db.QueryContext(ctx, query)
 	if err != nil {
@@ -205,7 +210,8 @@ func (r *ServiceRepository) ListAll(ctx context.Context) ([]*types.Service, erro
 
 		err := rows.Scan(
 			&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
-			&appPath, &buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
+			&appPath, &buildConfigJSON, &service.AutoDeploy, &service.AutoDeployBranch,
+			&service.AutoDeployEnv, &service.CreatedAt, &service.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -226,7 +232,9 @@ func (r *ServiceRepository) ListAll(ctx context.Context) ([]*types.Service, erro
 }
 
 func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service, error) {
-	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config, created_at, updated_at FROM services WHERE project_id = $1 ORDER BY created_at DESC`
+	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config,
+		auto_deploy, auto_deploy_branch, auto_deploy_env, created_at, updated_at
+		FROM services WHERE project_id = $1 ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(query, projectID)
 	if err != nil {
@@ -240,7 +248,8 @@ func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service
 		var buildConfigJSON []byte
 		var appPath sql.NullString
 
-		err := rows.Scan(&service.ID, &service.ProjectID, &service.Name, &service.GitRepo, &appPath, &buildConfigJSON, &service.CreatedAt, &service.UpdatedAt)
+		err := rows.Scan(&service.ID, &service.ProjectID, &service.Name, &service.GitRepo, &appPath, &buildConfigJSON,
+			&service.AutoDeploy, &service.AutoDeployBranch, &service.AutoDeployEnv, &service.CreatedAt, &service.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -264,15 +273,23 @@ func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service
 func (r *ServiceRepository) GetByGitRepo(gitRepoURL string) (*types.Service, error) {
 	service := &types.Service{}
 	var buildConfigJSON []byte
+	var appPath sql.NullString
 
-	query := `SELECT id, project_id, name, git_repo, build_config, created_at, updated_at FROM services WHERE git_repo = $1`
+	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config,
+		auto_deploy, auto_deploy_branch, auto_deploy_env, created_at, updated_at
+		FROM services WHERE git_repo = $1`
 
 	err := r.db.QueryRow(query, gitRepoURL).Scan(
 		&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
-		&buildConfigJSON, &service.CreatedAt, &service.UpdatedAt,
+		&appPath, &buildConfigJSON, &service.AutoDeploy, &service.AutoDeployBranch,
+		&service.AutoDeployEnv, &service.CreatedAt, &service.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if appPath.Valid {
+		service.AppPath = appPath.String
 	}
 
 	if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
