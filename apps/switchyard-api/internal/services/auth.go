@@ -54,7 +54,16 @@ type RegisterResponse struct {
 }
 
 // Register registers a new user
+// NOTE: This method only works in local JWT auth mode. In OIDC mode, users register via the external IDP.
 func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*RegisterResponse, error) {
+	// Check if JWT manager is available (not available in OIDC mode)
+	if s.jwtManager == nil {
+		s.logger.Warn("Registration not available - OIDC mode active")
+		return nil, errors.ErrInternal.WithDetails(map[string]any{
+			"reason": "User registration not available in OIDC mode. Please register via the identity provider.",
+		})
+	}
+
 	// Validate input
 	if err := s.validateRegistrationInput(req); err != nil {
 		return nil, err
@@ -152,7 +161,16 @@ type LoginResponse struct {
 }
 
 // Login authenticates a user
+// NOTE: This method only works in local JWT auth mode. In OIDC mode, users authenticate via the external IDP.
 func (s *AuthService) Login(ctx context.Context, req *LoginRequest) (*LoginResponse, error) {
+	// Check if JWT manager is available (not available in OIDC mode)
+	if s.jwtManager == nil {
+		s.logger.Warn("Local login not available - OIDC mode active")
+		return nil, errors.ErrUnauthorized.WithDetails(map[string]any{
+			"reason": "Local login not available in OIDC mode. Please authenticate via the identity provider.",
+		})
+	}
+
 	// Validate input
 	if strings.TrimSpace(req.Email) == "" || strings.TrimSpace(req.Password) == "" {
 		return nil, errors.ErrInvalidCredentials
@@ -266,7 +284,16 @@ type RefreshTokenResponse struct {
 }
 
 // RefreshToken generates new access and refresh tokens
+// In OIDC mode (jwtManager is nil), token refresh is not supported - users must re-authenticate via the IDP
 func (s *AuthService) RefreshToken(ctx context.Context, req *RefreshTokenRequest) (*RefreshTokenResponse, error) {
+	// Check if JWT manager is available (not available in OIDC mode)
+	if s.jwtManager == nil {
+		s.logger.Warn("Token refresh not available - OIDC mode active, re-authentication required")
+		return nil, errors.ErrTokenInvalid.WithDetails(map[string]any{
+			"reason": "Token refresh not available in OIDC mode. Please re-authenticate.",
+		})
+	}
+
 	// Refresh token (validates token, checks revocation, and generates new token pair)
 	tokenPair, err := s.jwtManager.RefreshToken(req.RefreshToken)
 	if err != nil {
@@ -303,10 +330,15 @@ func (s *AuthService) Logout(ctx context.Context, req *LogoutRequest) error {
 	}
 
 	// Revoke the session (invalidates both access and refresh tokens with same session ID)
-	if err := s.jwtManager.RevokeSessionFromToken(ctx, req.TokenString); err != nil {
-		s.logger.Warn("Failed to revoke session during logout", "error", err, "user_id", req.UserID)
-		// Continue with logout even if revocation fails
-		// The token will still expire naturally
+	// Only available in local JWT mode, not OIDC mode
+	if s.jwtManager != nil {
+		if err := s.jwtManager.RevokeSessionFromToken(ctx, req.TokenString); err != nil {
+			s.logger.Warn("Failed to revoke session during logout", "error", err, "user_id", req.UserID)
+			// Continue with logout even if revocation fails
+			// The token will still expire naturally
+		}
+	} else {
+		s.logger.Debug("Session revocation skipped - OIDC mode active", "user_id", req.UserID)
 	}
 
 	// Log logout event - OIDC users may not have local user row, use nil

@@ -282,23 +282,31 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 
 // AuthMiddleware returns a Gin middleware for OIDC authentication
 // Implements dual-mode validation: local tokens first, then external tokens
+// Supports both Authorization header and query parameter (for WebSocket connections)
 func (o *OIDCManager) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var tokenString string
+
+		// Try Authorization header first (standard method)
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(401, gin.H{"error": "Authorization header is required"})
+		if authHeader != "" {
+			bearerToken := strings.Split(authHeader, " ")
+			if len(bearerToken) == 2 && bearerToken[0] == "Bearer" {
+				tokenString = bearerToken[1]
+			}
+		}
+
+		// Fall back to query parameter (for WebSocket connections)
+		// WebSocket API doesn't support custom headers, so token is passed via query param
+		if tokenString == "" {
+			tokenString = c.Query("token")
+		}
+
+		if tokenString == "" {
+			c.JSON(401, gin.H{"error": "Authorization required (header or token query param)"})
 			c.Abort()
 			return
 		}
-
-		bearerToken := strings.Split(authHeader, " ")
-		if len(bearerToken) != 2 || bearerToken[0] != "Bearer" {
-			c.JSON(401, gin.H{"error": "Invalid authorization header format"})
-			c.Abort()
-			return
-		}
-
-		tokenString := bearerToken[1]
 
 		// Try local token validation first
 		localClaims, localErr := o.jwtManager.ValidateToken(tokenString)

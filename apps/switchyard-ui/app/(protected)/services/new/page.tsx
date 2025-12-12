@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiGet, apiPost } from "@/lib/api";
-import type { Project, Service } from "@/lib/types";
+import type { Project, ProjectsResponse, Service } from "@/lib/types";
 
 // Icons as SVG components
 const GithubIcon = () => (
@@ -62,11 +62,12 @@ function CreateServiceContent() {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const data = await apiGet<Project[]>('/v1/projects');
-        setProjects(data || []);
+        const response = await apiGet<ProjectsResponse>('/v1/projects');
+        const projectList = response.projects || [];
+        setProjects(projectList);
         // Auto-select first project if available
-        if (data && data.length > 0 && !selectedProject) {
-          setSelectedProject(data[0].slug);
+        if (projectList.length > 0 && !selectedProject) {
+          setSelectedProject(projectList[0].slug);
         }
         setLoading(false);
       } catch (err) {

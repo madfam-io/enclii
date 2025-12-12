@@ -52,6 +52,28 @@ spec:
         # Admin email mapping for OIDC providers that don't include roles in JWT
         - name: ENCLII_ADMIN_EMAILS
           value: "admin@madfam.io"
+        # Container Registry Credentials (for pushing built images)
+        - name: ENCLII_REGISTRY
+          value: "ghcr.io/madfam-io"
+        - name: ENCLII_REGISTRY_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: enclii-registry-credentials
+              key: username
+        - name: ENCLII_REGISTRY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: enclii-registry-credentials
+              key: password
+        # GitHub Webhook Secret (for verifying webhook signatures)
+        - name: ENCLII_GITHUB_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: enclii-github-webhook
+              key: secret
+        # Janua API URL for GitHub token retrieval
+        - name: ENCLII_JANUA_API_URL
+          value: "https://api.janua.dev"
         readinessProbe:
           httpGet:
             path: /health/ready

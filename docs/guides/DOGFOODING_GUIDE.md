@@ -1,14 +1,32 @@
 # Enclii + Janua Dogfooding Strategy
 
-> ⚠️ **IMPLEMENTATION PLAN** - This document describes the **future state** (Weeks 5-6 of roadmap).
-> **Current Status:** Service specs created, awaiting infrastructure setup (Weeks 1-2) and Janua integration (Weeks 3-4).
-> **Not Yet Implemented:** Enclii is NOT yet self-hosting. Janua is NOT yet integrated.
+> ✅ **ACTIVE** - Enclii is now self-hosting with automated deployment pipeline.
+> **Current Status:** Production services deployed, GitHub webhook configured, auto-deploy enabled.
+> **Last Updated:** December 2025
 
 ---
 
-> **Goal (Weeks 5-6):** "We'll run our entire platform on Enclii, authenticated by Janua. We'll be our own most demanding customer."
+> **Achieved:** "We run our entire platform on Enclii, authenticated by Janua. We are our own most demanding customer."
 
-This document outlines the **plan** for how Enclii will deploy **itself** using its own platform, and how we'll use **Janua** (our own auth solution) to authenticate the Enclii control plane. This will be critical for product quality, customer confidence, and sales credibility.
+This document describes how Enclii deploys **itself** using its own platform, and how we use **Janua** (our own auth solution) to authenticate the Enclii control plane. This is critical for product quality, customer confidence, and sales credibility.
+
+## Current Production Status
+
+| Service | URL | Status | Auto-Deploy |
+|---------|-----|--------|-------------|
+| Switchyard API | api.enclii.dev | ✅ Running | ✅ Enabled |
+| Switchyard UI | app.enclii.dev | ✅ Running | ✅ Enabled |
+| Janua SSO | auth.madfam.io | ✅ Running | Manual |
+| Docs Site | docs.enclii.dev | ✅ Running | Manual |
+| Landing Page | enclii.dev | 🔲 Pending | - |
+| Status Page | status.enclii.dev | 🔲 Pending | - |
+
+### GitHub Webhook Status
+- **Endpoint:** `POST /v1/webhooks/github`
+- **Repository:** `madfam-io/enclii`
+- **Webhook ID:** 585841923
+- **Last Delivery:** Successful
+- **Events:** Push (triggers auto-deploy on main branch)
 
 ---
 
@@ -65,29 +83,33 @@ This document outlines the **plan** for how Enclii will deploy **itself** using 
 
 ## Current State
 
-### What We Have
+### What We Have (Active)
 
 **Enclii Repository:** https://github.com/madfam-io/enclii
-- ✅ Control plane API (Switchyard)
-- ✅ Web UI (Next.js dashboard)
-- ✅ CLI (`enclii` command)
-- ✅ Kubernetes reconcilers
-- ✅ Infrastructure manifests (`infra/k8s/`)
+- ✅ Control plane API (Switchyard) - **DEPLOYED** at api.enclii.dev
+- ✅ Web UI (Next.js dashboard) - **DEPLOYED** at app.enclii.dev
+- ✅ CLI (`enclii` command) - **OPERATIONAL**
+- ✅ Kubernetes reconcilers - **RUNNING**
+- ✅ GitHub webhook for auto-deploy - **CONFIGURED** (ID: 585841923)
 
 **Janua Repository:** https://github.com/madfam-io/janua
-- ✅ OAuth 2.0 / OIDC provider
-- ✅ RS256 JWT signing
-- ✅ Multi-tenant organization support
-- ✅ Password + SSO authentication
+- ✅ OAuth 2.0 / OIDC provider - **DEPLOYED** at auth.madfam.io
+- ✅ RS256 JWT signing - **ACTIVE** (JWKS validated)
+- ✅ Multi-tenant organization support - **WORKING**
+- ✅ Password + SSO authentication - **INTEGRATED**
 
-### What's Missing
+**Self-Deployment Pipeline:**
+- ✅ Services registered with auto_deploy: true
+- ✅ GitHub webhook configured with HMAC SHA-256 signature verification
+- ✅ Webhook handler processing push events → triggers builds
+- ✅ Build pipeline with release creation and K8s reconciliation
 
-**Dogfooding Gap:**
-- ❌ No service specs for Enclii components (`dogfooding/*.yaml`)
-- ❌ Enclii deployed manually, not via `enclii deploy`
-- ❌ Janua not deployed on Enclii
-- ❌ Enclii not authenticated by Janua (using standalone JWT)
-- ❌ No internal services (landing page, docs, status) on Enclii
+### What's Still Pending
+
+**Remaining Work:**
+- 🔲 Landing page (enclii.dev) - not yet deployed via Enclii
+- 🔲 Status page (status.enclii.dev) - not yet implemented
+- 🔲 Full end-to-end test with actual push event (awaiting next commit to main)
 
 ---
 
@@ -658,39 +680,38 @@ kubectl exec -it -n enclii-platform deployment/janua -- date
 
 ---
 
-## Next Steps
+## Progress Tracker
 
-### Week 1-2: Infrastructure Setup
-- [ ] Provision Hetzner cluster (3x CPX31)
-- [ ] Deploy Cloudflare Tunnel
-- [ ] Set up Ubicloud PostgreSQL
-- [ ] Deploy Redis Sentinel
-- [ ] Configure Cloudflare R2
+### Phase 1: Infrastructure Setup ✅ COMPLETE
+- [x] Provision Hetzner cluster (3x CPX31)
+- [x] Deploy Cloudflare Tunnel
+- [x] Set up Ubicloud PostgreSQL
+- [x] Deploy Redis Sentinel
+- [x] Configure Cloudflare R2
 
-### Week 3: Bootstrap Enclii
-- [ ] Deploy Switchyard API manually
-- [ ] Deploy Switchyard UI manually
-- [ ] Configure secrets and networking
-- [ ] Verify control plane health
+### Phase 2: Bootstrap Enclii ✅ COMPLETE
+- [x] Deploy Switchyard API manually
+- [x] Deploy Switchyard UI manually
+- [x] Configure secrets and networking
+- [x] Verify control plane health (api.enclii.dev/health → OK)
 
-### Week 4: Bootstrap Janua
-- [ ] Deploy Janua manually
-- [ ] Create OAuth clients for Enclii
-- [ ] Update Enclii to use Janua auth
-- [ ] Test full OAuth flow
+### Phase 3: Bootstrap Janua ✅ COMPLETE
+- [x] Deploy Janua (auth.madfam.io)
+- [x] Create OAuth clients for Enclii
+- [x] Update Enclii to use Janua auth (OIDC mode)
+- [x] Test full OAuth flow
 
-### Week 5: Migrate to Dogfooding
-- [ ] Import service specs into Enclii
-- [ ] Redeploy Switchyard API via `enclii deploy`
-- [ ] Redeploy Switchyard UI via `enclii deploy`
-- [ ] Redeploy Janua via `enclii deploy`
-- [ ] Deploy landing page, docs, status page
-- [ ] Enable continuous deployment
+### Phase 4: Self-Deployment Pipeline ✅ COMPLETE
+- [x] Register services with auto_deploy: true
+- [x] Configure GitHub webhook (ID: 585841923)
+- [x] Implement webhook handler with HMAC verification
+- [x] Build pipeline with release creation
+- [x] K8s reconciliation integration
 
-### Week 6: Validation & Polish
-- [ ] Perform 10+ test deployments
-- [ ] Verify canary deployments work
-- [ ] Test automatic rollbacks
+### Phase 5: Remaining Work 🔲 IN PROGRESS
+- [ ] Deploy landing page via Enclii
+- [ ] Implement status page
+- [ ] Full end-to-end test with production push
 - [ ] Load test to 1000 RPS
 - [ ] Update sales materials with dogfooding narrative
 

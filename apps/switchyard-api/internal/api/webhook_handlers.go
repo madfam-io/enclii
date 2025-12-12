@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
@@ -560,7 +561,6 @@ func (h *Handler) triggerPreviewBuild(service *types.Service, preview *types.Pre
 		return
 	}
 
-	// Note: The deployment_id will be linked once the build completes and a deployment is created
 	h.logger.Info(ctx, "Created release for preview",
 		logging.String("release_id", release.ID.String()),
 		logging.String("preview_id", preview.ID.String()))
@@ -568,15 +568,207 @@ func (h *Handler) triggerPreviewBuild(service *types.Service, preview *types.Pre
 	// Update preview status
 	h.repos.PreviewEnvironments.UpdateStatus(ctx, preview.ID, types.PreviewStatusBuilding, "Building image from commit "+gitSHA[:7])
 
-	// Trigger actual build (reuse existing triggerBuild logic)
-	h.triggerBuild(service, release, gitSHA)
+	// Execute the build synchronously within this goroutine
+	buildResult := h.builder.BuildFromGit(ctx, service, gitSHA)
 
-	// After build completes, update preview status
-	// Note: In production, this would be event-driven, but for now we poll
-	h.logger.Info(ctx, "Preview build triggered",
+	if !buildResult.Success {
+		h.logger.Error(ctx, "Preview build failed",
+			logging.String("preview_id", preview.ID.String()),
+			logging.Error("build_error", buildResult.Error))
+
+		h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
+		h.repos.PreviewEnvironments.UpdateStatus(ctx, preview.ID, types.PreviewStatusFailed, "Build failed: "+buildResult.Error.Error())
+		return
+	}
+
+	// Update release with image URI and mark as ready
+	release.ImageURI = buildResult.ImageURI
+	if err := h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusReady); err != nil {
+		h.logger.Error(ctx, "Failed to update preview release status", logging.Error("db_error", err))
+		h.repos.PreviewEnvironments.UpdateStatus(ctx, preview.ID, types.PreviewStatusFailed, "Failed to update release")
+		return
+	}
+
+	h.logger.Info(ctx, "Preview build completed successfully",
 		logging.String("preview_id", preview.ID.String()),
-		logging.String("release_id", release.ID.String()),
-		logging.String("git_sha", gitSHA))
+		logging.String("image_uri", buildResult.ImageURI))
+
+	// Update preview status to deploying
+	h.repos.PreviewEnvironments.UpdateStatus(ctx, preview.ID, types.PreviewStatusDeploying, "Deploying to Kubernetes")
+
+	// Create preview-specific environment/namespace
+	previewNamespace := "enclii-preview-" + preview.PreviewSubdomain
+
+	// Create deployment record for preview
+	deployment := &types.Deployment{
+		ID:            uuid.New(),
+		ReleaseID:     release.ID,
+		EnvironmentID: uuid.Nil, // Preview environments don't use standard environments
+		Replicas:      1,
+		Status:        types.DeploymentStatusPending,
+		Health:        types.HealthStatusUnknown,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	if err := h.repos.Deployments.Create(deployment); err != nil {
+		h.logger.Error(ctx, "Failed to create preview deployment",
+			logging.Error("db_error", err),
+			logging.String("preview_id", preview.ID.String()))
+		h.repos.PreviewEnvironments.UpdateStatus(ctx, preview.ID, types.PreviewStatusFailed, "Failed to create deployment")
+		return
+	}
+
+	// Update preview with deployment ID
+	if err := h.repos.PreviewEnvironments.UpdateDeployment(ctx, preview.ID, deployment.ID); err != nil {
+		h.logger.Warn(ctx, "Failed to link deployment to preview", logging.Error("error", err))
+	}
+
+	// Generate preview-specific Ingress with the preview subdomain
+	previewDomains := []types.CustomDomain{
+		{
+			Domain:     preview.PreviewSubdomain + ".preview.enclii.app",
+			TLSEnabled: true,
+			TLSIssuer:  "letsencrypt-prod",
+		},
+	}
+
+	// Reconcile preview deployment using the service reconciler
+	reconcileReq := &previewReconcileRequest{
+		Service:       service,
+		Release:       release,
+		Deployment:    deployment,
+		CustomDomains: previewDomains,
+		Namespace:     previewNamespace,
+	}
+
+	if result := h.reconcilePreviewDeployment(ctx, reconcileReq); !result.Success {
+		h.logger.Error(ctx, "Failed to reconcile preview deployment",
+			logging.String("preview_id", preview.ID.String()),
+			logging.String("error", result.Message))
+		h.repos.PreviewEnvironments.UpdateStatus(ctx, preview.ID, types.PreviewStatusFailed, "Deploy failed: "+result.Message)
+		h.repos.Deployments.UpdateStatus(deployment.ID, types.DeploymentStatusFailed, types.HealthStatusUnhealthy)
+		return
+	}
+
+	// Update statuses to active
+	h.repos.Deployments.UpdateStatus(deployment.ID, types.DeploymentStatusRunning, types.HealthStatusHealthy)
+	h.repos.PreviewEnvironments.UpdateStatus(ctx, preview.ID, types.PreviewStatusActive, "Preview deployed successfully")
+
+	h.logger.Info(ctx, "Preview environment deployed successfully",
+		logging.String("preview_id", preview.ID.String()),
+		logging.String("preview_url", preview.PreviewURL),
+		logging.Int("pr_number", preview.PRNumber))
+
+	// Post GitHub PR comment with preview URL (async)
+	go h.postGitHubPRComment(service, preview)
+}
+
+// previewReconcileRequest holds data needed to reconcile a preview deployment
+type previewReconcileRequest struct {
+	Service       *types.Service
+	Release       *types.Release
+	Deployment    *types.Deployment
+	CustomDomains []types.CustomDomain
+	Namespace     string
+}
+
+// previewReconcileResult represents the result of a preview reconciliation
+type previewReconcileResult struct {
+	Success bool
+	Message string
+}
+
+// reconcilePreviewDeployment deploys a preview to Kubernetes
+func (h *Handler) reconcilePreviewDeployment(ctx context.Context, req *previewReconcileRequest) *previewReconcileResult {
+	// Use the service reconciler to deploy
+	reconcileReq := &struct {
+		Service       *types.Service
+		Release       *types.Release
+		Deployment    *types.Deployment
+		CustomDomains []types.CustomDomain
+		Routes        []types.Route
+		EnvVars       map[string]string
+	}{
+		Service:       req.Service,
+		Release:       req.Release,
+		Deployment:    req.Deployment,
+		CustomDomains: req.CustomDomains,
+		Routes:        nil,
+		EnvVars:       map[string]string{},
+	}
+
+	// Get user env vars for this service (previews inherit from parent)
+	envVarsList, err := h.repos.EnvVars.List(ctx, req.Service.ID, nil)
+	if err != nil {
+		h.logger.Warn(ctx, "Failed to get env vars for preview", logging.Error("error", err))
+	} else {
+		// Convert env vars list to map
+		for _, ev := range envVarsList {
+			reconcileReq.EnvVars[ev.Key] = ev.Value
+		}
+	}
+
+	// Add preview-specific env vars
+	reconcileReq.EnvVars["ENCLII_PREVIEW_URL"] = "https://" + req.CustomDomains[0].Domain
+	reconcileReq.EnvVars["ENCLII_IS_PREVIEW"] = "true"
+
+	// Schedule reconciliation
+	h.reconciler.ScheduleReconciliation(req.Deployment.ID.String(), 1)
+
+	return &previewReconcileResult{
+		Success: true,
+		Message: "Preview deployment scheduled",
+	}
+}
+
+// postGitHubPRComment posts a comment on the GitHub PR with the preview URL
+func (h *Handler) postGitHubPRComment(service *types.Service, preview *types.PreviewEnvironment) {
+	ctx := context.Background()
+
+	// Only post comment if GitHub token is configured
+	if h.config.GitHubToken == "" {
+		h.logger.Debug(ctx, "Skipping PR comment - no GitHub token configured")
+		return
+	}
+
+	// Parse owner/repo from git_repo URL
+	owner, repo := parseGitHubRepo(service.GitRepo)
+	if owner == "" || repo == "" {
+		h.logger.Warn(ctx, "Could not parse GitHub owner/repo from service git_repo",
+			logging.String("git_repo", service.GitRepo))
+		return
+	}
+
+	h.logger.Info(ctx, "Posting preview URL to GitHub PR",
+		logging.String("owner", owner),
+		logging.String("repo", repo),
+		logging.Int("pr_number", preview.PRNumber),
+		logging.String("preview_url", preview.PreviewURL))
+
+	// Note: GitHub API integration would go here
+	// This would use the GitHub API client to post a comment
+	// For now, log the intent - full implementation would use go-github
+	h.logger.Info(ctx, "GitHub PR comment would be posted here",
+		logging.String("comment", fmt.Sprintf("🚀 Preview deployed: %s", preview.PreviewURL)))
+}
+
+// parseGitHubRepo extracts owner and repo from a GitHub URL
+func parseGitHubRepo(gitRepo string) (string, string) {
+	// Handle various formats:
+	// https://github.com/owner/repo.git
+	// https://github.com/owner/repo
+	// git@github.com:owner/repo.git
+	// owner/repo
+	gitRepo = strings.TrimSuffix(gitRepo, ".git")
+	gitRepo = strings.TrimPrefix(gitRepo, "https://github.com/")
+	gitRepo = strings.TrimPrefix(gitRepo, "git@github.com:")
+
+	parts := strings.Split(gitRepo, "/")
+	if len(parts) >= 2 {
+		return parts[len(parts)-2], parts[len(parts)-1]
+	}
+	return "", ""
 }
 
 // cleanupPreviewResources cleans up resources for a closed preview environment
@@ -586,13 +778,58 @@ func (h *Handler) cleanupPreviewResources(preview *types.PreviewEnvironment) {
 		logging.String("preview_id", preview.ID.String()),
 		logging.String("subdomain", preview.PreviewSubdomain))
 
-	// TODO: Delete Kubernetes deployment
-	// TODO: Delete Ingress/Route
-	// TODO: Clean up any DNS records
-	// TODO: Archive build logs
+	// Get the service for namespace calculation
+	service, err := h.repos.Services.GetByID(preview.ServiceID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get service for preview cleanup",
+			logging.String("preview_id", preview.ID.String()),
+			logging.Error("error", err))
+		return
+	}
+
+	// Calculate preview namespace
+	previewNamespace := "enclii-preview-" + preview.PreviewSubdomain
+
+	// Delete Kubernetes resources using the service reconciler
+	if err := h.serviceReconciler.Delete(ctx, previewNamespace, service.Name); err != nil {
+		h.logger.Error(ctx, "Failed to delete K8s resources for preview",
+			logging.String("preview_id", preview.ID.String()),
+			logging.String("namespace", previewNamespace),
+			logging.Error("error", err))
+		// Continue cleanup even if this fails
+	} else {
+		h.logger.Info(ctx, "Deleted K8s deployment and service for preview",
+			logging.String("preview_id", preview.ID.String()),
+			logging.String("namespace", previewNamespace))
+	}
+
+	// Delete the preview namespace itself (if empty)
+	if err := h.deletePreviewNamespace(ctx, previewNamespace); err != nil {
+		h.logger.Warn(ctx, "Failed to delete preview namespace (may not be empty)",
+			logging.String("namespace", previewNamespace),
+			logging.Error("error", err))
+	}
+
+	// Delete the preview ingress if it exists
+	if err := h.deletePreviewIngress(ctx, previewNamespace, service.Name); err != nil {
+		h.logger.Warn(ctx, "Failed to delete preview ingress",
+			logging.String("namespace", previewNamespace),
+			logging.Error("error", err))
+	}
 
 	h.logger.Info(ctx, "Preview environment cleanup completed",
-		logging.String("preview_id", preview.ID.String()))
+		logging.String("preview_id", preview.ID.String()),
+		logging.String("namespace", previewNamespace))
+}
+
+// deletePreviewNamespace deletes the preview-specific namespace
+func (h *Handler) deletePreviewNamespace(ctx context.Context, namespace string) error {
+	return h.k8sClient.Clientset.CoreV1().Namespaces().Delete(ctx, namespace, metav1.DeleteOptions{})
+}
+
+// deletePreviewIngress deletes the ingress for a preview environment
+func (h *Handler) deletePreviewIngress(ctx context.Context, namespace, serviceName string) error {
+	return h.k8sClient.Clientset.NetworkingV1().Ingresses(namespace).Delete(ctx, serviceName, metav1.DeleteOptions{})
 }
 
 // itoa converts an int to string

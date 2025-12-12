@@ -6,11 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
-**Current Status:** 🟡 v0.1.0 - Production Alpha ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
-**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud (~$34-100/month)
-**Authentication:** JWT (RS256) - Janua integration ready
-**Dogfooding:** Service specs ready ([specs](./dogfooding/), [guide](./docs/guides/DOGFOODING_GUIDE.md))
-**Deployment:** Ready to deploy ([deploy script](./scripts/deploy-production.sh))
+**Current Status:** 🟢 v0.1.0 - Production Beta (85% ready) ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
+**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud (~$100/month) - **Running**
+**Authentication:** OIDC via Janua SSO (RS256 JWT) - **Integrated**
+**Dogfooding:** Core services deployed ([api.enclii.dev](https://api.enclii.dev), [app.enclii.dev](https://app.enclii.dev))
+**Build Pipeline:** GitHub webhook CI/CD with Buildpacks - **Operational**
 
 ### Port Allocation
 
@@ -175,58 +175,45 @@ Enclii runs on cost-optimized infrastructure validated through independent resea
 
 See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md) for details.
 
-### Authentication
+### Authentication (Production)
 
-**Current Implementation (Alpha):**
-- **JWT Authentication** with RSA signing (RS256)
-- **RBAC** with admin/developer/viewer roles
-- **Session Management** via Redis
-- **API Keys** for CI/CD integration
+**Current Implementation:**
+- ✅ **OIDC/OAuth 2.0** via Janua SSO (auth.madfam.io)
+- ✅ **External JWKS validation** for federated identity
+- ✅ **GitHub OAuth integration** for repo imports
+- ✅ **RBAC** with admin/developer/viewer roles
+- ✅ **Session Management** via Redis
+- ✅ **API Keys** for CI/CD integration
 
-**Planned Integration (Weeks 3-4): Janua**
-
-Janua is a self-hosted OAuth/OIDC provider that will replace standalone JWT:
-
+**Janua Integration (Complete):**
 - **Repository:** [github.com/madfam-io/janua](https://github.com/madfam-io/janua)
-- **Deployment:** Will deploy via Enclii (dogfooding) using `dogfooding/janua.yaml`
+- **Production URL:** https://auth.madfam.io
 - **Protocol:** OAuth 2.0 / OIDC with RS256 JWT
-- **Features:** Multi-tenant orgs, password + SSO, JWKS rotation
-- **Implementation:** See [PRODUCTION_READINESS_AUDIT.md](./docs/production/PRODUCTION_READINESS_AUDIT.md) for code examples
+- **Features:** Multi-tenant orgs, GitHub OAuth, JWKS rotation
 
-**Why Janua (when integrated):**
-- No Auth0/Clerk vendor lock-in
-- No per-MAU costs ($0 vs $220+/month)
-- Full control over auth flows
-- Multi-tenant ready out of the box
-- Will be deployed and managed via Enclii itself
-
-### Dogfooding Strategy (Planned for Weeks 5-6)
+### Dogfooding Status (In Progress)
 
 **Goal:** Run our entire platform on Enclii, authenticated by Janua.
 
-> **Future State:** "We'll run our entire production on Enclii. We'll be our own most demanding customer."
+> **Current State:** "We run our core production services on Enclii. We are our own most demanding customer."
 
-**Planned Services** (service specs ready in `dogfooding/`):
-- `switchyard-api` → api.enclii.io (control plane, deployed via Enclii)
-- `switchyard-ui` → app.enclii.io (web dashboard, deployed via Enclii)
-- `janua` → auth.enclii.io (authentication from [separate repo](https://github.com/madfam-io/janua))
-- `landing-page` → enclii.io (marketing site)
-- `docs-site` → docs.enclii.io (documentation)
-- `status-page` → status.enclii.io (uptime monitoring)
+**Production Services** (running at enclii.dev):
+- ✅ `switchyard-api` → api.enclii.dev (control plane)
+- ✅ `switchyard-ui` → app.enclii.dev (web dashboard)
+- ✅ `janua` → auth.madfam.io (SSO authentication)
+- ✅ `docs-site` → docs.enclii.dev (documentation)
+- 🔲 `landing-page` → enclii.dev (pending)
+- 🔲 `status-page` → status.enclii.dev (pending)
 
-**Current Status:**
-- ✅ Service specs created in `dogfooding/` directory
-- ✅ Multi-repo build strategy defined (Janua from different GitHub repo)
-- ✅ NetworkPolicies, autoscaling, custom domains configured
-- ✅ Infrastructure Terraform ready (`infra/terraform/`)
-- ✅ Deployment script ready (`scripts/deploy-production.sh`)
-- ✅ Production checklist ready (`docs/production/PRODUCTION_CHECKLIST.md`)
-- ⏳ Ready to deploy - awaiting credentials configuration
+**Build Pipeline Status:**
+- ✅ GitHub webhook configured with HMAC verification
+- ✅ Real build pipeline (Buildpacks/Dockerfile detection)
+- ✅ Container registry push (ghcr.io/madfam-io)
+- ✅ Kubernetes reconciler for deployments
 
 See [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md) for complete implementation plan.
 
-**Why This Will Matter:**
+**Why This Matters:**
 - **Customer Confidence:** "If they trust it, we can too"
-- **Product Quality:** We'll find bugs before customers do
+- **Product Quality:** We find bugs before customers do
 - **Sales Credibility:** Authentic production usage metrics
-- **Team Alignment:** Everyone will use the platform daily

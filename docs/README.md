@@ -2,12 +2,24 @@
 
 **Welcome to the Enclii documentation!** This directory contains all technical documentation, guides, audit reports, and implementation notes.
 
+## Current Status
+
+**Production:** 85% Ready (Beta) | **Live at:** [app.enclii.dev](https://app.enclii.dev)
+
+| Component | Status | Details |
+|-----------|--------|---------|
+| API | ✅ Running | api.enclii.dev |
+| UI | ✅ Running | app.enclii.dev |
+| Auth | ✅ Janua SSO | auth.madfam.io |
+| Build Pipeline | ✅ Operational | GitHub webhooks + Buildpacks |
+| Docs | ✅ Running | docs.enclii.dev |
+
 ## Quick Start
 
 **New to Enclii?** Start here:
 1. [Quickstart Guide](./getting-started/QUICKSTART.md) - Get up and running in 5 minutes
 2. [Development Setup](./getting-started/DEVELOPMENT.md) - Set up your development environment
-3. [Build Setup](./getting-started/BUILD_SETUP.md) - Understand the build system
+3. [Production Checklist](./production/PRODUCTION_CHECKLIST.md) - Deployment verification
 
 **Want to understand the architecture?** Read:
 - [Architecture Overview](./architecture/ARCHITECTURE.md)
@@ -110,21 +122,32 @@ Implementation status reports and strategy documents.
 - [Main Integration Complete](./implementation/MAIN_INTEGRATION_COMPLETE.md)
 
 ### 📦 Archive
-Historical reports and completed progress tracking documents.
+Historical reports, completed progress tracking documents, and design artifacts.
 
+#### Design Documents (Planning Artifacts)
+- [Design Docs README](./archive/design-docs/README.md) - **Historical design documents**
+- [MVP Implementation Prompt](./archive/design-docs/ENCLII_MVP_IMPLEMENTATION_PROMPT.md)
+- [MVP Parity Prompt V2](./archive/design-docs/ENCLII_MVP_PARITY_PROMPT_V2.md)
+- [SWE Agent Stability Prompt](./archive/design-docs/SWE_AGENT_PROMPT_FULL_STABILITY.md)
+
+#### Sprint Progress Reports
+- [Sprint 0 Complete](./archive/SPRINT_0_COMPLETE.md)
+- [Sprint 0 Progress](./archive/SPRINT_0_PROGRESS.md)
+- [Sprint 1 Progress](./archive/SPRINT_1_PROGRESS.md)
+- [Phase 1 Fixes Complete](./archive/PHASE_1_FIXES_COMPLETE.md)
+- [Phase 2 Auth Security Complete](./archive/PHASE_2_AUTH_SECURITY_COMPLETE.md)
+
+#### Audit Artifacts
 - [Analysis Complete](./archive/ANALYSIS_COMPLETE.md)
 - [Audit Files Reviewed](./archive/AUDIT_FILES_REVIEWED.md)
 - [Audit Issues Tracker](./archive/AUDIT_ISSUES_TRACKER.md)
 - [Audit Logging Provenance](./archive/AUDIT_LOGGING_PROVENANCE.md)
+- [Secret Audit Summary](./archive/SECRET_AUDIT_SUMMARY.md)
+
+#### Other Historical Documents
 - [Cleanup Summary](./archive/CLEANUP_SUMMARY.md)
 - [Documentation Quality Review](./archive/DOCUMENTATION_QUALITY_REVIEW.md)
-- [Phase 1 Fixes Complete](./archive/PHASE_1_FIXES_COMPLETE.md)
-- [Phase 2 Auth Security Complete](./archive/PHASE_2_AUTH_SECURITY_COMPLETE.md)
 - [Refactoring Progress](./archive/REFACTORING_PROGRESS.md)
-- [Secret Audit Summary](./archive/SECRET_AUDIT_SUMMARY.md)
-- [Sprint 0 Complete](./archive/SPRINT_0_COMPLETE.md)
-- [Sprint 0 Progress](./archive/SPRINT_0_PROGRESS.md)
-- [Sprint 1 Progress](./archive/SPRINT_1_PROGRESS.md)
 - [Switchyard Executive Summary](./archive/SWITCHYARD_EXECUTIVE_SUMMARY.md)
 - [Switchyard Gap Report](./archive/SWITCHYARD_GAP_REPORT.md)
 
@@ -204,5 +227,5 @@ When adding new documentation:
 
 ---
 
-**Last Updated:** 2025-11-21
-**Documentation Version:** 2.0 (Reorganized Structure)
+**Last Updated:** 2025-12-11
+**Documentation Version:** 2.1 (Production Beta)

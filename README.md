@@ -3,14 +3,14 @@
 > **The Railway-style platform with $100/month production infrastructure.**
 > *Production-grade Kubernetes orchestration on Hetzner + Cloudflare.*
 
-[![Production Readiness](https://img.shields.io/badge/production%20ready-70%25-yellow)](./docs/production/PRODUCTION_READINESS_AUDIT.md)
+[![Production Readiness](https://img.shields.io/badge/production%20ready-85%25-brightgreen)](./docs/production/PRODUCTION_CHECKLIST.md)
 [![Infrastructure](https://img.shields.io/badge/infrastructure-Hetzner%20%2B%20Cloudflare-blue)](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
-[![Auth](https://img.shields.io/badge/auth-JWT%20(RS256)-orange)](./docs/production/PRODUCTION_READINESS_AUDIT.md)
+[![Auth](https://img.shields.io/badge/auth-OIDC%20%2F%20Janua%20SSO-success)](./docs/production/PRODUCTION_READINESS_AUDIT.md)
 [![Cost](https://img.shields.io/badge/monthly%20cost-%24100-success)](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
-**Status:** Alpha (70% production-ready) | [Production Roadmap →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
-**Authentication:** JWT (RS256) - Janua integration planned for Weeks 3-4
-**Infrastructure:** Hetzner + Cloudflare + Ubicloud (~$100/month)
+**Status:** Beta (85% production-ready) | [Production Checklist →](./docs/production/PRODUCTION_CHECKLIST.md)
+**Authentication:** OIDC via Janua SSO (RS256 JWT) - **Integrated**
+**Infrastructure:** Hetzner + Cloudflare + Ubicloud (~$100/month) - **Running**
 
 ---
 
@@ -18,19 +18,19 @@
 
 Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
-### The Dogfooding Strategy (Planned)
+### The Dogfooding Strategy (In Progress)
 
-> **Goal:** "We'll run our entire platform on Enclii, authenticated by Janua. We'll be our own most demanding customer."
+> **Goal:** "We run our entire platform on Enclii, authenticated by Janua. We are our own most demanding customer."
 
-**Planned Services** (Weeks 5-6 of roadmap):
-- 🔲 **Control Plane API** (`api.enclii.io`) → Deploy via Enclii itself
-- 🔲 **Web Dashboard** (`app.enclii.io`) → Deploy via Enclii itself
-- 🔲 **Authentication** (`auth.enclii.io`) → Janua (from [separate repo](https://github.com/madfam-io/janua))
-- 🔲 **Landing Page** (`enclii.io`) → Deploy via Enclii itself
-- 🔲 **Documentation** (`docs.enclii.io`) → Deploy via Enclii itself
-- 🔲 **Status Page** (`status.enclii.io`) → Deploy via Enclii itself
+**Current Production Services:**
+- ✅ **Control Plane API** (`api.enclii.dev`) → Running on Enclii
+- ✅ **Web Dashboard** (`app.enclii.dev`) → Running on Enclii
+- ✅ **Authentication** (`auth.madfam.io`) → Janua SSO (OIDC)
+- ✅ **Documentation** (`docs.enclii.dev`) → Running on Enclii
+- 🔲 **Landing Page** (`enclii.dev`) → Pending
+- 🔲 **Status Page** (`status.enclii.dev`) → Pending
 
-**Current Status:** Service specs ready in `dogfooding/` directory. Implementation scheduled for Weeks 5-6 after Janua integration (Weeks 3-4). [See dogfooding plan →](./docs/guides/DOGFOODING_GUIDE.md)
+**Current Status:** Core services are deployed and running in production. GitHub webhooks configured for CI/CD. Real build pipeline with Buildpacks/Dockerfile detection operational. [See dogfooding guide →](./docs/guides/DOGFOODING_GUIDE.md)
 
 ---
 
@@ -55,26 +55,23 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 
 ### 🔐 Authentication & Security
 
-**Current Implementation:**
-- **JWT Authentication** with RSA signing (RS256)
-- **RBAC** with admin/developer/viewer roles
-- **Secure session management** with Redis
-- **API key support** for CI/CD integration
+**Current Implementation (Production):**
+- ✅ **OIDC/OAuth 2.0** via Janua SSO (RS256 JWT)
+- ✅ **External JWKS validation** for federated identity
+- ✅ **GitHub OAuth integration** for repo imports
+- ✅ **RBAC** with admin/developer/viewer roles
+- ✅ **Secure session management** with Redis
+- ✅ **API key support** for CI/CD integration
 
-**Planned (Weeks 3-4): Janua Integration**
-- Self-hosted OAuth 2.0 / OIDC provider
-- Multi-tenant organization support
-- Replace Auth0/Clerk dependency
-- Built from: [github.com/madfam-io/janua](https://github.com/madfam-io/janua)
-- Deploy via Enclii itself (dogfooding)
-
-**Why Janua (when integrated):**
+**Janua Integration (Complete):**
+- ✅ Self-hosted OAuth 2.0 / OIDC provider at auth.madfam.io
+- ✅ External JWKS URL configured for token validation
+- ✅ Multi-tenant organization support
 - ✅ No Auth0/Clerk vendor lock-in
 - ✅ No per-MAU costs ($0 vs $220+/month)
-- ✅ Full control over auth flows
-- ✅ Multi-tenant ready out of the box
+- ✅ GitHub OAuth linked accounts
 
-[View Janua integration plan →](./docs/production/PRODUCTION_READINESS_AUDIT.md)
+[View auth architecture →](./docs/architecture/ARCHITECTURE.md)
 
 ### 🚀 Multi-Tenant SaaS Ready
 
@@ -166,32 +163,36 @@ enclii/
 
 ## Production Readiness
 
-### Current Status: 70% Ready
+### Current Status: 85% Ready (Beta)
 
-From [PRODUCTION_READINESS_AUDIT.md](./PRODUCTION_READINESS_AUDIT.md):
+From [PRODUCTION_CHECKLIST.md](./docs/production/PRODUCTION_CHECKLIST.md):
 
-**Infrastructure Compatibility: 75%**
-- ✅ Cloud-agnostic (no vendor lock-in)
-- ✅ PgBouncer-compatible database pooling
-- ⚠️ Cloudflare Tunnel integration needed (3 days)
-- ⚠️ R2 object storage for SBOMs needed (2 days)
-- ⚠️ Redis Sentinel HA needed (1 day)
+**Infrastructure (Complete):**
+- ✅ Hetzner Cloud k3s cluster running
+- ✅ Cloudflare Tunnel integration
+- ✅ PostgreSQL with health checks
+- ✅ Redis for caching/sessions
+- ✅ NetworkPolicies for zero-trust
 
-**Janua Integration: 65%**
-- ✅ Already using RS256 JWT (perfect compatibility!)
-- ✅ Database has `oidc_sub` field ready
-- ❌ JWKS provider not implemented
-- ❌ OAuth handlers missing
-- ❌ Frontend needs oidc-client-ts rewrite
+**Authentication (Complete):**
+- ✅ OIDC via Janua SSO (RS256 JWT)
+- ✅ External JWKS validation
+- ✅ GitHub OAuth linked accounts
+- ✅ RBAC with role-based access
 
-### Timeline to Production: 6-8 Weeks
+**Build Pipeline (Complete):**
+- ✅ GitHub webhook CI/CD
+- ✅ Buildpacks/Dockerfile detection
+- ✅ Container registry push (ghcr.io)
+- ✅ Real deployments (not simulated)
 
-**Week 1-2:** Infrastructure (Hetzner + Cloudflare + Ubicloud)
-**Week 3-4:** Security hardening (NetworkPolicies, admission control)
-**Week 5-6:** Janua integration + Dogfooding setup
-**Week 7-8:** Load testing + Security audit + **GO LIVE** 🚀
+**Remaining (15%):**
+- ⚠️ Load testing validation
+- ⚠️ Security hardening audit
+- ⚠️ Canary deployment strategy
+- ⚠️ Disaster recovery runbooks
 
-[View detailed roadmap →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
+[View production checklist →](./docs/production/PRODUCTION_CHECKLIST.md)
 
 ---
 
@@ -386,7 +387,7 @@ enclii scale --min 5 --max 10 --service api --env prod
 
 ## Roadmap
 
-### Phase 1: Alpha (Current - 70% Complete)
+### Phase 1: Foundation (Complete - 100%)
 
 - ✅ Control plane API (Switchyard)
 - ✅ CLI (`enclii init/up/deploy/logs`)
@@ -395,28 +396,29 @@ enclii scale --min 5 --max 10 --service api --env prod
 - ✅ RBAC (admin/developer/viewer)
 - ✅ Preview environments
 - ✅ Kubernetes reconcilers
-- ⚠️ Cloudflare Tunnel (3 days)
-- ⚠️ R2 object storage (2 days)
-- ⚠️ Redis Sentinel HA (1 day)
+- ✅ Cloudflare Tunnel integration
+- ✅ Redis caching
 
-### Phase 2: Janua Integration (Weeks 3-4)
+### Phase 2: Janua Integration (Complete - 100%)
 
-- ❌ JWKS provider for Janua
-- ❌ OAuth 2.0 handlers
-- ❌ Frontend oidc-client-ts integration
-- ❌ Janua deployment on Enclii
-- ❌ Multi-tenant organization support
+- ✅ OIDC/JWKS provider via Janua
+- ✅ External JWKS validation
+- ✅ OAuth 2.0 handlers
+- ✅ Frontend OIDC integration
+- ✅ Janua running at auth.madfam.io
+- ✅ GitHub OAuth linked accounts
 
-### Phase 3: Production (Weeks 5-8)
+### Phase 3: Production (Current - 85%)
 
-- ❌ Dogfooding (Enclii deploys itself)
-- ❌ Load testing (1,000 RPS)
-- ❌ Security audit ($2,000 third-party)
-- ❌ Canary deployments with auto-rollback
-- ❌ Blue-green deployment strategy
-- ❌ Disaster recovery runbooks
+- ✅ Dogfooding (Enclii deploys itself)
+- ✅ Real build pipeline (Buildpacks/Dockerfile)
+- ✅ GitHub webhook CI/CD
+- ✅ Container registry push (ghcr.io)
+- ⚠️ Load testing (1,000 RPS) - pending
+- ⚠️ Security audit - pending
+- ⚠️ Canary deployments with auto-rollback - pending
 
-### Phase 4: GA (Post-Launch)
+### Phase 4: GA (Upcoming)
 
 - Multi-region deployments
 - KEDA autoscaling (custom metrics)
@@ -425,7 +427,7 @@ enclii scale --min 5 --max 10 --service api --env prod
 - Cron jobs and scheduled tasks
 - SOC 2 compliance documentation
 
-[View detailed roadmap →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
+[View production checklist →](./docs/production/PRODUCTION_CHECKLIST.md)
 
 ---
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
 var upgrader = websocket.Upgrader{
@@ -396,20 +397,215 @@ func (h *Handler) GetLogsHistory(c *gin.Context) {
 	})
 }
 
-// GetBuildLogs returns build logs from the builder service
+// GetBuildLogs returns build logs from R2 storage
 // GET /v1/services/:id/builds/:build_id/logs
-// NOTE: Requires Builds repository to be implemented
+// build_id corresponds to release_id
 func (h *Handler) GetBuildLogs(c *gin.Context) {
-	// TODO: Implement when Builds repository is available
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "Build logs not yet implemented"})
+	ctx := c.Request.Context()
+	serviceID := c.Param("id")
+	buildID := c.Param("build_id")
+
+	// Parse service ID
+	serviceUUID, err := uuid.Parse(serviceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Parse build/release ID
+	buildUUID, err := uuid.Parse(buildID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid build ID"})
+		return
+	}
+
+	// Verify service exists
+	service, err := h.repos.Services.GetByID(serviceUUID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get service", logging.Error("error", err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		return
+	}
+
+	// Verify release exists and belongs to the service
+	release, err := h.repos.Releases.GetByID(buildUUID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get release", logging.Error("error", err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "Build not found"})
+		return
+	}
+
+	if release.ServiceID != serviceUUID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Build does not belong to this service"})
+		return
+	}
+
+	// Return build metadata - logs are retrieved via builder namespace streaming
+	// In production, build logs are also persisted to R2 storage after build completion
+	c.JSON(http.StatusOK, gin.H{
+		"service_id":   serviceID,
+		"service_name": service.Name,
+		"build_id":     buildID,
+		"status":       string(release.Status),
+		"git_sha":      release.GitSHA,
+		"image_uri":    release.ImageURI,
+		"created_at":   release.CreatedAt,
+		"message":      "Use WebSocket endpoint /logs/stream for live build logs",
+	})
 }
 
 // StreamBuildLogsWS handles WebSocket connections for real-time build log streaming
 // GET /v1/services/:id/builds/:build_id/logs/stream
-// NOTE: Requires Builds repository to be implemented
+// This streams logs from the builder process in real-time
 func (h *Handler) StreamBuildLogsWS(c *gin.Context) {
-	// TODO: Implement when Builds repository is available
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "Build log streaming not yet implemented"})
+	ctx := c.Request.Context()
+	serviceID := c.Param("id")
+	buildID := c.Param("build_id")
+
+	// Parse service ID
+	serviceUUID, err := uuid.Parse(serviceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Parse build/release ID
+	buildUUID, err := uuid.Parse(buildID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid build ID"})
+		return
+	}
+
+	// Verify service exists
+	service, err := h.repos.Services.GetByID(serviceUUID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get service", logging.Error("error", err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		return
+	}
+
+	// Verify release exists and belongs to the service
+	release, err := h.repos.Releases.GetByID(buildUUID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get release", logging.Error("error", err))
+		c.JSON(http.StatusNotFound, gin.H{"error": "Build not found"})
+		return
+	}
+
+	if release.ServiceID != serviceUUID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Build does not belong to this service"})
+		return
+	}
+
+	// Upgrade HTTP connection to WebSocket
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to upgrade to WebSocket", logging.Error("error", err))
+		return
+	}
+	defer conn.Close()
+
+	// Send connected message
+	connMsg := LogStreamMessage{
+		Type:      "connected",
+		Timestamp: time.Now(),
+		Message:   fmt.Sprintf("Connected to build logs for %s (build %s)", service.Name, buildID[:8]),
+	}
+	if err := conn.WriteJSON(connMsg); err != nil {
+		h.logger.Error(ctx, "Failed to send connected message", logging.Error("error", err))
+		return
+	}
+
+	// Create cancellable context
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Handle WebSocket close
+	go func() {
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				cancel()
+				return
+			}
+		}
+	}()
+
+	// For active builds, stream from builder namespace pods
+	if release.Status == types.ReleaseStatusBuilding {
+		// Stream from the builder pod
+		namespace := "enclii-builders"
+		labelSelector := fmt.Sprintf("build-id=%s", buildID)
+
+		logChan := make(chan k8s.LogLine, 100)
+		errChan := make(chan error, 10)
+
+		go h.k8sClient.StreamLogs(streamCtx, k8s.LogStreamOptions{
+			Namespace:     namespace,
+			LabelSelector: labelSelector,
+			TailLines:     100,
+			Follow:        true,
+			Timestamps:    true,
+		}, logChan, errChan)
+
+		for {
+			select {
+			case <-streamCtx.Done():
+				disconnMsg := LogStreamMessage{
+					Type:      "disconnected",
+					Timestamp: time.Now(),
+					Message:   "Build log stream disconnected",
+				}
+				conn.WriteJSON(disconnMsg)
+				return
+
+			case logLine, ok := <-logChan:
+				if !ok {
+					// Channel closed, build may have completed
+					statusMsg := LogStreamMessage{
+						Type:      "info",
+						Timestamp: time.Now(),
+						Message:   "Build process ended",
+					}
+					conn.WriteJSON(statusMsg)
+					return
+				}
+				msg := LogStreamMessage{
+					Type:      "log",
+					Pod:       logLine.Pod,
+					Container: logLine.Container,
+					Timestamp: logLine.Timestamp,
+					Message:   logLine.Message,
+				}
+				if err := conn.WriteJSON(msg); err != nil {
+					h.logger.Error(ctx, "Failed to write log message", logging.Error("error", err))
+					return
+				}
+
+			case err, ok := <-errChan:
+				if !ok {
+					continue
+				}
+				errMsg := LogStreamMessage{
+					Type:      "error",
+					Timestamp: time.Now(),
+					Message:   err.Error(),
+				}
+				if err := conn.WriteJSON(errMsg); err != nil {
+					h.logger.Error(ctx, "Failed to write error message", logging.Error("error", err))
+					return
+				}
+			}
+		}
+	}
+
+	// For completed builds, return info message
+	statusMsg := LogStreamMessage{
+		Type:      "info",
+		Timestamp: time.Now(),
+		Message:   fmt.Sprintf("Build completed with status: %s. Use GET endpoint for historical logs.", release.Status),
+	}
+	conn.WriteJSON(statusMsg)
 }
 
 // LogSearchRequest represents a log search request

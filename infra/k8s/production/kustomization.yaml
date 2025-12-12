@@ -8,6 +8,7 @@ resources:
   - cloudflared.yaml
   - redis-sentinel.yaml
   - oidc-secrets.yaml
+  - build-secrets.yaml
 
 patchesStrategicMerge:
   - replicas-patch.yaml

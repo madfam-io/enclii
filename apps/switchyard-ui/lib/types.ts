@@ -80,9 +80,13 @@ export interface Project {
   id: string;
   name: string;
   slug: string;
-  description: string;
+  description?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface ProjectsResponse {
+  projects: Project[];
 }
 
 // ============================================================================

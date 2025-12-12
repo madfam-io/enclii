@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiGet, apiPost } from "@/lib/api";
-import type { AnalysisResult, DetectedService, GitHubBranch, BranchesResponse, Project } from "@/lib/types";
+import type { AnalysisResult, DetectedService, GitHubBranch, BranchesResponse, Project, ProjectsResponse } from "@/lib/types";
 
 // Icons
 const GithubIcon = () => (
@@ -94,10 +94,10 @@ export default function AnalyzeRepositoryPage({ params }: PageProps) {
       try {
         const [branchesResp, projectsResp] = await Promise.all([
           apiGet<BranchesResponse>(`/v1/integrations/github/repos/${owner}/${repo}/branches`),
-          apiGet<Project[]>('/v1/projects'),
+          apiGet<ProjectsResponse>('/v1/projects'),
         ]);
         setBranches(branchesResp.branches || []);
-        setProjects(projectsResp || []);
+        setProjects(projectsResp.projects || []);
 
         // Auto-analyze with initial branch
         analyzeRepository(initialBranch);

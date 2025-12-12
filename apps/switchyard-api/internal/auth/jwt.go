@@ -322,23 +322,31 @@ func (j *JWTManager) validateRefreshToken(tokenString string) (*Claims, error) {
 }
 
 // Middleware functions
+// AuthMiddleware supports both Authorization header and query parameter (for WebSocket connections)
 func (j *JWTManager) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var tokenString string
+
+		// Try Authorization header first (standard method)
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
+		if authHeader != "" {
+			bearerToken := strings.Split(authHeader, " ")
+			if len(bearerToken) == 2 && bearerToken[0] == "Bearer" {
+				tokenString = bearerToken[1]
+			}
+		}
+
+		// Fall back to query parameter (for WebSocket connections)
+		// WebSocket API doesn't support custom headers, so token is passed via query param
+		if tokenString == "" {
+			tokenString = c.Query("token")
+		}
+
+		if tokenString == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization required (header or token query param)"})
 			c.Abort()
 			return
 		}
-
-		bearerToken := strings.Split(authHeader, " ")
-		if len(bearerToken) != 2 || bearerToken[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
-			c.Abort()
-			return
-		}
-
-		tokenString := bearerToken[1]
 
 		// Try local token validation first
 		claims, err := j.ValidateToken(tokenString)

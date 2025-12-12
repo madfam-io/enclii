@@ -114,12 +114,14 @@ func main() {
 
 	// Initialize builder service
 	builderService := builder.NewService(&builder.Config{
-		WorkDir:      cfg.BuildWorkDir,
-		Registry:     cfg.Registry,
-		CacheDir:     cfg.BuildCacheDir,
-		Timeout:      time.Duration(cfg.BuildTimeout) * time.Second,
-		GenerateSBOM: true, // Enable SBOM generation with Syft
-		SignImages:   true, // Enable image signing with Cosign
+		WorkDir:          cfg.BuildWorkDir,
+		Registry:         cfg.Registry,
+		RegistryUsername: cfg.RegistryUsername,
+		RegistryPassword: cfg.RegistryPassword,
+		CacheDir:         cfg.BuildCacheDir,
+		Timeout:          time.Duration(cfg.BuildTimeout) * time.Second,
+		GenerateSBOM:     true, // Enable SBOM generation with Syft
+		SignImages:       true, // Enable image signing with Cosign
 	}, logrus.StandardLogger())
 
 	// Ensure build directories exist

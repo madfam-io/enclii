@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -13,16 +14,20 @@ import (
 )
 
 type BuildpacksBuilder struct {
-	registry    string
-	cacheDir    string
-	timeout     time.Duration
+	registry         string
+	registryUsername string
+	registryPassword string
+	cacheDir         string
+	timeout          time.Duration
 }
 
-func NewBuildpacksBuilder(registry string, cacheDir string, timeout time.Duration) *BuildpacksBuilder {
+func NewBuildpacksBuilder(registry, registryUsername, registryPassword, cacheDir string, timeout time.Duration) *BuildpacksBuilder {
 	return &BuildpacksBuilder{
-		registry: registry,
-		cacheDir: cacheDir,
-		timeout:  timeout,
+		registry:         registry,
+		registryUsername: registryUsername,
+		registryPassword: registryPassword,
+		cacheDir:         cacheDir,
+		timeout:          timeout,
 	}
 }
 
@@ -206,7 +211,7 @@ func (b *BuildpacksBuilder) generateImageURI(serviceName, gitSHA string) string 
 
 func (b *BuildpacksBuilder) ValidateTools() error {
 	tools := []string{"pack", "docker"}
-	
+
 	for _, tool := range tools {
 		if _, err := exec.LookPath(tool); err != nil {
 			return fmt.Errorf("%s not found in PATH: %w", tool, err)
@@ -222,11 +227,50 @@ func (b *BuildpacksBuilder) ValidateTools() error {
 	return nil
 }
 
+// DockerLogin authenticates with the container registry
+func (b *BuildpacksBuilder) DockerLogin(ctx context.Context) error {
+	if b.registryUsername == "" || b.registryPassword == "" {
+		logrus.Warn("Registry credentials not configured, skipping docker login")
+		return nil
+	}
+
+	// Extract registry hostname (e.g., ghcr.io from ghcr.io/madfam-io)
+	registryHost := b.registry
+	if idx := len(b.registry); idx > 0 {
+		// Find first slash after protocol
+		for i, c := range b.registry {
+			if c == '/' {
+				registryHost = b.registry[:i]
+				break
+			}
+		}
+	}
+
+	logrus.Infof("Logging in to container registry: %s", registryHost)
+
+	// Use docker login with password from stdin for security
+	cmd := exec.CommandContext(ctx, "docker", "login", registryHost, "-u", b.registryUsername, "--password-stdin")
+	cmd.Stdin = strings.NewReader(b.registryPassword)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker login failed: %w, output: %s", err, string(output))
+	}
+
+	logrus.Info("Successfully authenticated with container registry")
+	return nil
+}
+
 // BuildService is a high-level function that orchestrates the build process
 func (b *BuildpacksBuilder) BuildService(ctx context.Context, service *types.Service, gitSHA string, sourcePath string) (*BuildResult, error) {
 	// Validate tools are available
 	if err := b.ValidateTools(); err != nil {
 		return nil, fmt.Errorf("build tools validation failed: %w", err)
+	}
+
+	// Authenticate with container registry before build
+	if err := b.DockerLogin(ctx); err != nil {
+		return nil, fmt.Errorf("registry authentication failed: %w", err)
 	}
 
 	// Create build request

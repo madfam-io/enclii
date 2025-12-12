@@ -40,7 +40,7 @@ func TestNewBuildpacksBuilder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			builder := NewBuildpacksBuilder(tt.registry, tt.cacheDir, tt.timeout)
+			builder := NewBuildpacksBuilder(tt.registry, "", "", tt.cacheDir, tt.timeout)
 
 			if builder == nil {
 				t.Fatal("NewBuildpacksBuilder() returned nil")
@@ -68,7 +68,7 @@ func TestBuildpacksBuilder_detectBuildStrategy(t *testing.T) {
 
 	os.MkdirAll(tmpDir, 0755)
 
-	builder := NewBuildpacksBuilder("registry.example.com", "/tmp/cache", 30*time.Minute)
+	builder := NewBuildpacksBuilder("registry.example.com", "", "", "/tmp/cache", 30*time.Minute)
 
 	tests := []struct {
 		name        string
@@ -166,7 +166,7 @@ func TestBuildpacksBuilder_detectBuildStrategy(t *testing.T) {
 }
 
 func TestBuildpacksBuilder_generateImageURI(t *testing.T) {
-	builder := NewBuildpacksBuilder("registry.example.com", "/tmp/cache", 30*time.Minute)
+	builder := NewBuildpacksBuilder("registry.example.com", "", "", "/tmp/cache", 30*time.Minute)
 
 	tests := []struct {
 		name        string
@@ -215,7 +215,7 @@ func TestBuildpacksBuilder_generateImageURI(t *testing.T) {
 }
 
 func TestBuildpacksBuilder_generateImageURI_Format(t *testing.T) {
-	builder := NewBuildpacksBuilder("gcr.io/project", "/cache", 30*time.Minute)
+	builder := NewBuildpacksBuilder("gcr.io/project", "", "", "/cache", 30*time.Minute)
 
 	uri := builder.generateImageURI("test-service", "abc123def456")
 
@@ -237,7 +237,7 @@ func TestBuildpacksBuilder_generateImageURI_Format(t *testing.T) {
 }
 
 func TestBuildpacksBuilder_ValidateTools(t *testing.T) {
-	builder := NewBuildpacksBuilder("registry.example.com", "/tmp/cache", 30*time.Minute)
+	builder := NewBuildpacksBuilder("registry.example.com", "", "", "/tmp/cache", 30*time.Minute)
 
 	// This test will fail if pack or docker are not installed
 	// That's expected - we're testing the validation logic
@@ -339,7 +339,7 @@ func TestBuildResult_ErrorCase(t *testing.T) {
 }
 
 func TestBuildpacksBuilder_Build_DetectionError(t *testing.T) {
-	builder := NewBuildpacksBuilder("registry.example.com", "/tmp/cache", 30*time.Minute)
+	builder := NewBuildpacksBuilder("registry.example.com", "", "", "/tmp/cache", 30*time.Minute)
 	ctx := context.Background()
 
 	req := &BuildRequest{
@@ -368,7 +368,7 @@ func TestBuildpacksBuilder_Build_DetectionError(t *testing.T) {
 }
 
 func TestBuildpacksBuilder_BuildService_ToolValidationFails(t *testing.T) {
-	builder := NewBuildpacksBuilder("registry.example.com", "/tmp/cache", 30*time.Minute)
+	builder := NewBuildpacksBuilder("registry.example.com", "", "", "/tmp/cache", 30*time.Minute)
 	ctx := context.Background()
 
 	service := &types.Service{
@@ -403,7 +403,7 @@ func TestBuildpacksBuilder_BuildService_ToolValidationFails(t *testing.T) {
 }
 
 func TestBuildpacksBuilder_ContextCancellation(t *testing.T) {
-	builder := NewBuildpacksBuilder("registry.example.com", "/tmp/cache", 30*time.Minute)
+	builder := NewBuildpacksBuilder("registry.example.com", "", "", "/tmp/cache", 30*time.Minute)
 
 	// Create a cancelled context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -432,7 +432,7 @@ func TestBuildpacksBuilder_ContextCancellation(t *testing.T) {
 
 func TestBuildpacksBuilder_Timeout(t *testing.T) {
 	// Create builder with very short timeout
-	builder := NewBuildpacksBuilder("registry.example.com", "/tmp/cache", 1*time.Millisecond)
+	builder := NewBuildpacksBuilder("registry.example.com", "", "", "/tmp/cache", 1*time.Millisecond)
 
 	ctx := context.Background()
 
@@ -461,7 +461,7 @@ func TestBuildpacksBuilder_Fields(t *testing.T) {
 	cacheDir := "/custom/cache"
 	timeout := 45 * time.Minute
 
-	builder := NewBuildpacksBuilder(registry, cacheDir, timeout)
+	builder := NewBuildpacksBuilder(registry, "", "", cacheDir, timeout)
 
 	if builder.registry != registry {
 		t.Errorf("registry = %s, want %s", builder.registry, registry)
@@ -477,7 +477,7 @@ func TestBuildpacksBuilder_Fields(t *testing.T) {
 }
 
 func TestBuildpacksBuilder_MultipleBuilds(t *testing.T) {
-	builder := NewBuildpacksBuilder("registry.example.com", "/tmp/cache", 30*time.Minute)
+	builder := NewBuildpacksBuilder("registry.example.com", "", "", "/tmp/cache", 30*time.Minute)
 
 	// Test that multiple builds generate different image URIs
 	shas := []string{"abc123def456", "xyz789ghi012", "qwe456rty789"}
@@ -500,7 +500,7 @@ func TestBuildpacksBuilder_MultipleBuilds(t *testing.T) {
 }
 
 func TestBuildpacksBuilder_EnvVariables(t *testing.T) {
-	builder := NewBuildpacksBuilder("registry.example.com", "/tmp/cache", 30*time.Minute)
+	builder := NewBuildpacksBuilder("registry.example.com", "", "", "/tmp/cache", 30*time.Minute)
 	ctx := context.Background()
 
 	env := map[string]string{

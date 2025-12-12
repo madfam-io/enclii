@@ -26,12 +26,14 @@ type Service struct {
 }
 
 type Config struct {
-	WorkDir      string
-	Registry     string
-	CacheDir     string
-	Timeout      time.Duration
-	GenerateSBOM bool // Enable SBOM generation (requires Syft)
-	SignImages   bool // Enable image signing (requires Cosign)
+	WorkDir          string
+	Registry         string
+	RegistryUsername string
+	RegistryPassword string
+	CacheDir         string
+	Timeout          time.Duration
+	GenerateSBOM     bool // Enable SBOM generation (requires Syft)
+	SignImages       bool // Enable image signing (requires Cosign)
 }
 
 func NewService(cfg *Config, logger *logrus.Logger) *Service {
@@ -68,7 +70,7 @@ func NewService(cfg *Config, logger *logrus.Logger) *Service {
 
 	return &Service{
 		git:          NewGitService(cfg.WorkDir),
-		builder:      NewBuildpacksBuilder(cfg.Registry, cfg.CacheDir, cfg.Timeout),
+		builder:      NewBuildpacksBuilder(cfg.Registry, cfg.RegistryUsername, cfg.RegistryPassword, cfg.CacheDir, cfg.Timeout),
 		sbomGen:      sbomGenerator,
 		signer:       imageSigner,
 		logger:       logger,
