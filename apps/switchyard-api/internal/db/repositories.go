@@ -553,11 +553,13 @@ func (r *DeploymentRepository) Create(deployment *types.Deployment) error {
 	deployment.CreatedAt = time.Now()
 	deployment.UpdatedAt = time.Now()
 
+	// Note: group_id and deploy_order columns don't exist in the database yet
+	// They're part of the deployment group feature that hasn't been migrated
 	query := `
-		INSERT INTO deployments (id, release_id, environment_id, group_id, deploy_order, replicas, status, health, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO deployments (id, release_id, environment_id, replicas, status, health, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
-	_, err := r.db.Exec(query, deployment.ID, deployment.ReleaseID, deployment.EnvironmentID, deployment.GroupID, deployment.DeployOrder, deployment.Replicas, deployment.Status, deployment.Health, deployment.CreatedAt, deployment.UpdatedAt)
+	_, err := r.db.Exec(query, deployment.ID, deployment.ReleaseID, deployment.EnvironmentID, deployment.Replicas, deployment.Status, deployment.Health, deployment.CreatedAt, deployment.UpdatedAt)
 	return err
 }
 
@@ -635,7 +637,9 @@ func (r *DeploymentRepository) GetLatestByService(ctx context.Context, serviceID
 }
 
 func (r *DeploymentRepository) GetByStatus(ctx context.Context, status types.DeploymentStatus) ([]*types.Deployment, error) {
-	query := `SELECT id, release_id, environment_id, group_id, deploy_order, replicas, status, health, created_at, updated_at
+	// Note: group_id and deploy_order columns don't exist in the database yet
+	// They're part of the deployment group feature that hasn't been migrated
+	query := `SELECT id, release_id, environment_id, replicas, status, health, created_at, updated_at
 	          FROM deployments WHERE status = $1 ORDER BY created_at ASC`
 
 	rows, err := r.db.QueryContext(ctx, query, status)
@@ -647,20 +651,15 @@ func (r *DeploymentRepository) GetByStatus(ctx context.Context, status types.Dep
 	var deployments []*types.Deployment
 	for rows.Next() {
 		deployment := &types.Deployment{}
-		var groupID sql.NullString
 		err := rows.Scan(
 			&deployment.ID, &deployment.ReleaseID, &deployment.EnvironmentID,
-			&groupID, &deployment.DeployOrder,
 			&deployment.Replicas, &deployment.Status, &deployment.Health,
 			&deployment.CreatedAt, &deployment.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
-		if groupID.Valid {
-			gid, _ := uuid.Parse(groupID.String)
-			deployment.GroupID = &gid
-		}
+		// GroupID and DeployOrder default to nil/0 until feature is migrated
 		deployments = append(deployments, deployment)
 	}
 
@@ -668,37 +667,11 @@ func (r *DeploymentRepository) GetByStatus(ctx context.Context, status types.Dep
 }
 
 // ListByGroup retrieves all deployments for a deployment group
+// Note: This feature is not yet implemented - group_id and deploy_order columns
+// don't exist in the database. Returns empty slice until feature is migrated.
 func (r *DeploymentRepository) ListByGroup(ctx context.Context, groupID uuid.UUID) ([]*types.Deployment, error) {
-	query := `SELECT id, release_id, environment_id, group_id, deploy_order, replicas, status, health, created_at, updated_at
-	          FROM deployments WHERE group_id = $1 ORDER BY deploy_order ASC`
-
-	rows, err := r.db.QueryContext(ctx, query, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var deployments []*types.Deployment
-	for rows.Next() {
-		deployment := &types.Deployment{}
-		var gid sql.NullString
-		err := rows.Scan(
-			&deployment.ID, &deployment.ReleaseID, &deployment.EnvironmentID,
-			&gid, &deployment.DeployOrder,
-			&deployment.Replicas, &deployment.Status, &deployment.Health,
-			&deployment.CreatedAt, &deployment.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		if gid.Valid {
-			parsedGID, _ := uuid.Parse(gid.String)
-			deployment.GroupID = &parsedGID
-		}
-		deployments = append(deployments, deployment)
-	}
-
-	return deployments, nil
+	// Deployment groups feature not yet migrated - return empty slice
+	return []*types.Deployment{}, nil
 }
 
 // UserRepository handles user CRUD operations

@@ -28,6 +28,7 @@ type ReconcileRequest struct {
 	Service       *types.Service
 	Release       *types.Release
 	Deployment    *types.Deployment
+	Environment   *types.Environment // The target environment with kube_namespace
 	CustomDomains []types.CustomDomain
 	Routes        []types.Route
 	EnvVars       map[string]string // User-defined environment variables (decrypted)
@@ -58,8 +59,16 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req *ReconcileRequest
 
 	logger.Info("Starting service reconciliation")
 
+	// Determine the Kubernetes namespace from the environment
+	// Use the environment's kube_namespace if set, otherwise fall back to project-based naming
+	namespace := req.Environment.KubeNamespace
+	if namespace == "" {
+		namespace = fmt.Sprintf("enclii-%s", req.Service.ProjectID)
+		logger.WithField("namespace", namespace).Warn("Environment has no kube_namespace set, using project-based fallback")
+	}
+	logger.WithField("namespace", namespace).Info("Using Kubernetes namespace for deployment")
+
 	// Create namespace if it doesn't exist
-	namespace := fmt.Sprintf("enclii-%s", req.Service.ProjectID)
 	if err := r.ensureNamespace(ctx, namespace); err != nil {
 		return &ReconcileResult{
 			Success: false,
@@ -362,8 +371,17 @@ func (r *ServiceReconciler) applyDeployment(ctx context.Context, deployment *app
 		return fmt.Errorf("failed to get existing deployment: %w", err)
 	}
 
-	// Update existing deployment
+	// Update existing deployment - preserve the immutable selector
+	// Kubernetes doesn't allow changing spec.selector on existing deployments
 	deployment.ResourceVersion = existing.ResourceVersion
+	deployment.Spec.Selector = existing.Spec.Selector
+
+	// Also ensure pod template labels match the selector (required by k8s)
+	// Preserve selector labels in pod template while adding our metadata labels
+	for key, value := range existing.Spec.Selector.MatchLabels {
+		deployment.Spec.Template.Labels[key] = value
+	}
+
 	_, err = deploymentClient.Update(ctx, deployment, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to update deployment: %w", err)
@@ -390,9 +408,17 @@ func (r *ServiceReconciler) applyService(ctx context.Context, service *corev1.Se
 		return fmt.Errorf("failed to get existing service: %w", err)
 	}
 
-	// Update existing service (preserve cluster IP)
+	// Update existing service (preserve cluster IP and selector)
+	// Service selectors should generally match what the deployment is using
 	service.ResourceVersion = existing.ResourceVersion
 	service.Spec.ClusterIP = existing.Spec.ClusterIP
+
+	// Preserve the existing selector to match the deployment's pods
+	// Only use our new selector for new services
+	if len(existing.Spec.Selector) > 0 {
+		service.Spec.Selector = existing.Spec.Selector
+	}
+
 	_, err = serviceClient.Update(ctx, service, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to update service: %w", err)

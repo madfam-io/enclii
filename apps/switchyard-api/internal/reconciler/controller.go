@@ -197,6 +197,17 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 		}
 	}
 
+	// Get environment to determine the target Kubernetes namespace
+	environment, err := c.repositories.Environments.GetByID(ctx, deployment.EnvironmentID)
+	if err != nil {
+		logger.WithError(err).Error("Failed to get environment")
+		return &ReconcileResult{
+			Success: false,
+			Message: "Failed to retrieve environment",
+			Error:   err,
+		}
+	}
+
 	// Get environment variables (decrypted) for this service and environment
 	var envVars map[string]string
 	if c.repositories.EnvVars != nil {
@@ -211,10 +222,11 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 
 	// Create reconcile request
 	req := &ReconcileRequest{
-		Service:    service,
-		Release:    release,
-		Deployment: deployment,
-		EnvVars:    envVars,
+		Service:     service,
+		Release:     release,
+		Deployment:  deployment,
+		Environment: environment,
+		EnvVars:     envVars,
 	}
 	
 	// Perform reconciliation

@@ -38,6 +38,15 @@ func main() {
 		logrus.Fatal("Failed to load configuration:", err)
 	}
 
+	// Set global logrus level based on config
+	// This ensures components using logrus.StandardLogger() also respect the log level
+	logrusLevel, err := logrus.ParseLevel(cfg.LogLevel.String())
+	if err != nil {
+		logrusLevel = logrus.InfoLevel
+	}
+	logrus.SetLevel(logrusLevel)
+	logrus.Infof("Log level set to: %s", logrusLevel.String())
+
 	// Setup logging
 	logger, err := logging.NewStructuredLogger(&logging.LogConfig{
 		Level:       cfg.LogLevel.String(),
@@ -134,6 +143,12 @@ func main() {
 
 	// Initialize reconciler
 	reconcilerController := reconciler.NewController(database, repos, k8sClient, logrus.StandardLogger())
+
+	// Start reconciliation controller (processes pending deployments from database)
+	if err := reconcilerController.Start(ctx); err != nil {
+		logrus.Fatal("Failed to start reconciler controller:", err)
+	}
+	logrus.Info("✓ Reconciliation controller started (processing pending deployments)")
 
 	// Initialize service reconciler (also used directly by API handlers)
 	serviceReconciler := reconciler.NewServiceReconciler(k8sClient, logrus.StandardLogger())
@@ -290,6 +305,10 @@ func main() {
 	}
 
 	// Clean up resources
+	// Stop reconciler controller gracefully
+	reconcilerController.Stop()
+	logrus.Info("Reconciler controller stopped")
+
 	if cacheService != nil {
 		if err := cacheService.Close(); err != nil {
 			logrus.Warnf("Error closing cache connection: %v", err)
