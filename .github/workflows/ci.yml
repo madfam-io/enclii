@@ -275,7 +275,8 @@ jobs:
       - name: Build and push switchyard-ui
         uses: docker/build-push-action@v5
         with:
-          context: apps/switchyard-ui
+          context: .
+          file: apps/switchyard-ui/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}/switchyard-ui:${{ github.sha }}
           cache-from: type=gha
