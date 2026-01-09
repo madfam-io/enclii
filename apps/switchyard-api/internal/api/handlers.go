@@ -48,6 +48,9 @@ type Handler struct {
 	provenanceChecker  *provenance.Checker
 	complianceExporter *compliance.Exporter
 	topologyBuilder    *topology.GraphBuilder
+
+	// Build concurrency control - semaphore to limit concurrent builds (prevents OOM)
+	buildSemaphore chan struct{}
 }
 
 // NewHandler creates a new API handler with all dependencies
@@ -72,6 +75,10 @@ func NewHandler(
 	deploymentService *services.DeploymentService,
 	deploymentGroupService *services.DeploymentGroupService,
 ) *Handler {
+	// Create build semaphore with capacity 1 to serialize builds
+	// This prevents OOM when multiple webhook builds are triggered simultaneously
+	buildSem := make(chan struct{}, 1)
+
 	return &Handler{
 		// Repositories
 		repos: repos,
@@ -97,6 +104,9 @@ func NewHandler(
 		provenanceChecker:  provenanceChecker,
 		complianceExporter: complianceExporter,
 		topologyBuilder:    topologyBuilder,
+
+		// Build concurrency control
+		buildSemaphore: buildSem,
 	}
 }
 
