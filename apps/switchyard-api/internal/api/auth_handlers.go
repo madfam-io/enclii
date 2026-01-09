@@ -221,6 +221,262 @@ func (h *Handler) Register(c *gin.Context) {
 
 // =============== OIDC Authentication Handlers (Phase C) ===============
 
+// SilentAuthResponse contains the silent auth check URL for the frontend iframe
+type SilentAuthResponse struct {
+	AuthURL string `json:"auth_url"`
+}
+
+// OIDCSilentCheck returns a URL for silent authentication check via iframe
+// This endpoint is used by the frontend to check if the user has a valid SSO session
+// without showing a login prompt. The frontend opens this URL in a hidden iframe.
+// GET /v1/auth/silent-check
+func (h *Handler) OIDCSilentCheck(c *gin.Context) {
+	// Check if OIDC mode is enabled
+	if h.config.AuthMode != "oidc" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "OIDC authentication is not enabled",
+		})
+		return
+	}
+
+	// Cast auth manager to OIDC manager
+	oidcMgr, ok := h.auth.(*auth.OIDCManager)
+	if !ok {
+		logrus.Error("Auth manager is not OIDCManager despite OIDC mode being set")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Authentication system misconfigured",
+		})
+		return
+	}
+
+	// Generate random state for CSRF protection
+	state, err := auth.GenerateState()
+	if err != nil {
+		logrus.WithError(err).Error("Failed to generate OAuth state for silent check")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to generate authentication state",
+		})
+		return
+	}
+
+	// Store state in secure cookie with shorter TTL for silent check
+	c.SetCookie(
+		"oauth_state_silent",
+		state,
+		60, // 1 minute (shorter for silent check)
+		"/",
+		"",    // domain
+		true,  // secure
+		true,  // httpOnly
+	)
+	c.SetSameSite(http.SameSiteLaxMode)
+
+	// Build silent callback URL (same as regular callback but with /silent suffix)
+	silentCallbackURL := h.config.OIDCRedirectURL
+	if silentCallbackURL != "" {
+		// Replace /callback with /callback/silent
+		silentCallbackURL = silentCallbackURL[:len(silentCallbackURL)-len("/callback")] + "/callback/silent"
+	}
+
+	// Get silent auth URL with prompt=none
+	authURL := oidcMgr.GetSilentAuthURL(state, silentCallbackURL)
+
+	logrus.WithFields(logrus.Fields{
+		"auth_url":       authURL[:50] + "...",
+		"silent_callback": silentCallbackURL,
+	}).Debug("Generated silent auth URL")
+
+	c.JSON(http.StatusOK, SilentAuthResponse{
+		AuthURL: authURL,
+	})
+}
+
+// OIDCSilentCallback handles the silent OAuth callback from the OIDC provider
+// This is called inside an iframe and posts results back to the parent window
+// GET /v1/auth/callback/silent
+func (h *Handler) OIDCSilentCallback(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Check for error response from OIDC provider
+	// Common errors: login_required, interaction_required, consent_required
+	if errorParam := c.Query("error"); errorParam != "" {
+		errorDesc := c.Query("error_description")
+		logrus.WithFields(logrus.Fields{
+			"error":             errorParam,
+			"error_description": errorDesc,
+		}).Debug("Silent auth returned error (expected for unauthenticated users)")
+
+		// Return HTML that posts error to parent window
+		html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head><title>Silent Auth</title></head>
+<body>
+<script>
+window.parent.postMessage({
+    type: 'silent-auth-result',
+    success: false,
+    error: '%s',
+    error_description: '%s'
+}, window.location.origin);
+</script>
+</body>
+</html>`, errorParam, errorDesc)
+		c.Header("Content-Type", "text/html")
+		c.String(http.StatusOK, html)
+		return
+	}
+
+	// Verify state parameter (CSRF protection)
+	savedState, err := c.Cookie("oauth_state_silent")
+	if err != nil {
+		logrus.WithError(err).Warn("Missing silent OAuth state cookie")
+		html := `<!DOCTYPE html>
+<html>
+<head><title>Silent Auth</title></head>
+<body>
+<script>
+window.parent.postMessage({
+    type: 'silent-auth-result',
+    success: false,
+    error: 'state_missing',
+    error_description: 'State cookie not found'
+}, window.location.origin);
+</script>
+</body>
+</html>`
+		c.Header("Content-Type", "text/html")
+		c.String(http.StatusOK, html)
+		return
+	}
+
+	receivedState := c.Query("state")
+	if savedState != receivedState {
+		logrus.Warn("Silent OAuth state mismatch")
+		html := `<!DOCTYPE html>
+<html>
+<head><title>Silent Auth</title></head>
+<body>
+<script>
+window.parent.postMessage({
+    type: 'silent-auth-result',
+    success: false,
+    error: 'state_mismatch',
+    error_description: 'Invalid state parameter'
+}, window.location.origin);
+</script>
+</body>
+</html>`
+		c.Header("Content-Type", "text/html")
+		c.String(http.StatusOK, html)
+		return
+	}
+
+	// Clear state cookie
+	c.SetCookie("oauth_state_silent", "", -1, "/", "", true, true)
+
+	// Get authorization code
+	code := c.Query("code")
+	if code == "" {
+		html := `<!DOCTYPE html>
+<html>
+<head><title>Silent Auth</title></head>
+<body>
+<script>
+window.parent.postMessage({
+    type: 'silent-auth-result',
+    success: false,
+    error: 'no_code',
+    error_description: 'No authorization code received'
+}, window.location.origin);
+</script>
+</body>
+</html>`
+		c.Header("Content-Type", "text/html")
+		c.String(http.StatusOK, html)
+		return
+	}
+
+	// Exchange code for tokens
+	oidcMgr, ok := h.auth.(*auth.OIDCManager)
+	if !ok {
+		html := `<!DOCTYPE html>
+<html>
+<head><title>Silent Auth</title></head>
+<body>
+<script>
+window.parent.postMessage({
+    type: 'silent-auth-result',
+    success: false,
+    error: 'config_error',
+    error_description: 'Authentication system misconfigured'
+}, window.location.origin);
+</script>
+</body>
+</html>`
+		c.Header("Content-Type", "text/html")
+		c.String(http.StatusOK, html)
+		return
+	}
+
+	tokens, err := oidcMgr.HandleCallback(ctx, code)
+	if err != nil {
+		logrus.WithError(err).Error("Silent OIDC callback token exchange failed")
+		html := `<!DOCTYPE html>
+<html>
+<head><title>Silent Auth</title></head>
+<body>
+<script>
+window.parent.postMessage({
+    type: 'silent-auth-result',
+    success: false,
+    error: 'token_error',
+    error_description: 'Failed to exchange tokens'
+}, window.location.origin);
+</script>
+</body>
+</html>`
+		c.Header("Content-Type", "text/html")
+		c.String(http.StatusOK, html)
+		return
+	}
+
+	// Success! Post tokens to parent window
+	logrus.Info("Silent authentication successful")
+
+	// Build token data for postMessage
+	idpTokenData := ""
+	if tokens.IDPToken != "" && tokens.IDPTokenExpiresAt != nil {
+		idpTokenData = fmt.Sprintf(`idp_token: '%s', idp_token_expires_at: %d,`,
+			tokens.IDPToken, tokens.IDPTokenExpiresAt.Unix())
+	}
+
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head><title>Silent Auth</title></head>
+<body>
+<script>
+window.parent.postMessage({
+    type: 'silent-auth-result',
+    success: true,
+    access_token: '%s',
+    refresh_token: '%s',
+    expires_at: %d,
+    token_type: '%s',
+    %s
+}, window.location.origin);
+</script>
+</body>
+</html>`,
+		tokens.AccessToken,
+		tokens.RefreshToken,
+		tokens.ExpiresAt.Unix(),
+		tokens.TokenType,
+		idpTokenData)
+
+	c.Header("Content-Type", "text/html")
+	c.String(http.StatusOK, html)
+}
+
 // OIDCLogin redirects to the OIDC provider (Janua) for authentication
 func (h *Handler) OIDCLogin(c *gin.Context) {
 	// Check if OIDC mode is enabled

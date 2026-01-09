@@ -156,6 +156,12 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			// OAuth callback from OIDC provider (rate limited)
 			v1.GET("/auth/callback", authRateLimiter.Middleware(), h.OIDCCallback)
 
+			// Silent auth check for detecting existing SSO sessions (no rate limit - iframe use)
+			v1.GET("/auth/silent-check", h.OIDCSilentCheck)
+
+			// Silent callback for iframe-based auth (no rate limit - iframe use)
+			v1.GET("/auth/callback/silent", h.OIDCSilentCallback)
+
 			// Registration is handled by OIDC provider (Janua)
 			// POST /auth/register is not available in OIDC mode
 

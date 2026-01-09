@@ -139,6 +139,22 @@ func (o *OIDCManager) GetAuthURL(state string) string {
 	return o.oauth2Config.AuthCodeURL(state, oauth2.AccessTypeOffline)
 }
 
+// GetSilentAuthURL returns the OAuth authorization URL with prompt=none for silent authentication
+// This is used to check if the user has an active SSO session without user interaction
+func (o *OIDCManager) GetSilentAuthURL(state string, redirectURL string) string {
+	// Create a copy of oauth2Config with the silent callback URL
+	silentConfig := *o.oauth2Config
+	if redirectURL != "" {
+		silentConfig.RedirectURL = redirectURL
+	}
+	return silentConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "none"))
+}
+
+// GetRedirectURL returns the configured redirect URL
+func (o *OIDCManager) GetRedirectURL() string {
+	return o.oauth2Config.RedirectURL
+}
+
 // HandleCallback processes the OAuth callback and creates/updates user
 func (o *OIDCManager) HandleCallback(ctx context.Context, code string) (*TokenPair, error) {
 	// Exchange authorization code for token

@@ -3,15 +3,18 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSilentAuth } from "@/hooks/useSilentAuth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, loginWithOIDC, isAuthenticated, isLoading, authMode } = useAuth();
+  const { login, loginWithOIDC, isAuthenticated, isLoading, authMode, storeTokensFromRedirect } = useAuth();
+  const { isChecking: isSilentAuthChecking, hasValidSession, tokens: silentAuthTokens } = useSilentAuth();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isProcessingSilentAuth, setIsProcessingSilentAuth] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -19,6 +22,34 @@ export default function LoginPage() {
       router.push("/");
     }
   }, [isAuthenticated, isLoading, router]);
+
+  // Handle successful silent auth - store tokens and redirect
+  useEffect(() => {
+    if (hasValidSession && silentAuthTokens && !isProcessingSilentAuth) {
+      setIsProcessingSilentAuth(true);
+
+      // Convert silent auth tokens to the format expected by storeTokensFromRedirect
+      const tokens = {
+        accessToken: silentAuthTokens.access_token!,
+        refreshToken: silentAuthTokens.refresh_token!,
+        expiresAt: new Date(silentAuthTokens.expires_at! * 1000),
+        tokenType: silentAuthTokens.token_type || 'Bearer',
+        idpToken: silentAuthTokens.idp_token,
+        idpTokenExpiresAt: silentAuthTokens.idp_token_expires_at
+          ? new Date(silentAuthTokens.idp_token_expires_at * 1000)
+          : undefined,
+      };
+
+      storeTokensFromRedirect(tokens)
+        .then(() => {
+          router.push("/");
+        })
+        .catch((err) => {
+          console.error("Failed to store silent auth tokens:", err);
+          setIsProcessingSilentAuth(false);
+        });
+    }
+  }, [hasValidSession, silentAuthTokens, storeTokensFromRedirect, router, isProcessingSilentAuth]);
 
   const handleLocalLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,11 +70,23 @@ export default function LoginPage() {
     loginWithOIDC();
   };
 
-  // Show loading while checking auth state
-  if (isLoading) {
+  // Determine if we're in a loading state
+  const showLoading = isLoading || (authMode === "oidc" && isSilentAuthChecking) || isProcessingSilentAuth;
+
+  // Show loading while checking auth state or performing silent auth
+  if (showLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-enclii-blue"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-enclii-blue mx-auto"></div>
+          <p className="mt-4 text-gray-600">
+            {isProcessingSilentAuth
+              ? "Signing you in..."
+              : isSilentAuthChecking
+                ? "Checking session..."
+                : "Loading..."}
+          </p>
+        </div>
       </div>
     );
   }
