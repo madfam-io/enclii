@@ -68,6 +68,18 @@ data:
         originRequest:
           noTLSVerify: false
 
+      # Landing page (apex domain)
+      - hostname: enclii.dev
+        service: http://landing-page:3000
+        originRequest:
+          noTLSVerify: false
+
+      # Landing page (www subdomain)
+      - hostname: www.enclii.dev
+        service: http://landing-page:3000
+        originRequest:
+          noTLSVerify: false
+
       # Catch-all rule (required)
       - service: http_status:404
 ---
@@ -233,6 +245,13 @@ spec:
         - podSelector:
             matchLabels:
               app: grafana
+      ports:
+        - protocol: TCP
+          port: 3000
+    - to:
+        - podSelector:
+            matchLabels:
+              app: landing-page
       ports:
         - protocol: TCP
           port: 3000

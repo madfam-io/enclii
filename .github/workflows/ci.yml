@@ -300,6 +300,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build and push landing-page
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/landing
+          push: true
+          tags: ghcr.io/${{ github.repository }}/landing-page:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest

@@ -202,7 +202,7 @@ See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_R
 - ✅ `switchyard-ui` → app.enclii.dev (web dashboard)
 - ✅ `janua` → auth.madfam.io (SSO authentication)
 - ✅ `docs-site` → docs.enclii.dev (documentation)
-- 🔲 `landing-page` → enclii.dev (pending)
+- ✅ `landing-page` → enclii.dev (deployed)
 - 🔲 `status-page` → status.enclii.dev (pending)
 
 **Build Pipeline Status:**

@@ -13,6 +13,7 @@ resources:
   - redis.yaml
   - rbac.yaml
   - switchyard-api.yaml
+  - landing-page.yaml
   - ingress-nginx.yaml
   - monitoring.yaml
   - network-policies.yaml

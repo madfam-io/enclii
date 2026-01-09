@@ -1,0 +1,95 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: landing-page
+  labels:
+    app: landing-page
+    app.kubernetes.io/name: landing-page
+    app.kubernetes.io/component: marketing
+    app.kubernetes.io/part-of: enclii
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: landing-page
+  template:
+    metadata:
+      labels:
+        app: landing-page
+        app.kubernetes.io/name: landing-page
+        app.kubernetes.io/component: marketing
+        app.kubernetes.io/part-of: enclii
+    spec:
+      containers:
+        - name: landing-page
+          image: ghcr.io/madfam-io/enclii/landing-page:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: landing-page
+  labels:
+    app: landing-page
+spec:
+  ports:
+    - port: 3000
+      targetPort: 3000
+  selector:
+    app: landing-page
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: landing-page-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: landing-page
