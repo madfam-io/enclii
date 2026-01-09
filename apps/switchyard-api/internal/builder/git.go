@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 )
 
@@ -44,8 +46,11 @@ func (g *GitService) CloneRepository(ctx context.Context, repoURL, gitSHA string
 		GitSHA: gitSHA,
 	}
 
-	// Create a temporary directory for the clone
-	cloneDir := filepath.Join(g.workDir, fmt.Sprintf("build-%s", getShortSHA(gitSHA)))
+	// Create a unique temporary directory for the clone
+	// Using UUID to prevent collisions when building multiple services from same repo
+	uniqueID := uuid.New().String()[:8]
+	timestamp := time.Now().Format("20060102-150405")
+	cloneDir := filepath.Join(g.workDir, fmt.Sprintf("build-%s-%s-%s", getShortSHA(gitSHA), timestamp, uniqueID))
 
 	// Ensure work directory exists
 	if err := os.MkdirAll(g.workDir, 0755); err != nil {
@@ -111,7 +116,10 @@ func (g *GitService) CloneShallow(ctx context.Context, repoURL, gitSHA string) *
 		GitSHA: gitSHA,
 	}
 
-	cloneDir := filepath.Join(g.workDir, fmt.Sprintf("build-%s", getShortSHA(gitSHA)))
+	// Create a unique temporary directory for the clone
+	uniqueID := uuid.New().String()[:8]
+	timestamp := time.Now().Format("20060102-150405")
+	cloneDir := filepath.Join(g.workDir, fmt.Sprintf("build-%s-%s-%s", getShortSHA(gitSHA), timestamp, uniqueID))
 
 	if err := os.MkdirAll(g.workDir, 0755); err != nil {
 		result.Error = fmt.Errorf("failed to create work directory: %w", err)
