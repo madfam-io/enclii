@@ -114,7 +114,7 @@ spec:
       accessMode: ReadWriteOnce
 
   domains:
-    - domain: api.enclii.io
+    - domain: api.enclii.dev
       tls: true
       tlsIssuer: cloudflare
 
@@ -168,7 +168,7 @@ spec:
     - name: NODE_ENV
       value: production
     - name: NEXT_PUBLIC_API_URL
-      value: https://api.enclii.io
+      value: https://api.enclii.dev
 
     # Janua SSO
     - name: NEXT_PUBLIC_JANUA_URL
@@ -189,10 +189,10 @@ spec:
       value: enclii
 
   domains:
-    - domain: app.enclii.io
+    - domain: app.enclii.dev
       tls: true
       tlsIssuer: cloudflare
-    - domain: enclii.io
+    - domain: enclii.dev
       tls: true
       tlsIssuer: cloudflare
 
