@@ -105,7 +105,8 @@ type GitHubPushEvent struct {
 	} `json:"head_commit"`
 }
 
-// handleGitHubPush processes push events and triggers builds for matching services
+// handleGitHubPush processes push events and triggers builds for ALL matching services
+// Supports monorepos where multiple services share the same git repository
 func (h *Handler) handleGitHubPush(c *gin.Context, ctx context.Context, body []byte) {
 	var event GitHubPushEvent
 	if err := json.Unmarshal(body, &event); err != nil {
@@ -135,31 +136,6 @@ func (h *Handler) handleGitHubPush(c *gin.Context, ctx context.Context, body []b
 		return
 	}
 
-	// Find service by git repo URL
-	repoURL := event.Repository.CloneURL
-	service, err := h.repos.Services.GetByGitRepo(repoURL)
-	if err != nil {
-		// Try with HTTPS URL
-		repoURL = event.Repository.HTMLURL
-		service, err = h.repos.Services.GetByGitRepo(repoURL)
-		if err != nil {
-			// Try with SSH URL
-			repoURL = event.Repository.SSHURL
-			service, err = h.repos.Services.GetByGitRepo(repoURL)
-			if err != nil {
-				h.logger.Info(ctx, "No service found for repository",
-					logging.String("repo", event.Repository.FullName),
-					logging.String("clone_url", event.Repository.CloneURL))
-				c.JSON(http.StatusNotFound, gin.H{
-					"error":   "No service registered for this repository",
-					"repo":    event.Repository.FullName,
-					"message": "Register a service with this git_repo URL to enable auto-deploy",
-				})
-				return
-			}
-		}
-	}
-
 	gitSHA := event.After
 	if len(gitSHA) < 7 {
 		h.logger.Error(ctx, "Invalid git SHA in push event",
@@ -168,42 +144,96 @@ func (h *Handler) handleGitHubPush(c *gin.Context, ctx context.Context, body []b
 		return
 	}
 
-	h.logger.Info(ctx, "Triggering build from GitHub webhook",
-		logging.String("service_id", service.ID.String()),
-		logging.String("service_name", service.Name),
+	// Find ALL services matching this git repo (monorepo support)
+	// Try multiple URL formats that GitHub might send
+	var services []*types.Service
+	var err error
+
+	for _, repoURL := range []string{
+		event.Repository.CloneURL,
+		event.Repository.HTMLURL,
+		event.Repository.SSHURL,
+	} {
+		services, err = h.repos.Services.ListByGitRepo(repoURL)
+		if err == nil && len(services) > 0 {
+			break
+		}
+	}
+
+	if len(services) == 0 {
+		h.logger.Info(ctx, "No services found for repository",
+			logging.String("repo", event.Repository.FullName),
+			logging.String("clone_url", event.Repository.CloneURL))
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":   "No services registered for this repository",
+			"repo":    event.Repository.FullName,
+			"message": "Register a service with this git_repo URL to enable auto-deploy",
+		})
+		return
+	}
+
+	h.logger.Info(ctx, "Triggering builds from GitHub webhook (monorepo)",
+		logging.Int("service_count", len(services)),
+		logging.String("repo", event.Repository.FullName),
 		logging.String("git_sha", gitSHA),
 		logging.String("branch", branch),
 		logging.String("pusher", event.Pusher.Name),
 		logging.String("commit_message", truncateString(event.HeadCommit.Message, 100)))
 
-	// Create release record
-	release := &types.Release{
-		ID:        uuid.New(),
-		ServiceID: service.ID,
-		Version:   "v" + time.Now().Format("20060102-150405") + "-" + gitSHA[:7],
-		ImageURI:  h.config.Registry + "/" + service.Name + ":" + gitSHA[:7],
-		GitSHA:    gitSHA,
-		Status:    types.ReleaseStatusBuilding,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	// Trigger builds for ALL matching services
+	type buildResult struct {
+		Service   string `json:"service"`
+		ReleaseID string `json:"release_id"`
+		Status    string `json:"status"`
 	}
+	var results []buildResult
 
-	if err := h.repos.Releases.Create(release); err != nil {
-		h.logger.Error(ctx, "Failed to create release from webhook",
-			logging.Error("db_error", err))
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create release"})
-		return
+	for _, service := range services {
+		// Create release record for this service
+		release := &types.Release{
+			ID:        uuid.New(),
+			ServiceID: service.ID,
+			Version:   "v" + time.Now().Format("20060102-150405") + "-" + gitSHA[:7],
+			ImageURI:  h.config.Registry + "/" + service.Name + ":" + gitSHA[:7],
+			GitSHA:    gitSHA,
+			Status:    types.ReleaseStatusBuilding,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+
+		if err := h.repos.Releases.Create(release); err != nil {
+			h.logger.Error(ctx, "Failed to create release for service",
+				logging.String("service", service.Name),
+				logging.Error("db_error", err))
+			results = append(results, buildResult{
+				Service: service.Name,
+				Status:  "failed: " + err.Error(),
+			})
+			continue
+		}
+
+		// Trigger async build
+		go h.triggerBuild(service, release, gitSHA)
+
+		h.logger.Info(ctx, "Build triggered for service",
+			logging.String("service_id", service.ID.String()),
+			logging.String("service_name", service.Name),
+			logging.String("release_id", release.ID.String()))
+
+		results = append(results, buildResult{
+			Service:   service.Name,
+			ReleaseID: release.ID.String(),
+			Status:    "building",
+		})
 	}
-
-	// Trigger async build
-	go h.triggerBuild(service, release, gitSHA)
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":    "Build triggered",
-		"service":    service.Name,
-		"release_id": release.ID.String(),
-		"git_sha":    gitSHA,
-		"branch":     branch,
+		"message":       fmt.Sprintf("Builds triggered for %d services", len(results)),
+		"repo":          event.Repository.FullName,
+		"git_sha":       gitSHA,
+		"branch":        branch,
+		"builds":        results,
+		"service_count": len(results),
 	})
 }
 
@@ -538,8 +568,25 @@ func (h *Handler) closePreviewEnvironment(c *gin.Context, ctx context.Context, s
 }
 
 // triggerPreviewBuild triggers an async build for a preview environment
+// Uses a semaphore to serialize builds and prevent OOM from concurrent operations
 func (h *Handler) triggerPreviewBuild(service *types.Service, preview *types.PreviewEnvironment, gitSHA string) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	// Acquire build semaphore (blocks if another build is running)
+	h.logger.Info(ctx, "Preview build waiting for build slot",
+		logging.String("preview_id", preview.ID.String()))
+
+	select {
+	case h.buildSemaphore <- struct{}{}:
+		// Acquired semaphore, ensure we release it when done
+		defer func() { <-h.buildSemaphore }()
+	case <-ctx.Done():
+		h.logger.Error(ctx, "Preview build timed out waiting for semaphore",
+			logging.String("preview_id", preview.ID.String()))
+		h.repos.PreviewEnvironments.UpdateStatus(ctx, preview.ID, types.PreviewStatusFailed, "Build timed out waiting for slot")
+		return
+	}
 
 	// Create release for preview
 	release := &types.Release{
