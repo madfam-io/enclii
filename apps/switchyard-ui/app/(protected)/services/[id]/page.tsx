@@ -10,7 +10,7 @@ import { NetworkingTab } from "@/components/networking";
 import { EnvVarsTab } from "@/components/env-vars";
 import { PreviewsTab } from "@/components/previews";
 import { SettingsTab } from "@/components/settings";
-import { LogsTab } from "@/components/logs";
+import { LogsTab } from "@/components/log-viewer";
 
 interface ServiceDetail {
   id: string;
