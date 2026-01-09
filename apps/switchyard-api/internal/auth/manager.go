@@ -29,7 +29,21 @@ func NewAuthManager(
 	repos *db.Repositories,
 	cache SessionRevoker,
 ) (AuthManager, error) {
-	logrus.WithField("auth_mode", cfg.AuthMode).Info("Initializing authentication manager")
+	// Calculate token durations from config
+	accessTokenDuration := time.Duration(cfg.AccessTokenExpireMinutes) * time.Minute
+	if accessTokenDuration == 0 {
+		accessTokenDuration = 15 * time.Minute // fallback default
+	}
+	refreshTokenDuration := time.Duration(cfg.RefreshTokenExpireDays) * 24 * time.Hour
+	if refreshTokenDuration == 0 {
+		refreshTokenDuration = 7 * 24 * time.Hour // fallback default
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"auth_mode":                 cfg.AuthMode,
+		"access_token_expire_mins":  cfg.AccessTokenExpireMinutes,
+		"refresh_token_expire_days": cfg.RefreshTokenExpireDays,
+	}).Info("Initializing authentication manager")
 
 	switch cfg.AuthMode {
 	case "local", "":
@@ -42,8 +56,8 @@ func NewAuthManager(
 			}).Info("Using local JWT authentication with external JWKS validation")
 			jwksCacheTTL := time.Duration(cfg.ExternalJWKSCacheTTL) * time.Second
 			return NewJWTManagerWithExternalJWKS(
-				15*time.Minute,  // access token duration
-				7*24*time.Hour,  // refresh token duration
+				accessTokenDuration,
+				refreshTokenDuration,
 				repos,
 				cache,
 				cfg.ExternalJWKSURL,
@@ -54,8 +68,8 @@ func NewAuthManager(
 		// No external JWKS - use basic local JWT
 		logrus.Info("Using local JWT authentication (bootstrap mode)")
 		return NewJWTManager(
-			15*time.Minute,  // access token duration
-			7*24*time.Hour,  // refresh token duration
+			accessTokenDuration,
+			refreshTokenDuration,
 			repos,
 			cache,
 		)
@@ -93,6 +107,8 @@ func NewAuthManager(
 			cfg.ExternalJWKSURL,
 			cfg.ExternalIssuer,
 			jwksCacheTTL,
+			accessTokenDuration,
+			refreshTokenDuration,
 		)
 
 	default:

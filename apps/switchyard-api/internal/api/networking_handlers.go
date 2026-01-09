@@ -13,9 +13,9 @@ import (
 )
 
 // GetServiceNetworking returns combined networking info for a service
-// GET /api/v1/services/:service_id/networking
+// GET /api/v1/services/:id/networking
 func (h *Handler) GetServiceNetworking(c *gin.Context) {
-	serviceID := c.Param("service_id")
+	serviceID := c.Param("id")
 	if serviceID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "service_id is required"})
 		return

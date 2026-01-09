@@ -356,6 +356,7 @@ type DeploymentStatusInfo struct {
 	UnavailableReplicas int32
 	Generation          int64
 	ObservedGeneration  int64
+	ImageTag            string // Image tag from first container (for version display)
 }
 
 // GetDeploymentStatusInfo returns detailed status information about a deployment
@@ -363,6 +364,16 @@ func (c *Client) GetDeploymentStatusInfo(ctx context.Context, namespace, name st
 	deployment, err := c.Clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	// Extract image tag from first container for version display
+	imageTag := ""
+	if len(deployment.Spec.Template.Spec.Containers) > 0 {
+		image := deployment.Spec.Template.Spec.Containers[0].Image
+		// Extract tag after the last ":"
+		if idx := strings.LastIndex(image, ":"); idx != -1 {
+			imageTag = image[idx+1:]
+		}
 	}
 
 	status := &DeploymentStatusInfo{
@@ -373,6 +384,7 @@ func (c *Client) GetDeploymentStatusInfo(ctx context.Context, namespace, name st
 		UnavailableReplicas: deployment.Status.UnavailableReplicas,
 		Generation:          deployment.Generation,
 		ObservedGeneration:  deployment.Status.ObservedGeneration,
+		ImageTag:            imageTag,
 	}
 
 	return status, nil

@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -105,6 +107,15 @@ func (h *Handler) getDashboardStats(ctx context.Context) (DashboardStats, error)
 			if err == nil && deployment != nil {
 				if deployment.Health == types.HealthStatusHealthy {
 					healthyCount++
+				}
+			} else {
+				// Fallback: Query Kubernetes directly for services without deployment records
+				namespace := strings.ToLower(project.Slug)
+				k8sStatus, err := h.k8sClient.GetDeploymentStatusInfo(ctx, namespace, svc.Name)
+				if err == nil && k8sStatus != nil {
+					if k8sStatus.AvailableReplicas == k8sStatus.Replicas && k8sStatus.Replicas > 0 {
+						healthyCount++
+					}
 				}
 			}
 		}
@@ -244,7 +255,7 @@ func (h *Handler) getServicesOverview(ctx context.Context) ([]ServiceOverview, e
 			version := "N/A"
 			replicas := "0/0"
 
-			// Get latest deployment
+			// Get latest deployment from database
 			deployment, err := h.repos.Deployments.GetLatestByService(ctx, svc.ID.String())
 			if err == nil && deployment != nil {
 				switch deployment.Health {
@@ -261,6 +272,24 @@ func (h *Handler) getServicesOverview(ctx context.Context) ([]ServiceOverview, e
 				release, err := h.repos.Releases.GetByID(deployment.ReleaseID)
 				if err == nil {
 					version = release.Version
+				}
+			} else {
+				// Fallback: Query Kubernetes directly for services without deployment records
+				// This handles services deployed manually via kubectl
+				namespace := strings.ToLower(project.Slug)
+				k8sStatus, err := h.k8sClient.GetDeploymentStatusInfo(ctx, namespace, svc.Name)
+				if err == nil && k8sStatus != nil {
+					// Determine health from K8s replica counts
+					if k8sStatus.AvailableReplicas == k8sStatus.Replicas && k8sStatus.Replicas > 0 {
+						status = "healthy"
+					} else if k8sStatus.AvailableReplicas > 0 {
+						status = "unhealthy"
+					}
+					replicas = fmt.Sprintf("%d/%d", k8sStatus.AvailableReplicas, k8sStatus.Replicas)
+					// Use image tag as version fallback
+					if k8sStatus.ImageTag != "" {
+						version = k8sStatus.ImageTag
+					}
 				}
 			}
 

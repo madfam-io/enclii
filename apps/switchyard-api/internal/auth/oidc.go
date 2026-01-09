@@ -37,8 +37,10 @@ func NewOIDCManager(
 	redirectURL string,
 	repos *db.Repositories,
 	cache SessionRevoker,
+	accessTokenDuration time.Duration,
+	refreshTokenDuration time.Duration,
 ) (*OIDCManager, error) {
-	return NewOIDCManagerWithExternalJWKS(ctx, issuer, clientID, clientSecret, redirectURL, repos, cache, "", "", 0)
+	return NewOIDCManagerWithExternalJWKS(ctx, issuer, clientID, clientSecret, redirectURL, repos, cache, "", "", 0, accessTokenDuration, refreshTokenDuration)
 }
 
 // NewOIDCManagerWithExternalJWKS creates an OIDC manager with external JWKS validation support
@@ -54,7 +56,17 @@ func NewOIDCManagerWithExternalJWKS(
 	externalJWKSURL string,
 	externalIssuer string,
 	jwksCacheTTL time.Duration,
+	accessTokenDuration time.Duration,
+	refreshTokenDuration time.Duration,
 ) (*OIDCManager, error) {
+	// Apply defaults if not specified
+	if accessTokenDuration == 0 {
+		accessTokenDuration = 15 * time.Minute
+	}
+	if refreshTokenDuration == 0 {
+		refreshTokenDuration = 7 * 24 * time.Hour
+	}
+
 	// Discover OIDC provider configuration
 	provider, err := oidc.NewProvider(ctx, issuer)
 	if err != nil {
@@ -79,8 +91,8 @@ func NewOIDCManagerWithExternalJWKS(
 	var jwtManager *JWTManager
 	if externalJWKSURL != "" {
 		jwtManager, err = NewJWTManagerWithExternalJWKS(
-			15*time.Minute,  // access token duration
-			7*24*time.Hour,  // refresh token duration
+			accessTokenDuration,
+			refreshTokenDuration,
 			repos,
 			cache,
 			externalJWKSURL,
@@ -89,8 +101,8 @@ func NewOIDCManagerWithExternalJWKS(
 		)
 	} else {
 		jwtManager, err = NewJWTManager(
-			15*time.Minute,  // access token duration
-			7*24*time.Hour,  // refresh token duration
+			accessTokenDuration,
+			refreshTokenDuration,
 			repos,
 			cache,
 		)
