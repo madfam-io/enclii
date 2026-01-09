@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -299,6 +300,76 @@ func (r *ServiceRepository) GetByGitRepo(gitRepoURL string) (*types.Service, err
 	return service, nil
 }
 
+// ListByGitRepo retrieves ALL services matching a git repository URL
+// Supports monorepos where multiple services share the same repo
+// Normalizes URLs to handle variations like .git suffix, trailing slashes
+func (r *ServiceRepository) ListByGitRepo(gitRepoURL string) ([]*types.Service, error) {
+	// Normalize the input URL for matching
+	normalizedURL := normalizeGitURL(gitRepoURL)
+
+	// Query with normalized URL matching (handles .git suffix variations)
+	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config,
+		auto_deploy, auto_deploy_branch, auto_deploy_env, created_at, updated_at
+		FROM services
+		WHERE REPLACE(REPLACE(git_repo, '.git', ''), 'https://github.com/', '') = $1
+		   OR git_repo = $2
+		   OR git_repo = $3`
+
+	// Try with and without .git suffix
+	urlWithGit := normalizedURL
+	if !strings.HasSuffix(normalizedURL, ".git") {
+		urlWithGit = normalizedURL + ".git"
+	}
+	urlWithoutGit := strings.TrimSuffix(normalizedURL, ".git")
+
+	rows, err := r.db.Query(query,
+		strings.TrimPrefix(strings.TrimPrefix(urlWithoutGit, "https://github.com/"), "http://github.com/"),
+		urlWithGit,
+		urlWithoutGit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var services []*types.Service
+	for rows.Next() {
+		service := &types.Service{}
+		var buildConfigJSON []byte
+		var appPath sql.NullString
+
+		if err := rows.Scan(
+			&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
+			&appPath, &buildConfigJSON, &service.AutoDeploy, &service.AutoDeployBranch,
+			&service.AutoDeployEnv, &service.CreatedAt, &service.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		if appPath.Valid {
+			service.AppPath = appPath.String
+		}
+
+		if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
+		}
+
+		services = append(services, service)
+	}
+
+	return services, nil
+}
+
+// normalizeGitURL normalizes a git repository URL for consistent matching
+func normalizeGitURL(url string) string {
+	// Remove trailing slashes
+	url = strings.TrimSuffix(url, "/")
+	// Ensure https:// prefix
+	if strings.HasPrefix(url, "git@github.com:") {
+		url = strings.Replace(url, "git@github.com:", "https://github.com/", 1)
+	}
+	return url
+}
+
 // Update updates an existing service
 func (r *ServiceRepository) Update(ctx context.Context, service *types.Service) error {
 	service.UpdatedAt = time.Now()
@@ -449,6 +520,12 @@ func (r *ReleaseRepository) Create(release *types.Release) error {
 func (r *ReleaseRepository) UpdateStatus(id uuid.UUID, status types.ReleaseStatus) error {
 	query := `UPDATE releases SET status = $1, updated_at = NOW() WHERE id = $2`
 	_, err := r.db.Exec(query, status, id)
+	return err
+}
+
+func (r *ReleaseRepository) UpdateImageURI(id uuid.UUID, imageURI string) error {
+	query := `UPDATE releases SET image_uri = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.db.Exec(query, imageURI, id)
 	return err
 }
 

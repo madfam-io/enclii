@@ -65,9 +65,26 @@ func (h *Handler) BuildService(c *gin.Context) {
 }
 
 // triggerBuild is a helper method that executes the build process asynchronously
+// Uses a semaphore to serialize builds and prevent OOM from concurrent operations
 func (h *Handler) triggerBuild(service *types.Service, release *types.Release, gitSHA string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
+
+	// Acquire build semaphore (blocks if another build is running)
+	h.logger.Info(ctx, "Waiting for build slot",
+		logging.String("service_id", service.ID.String()),
+		logging.String("release_id", release.ID.String()))
+
+	select {
+	case h.buildSemaphore <- struct{}{}:
+		// Acquired semaphore, ensure we release it when done
+		defer func() { <-h.buildSemaphore }()
+	case <-ctx.Done():
+		h.logger.Error(ctx, "Build timed out waiting for semaphore",
+			logging.String("release_id", release.ID.String()))
+		h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
+		return
+	}
 
 	h.logger.Info(ctx, "Starting build process",
 		logging.String("service_id", service.ID.String()),
@@ -94,6 +111,14 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 
 	// Update release with image URI and mark as ready
 	release.ImageURI = buildResult.ImageURI
+
+	// Persist the actual image URI to the database (builder generates versioned tags)
+	if err := h.repos.Releases.UpdateImageURI(release.ID, buildResult.ImageURI); err != nil {
+		h.logger.Error(ctx, "Failed to update release image URI", logging.Error("db_error", err))
+		h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
+		return
+	}
+	h.logger.Info(ctx, "✓ Release image URI updated", logging.String("image_uri", buildResult.ImageURI))
 
 	// Store SBOM if generated
 	if buildResult.SBOMGenerated && buildResult.SBOM != nil {

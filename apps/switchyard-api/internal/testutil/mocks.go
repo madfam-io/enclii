@@ -212,6 +212,16 @@ func (m *MockReleaseRepository) UpdateStatus(id uuid.UUID, status types.ReleaseS
 	return errors.ErrNotFound
 }
 
+func (m *MockReleaseRepository) UpdateImageURI(id uuid.UUID, imageURI string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r, ok := m.releases[id]; ok {
+		r.ImageURI = imageURI
+		return nil
+	}
+	return errors.ErrNotFound
+}
+
 func (m *MockReleaseRepository) UpdateSBOM(ctx context.Context, id uuid.UUID, sbom, sbomFormat string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
