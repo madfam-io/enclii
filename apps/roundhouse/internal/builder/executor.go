@@ -392,7 +392,7 @@ func (e *Executor) runWithLogs(cmd *exec.Cmd, jobID uuid.UUID) error {
 func (e *Executor) streamOutput(jobID uuid.UUID, reader io.Reader) {
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
-		e.log(jobID, scanner.Text())
+		e.log(jobID, "%s", scanner.Text())
 	}
 }
 
@@ -408,6 +408,6 @@ func (e *Executor) failResult(result *queue.BuildResult, startTime time.Time, fo
 	result.Success = false
 	result.ErrorMessage = fmt.Sprintf(format, args...)
 	result.DurationSecs = time.Since(startTime).Seconds()
-	e.log(result.JobID, "❌ "+result.ErrorMessage)
-	return result, fmt.Errorf(result.ErrorMessage)
+	e.log(result.JobID, "❌ %s", result.ErrorMessage)
+	return result, fmt.Errorf("%s", result.ErrorMessage)
 }

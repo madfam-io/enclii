@@ -1,8 +1,6 @@
 package api
 
 import (
-	"io"
-
 	"github.com/gin-gonic/gin"
 	"github.com/madfam/enclii/apps/roundhouse/internal/queue"
 	"github.com/madfam/enclii/apps/roundhouse/internal/webhook"
