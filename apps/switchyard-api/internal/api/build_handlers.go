@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -186,11 +187,30 @@ func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service,
 	// Look up the target environment
 	env, err := h.repos.Environments.GetByProjectAndName(service.ProjectID, service.AutoDeployEnv)
 	if err != nil {
-		h.logger.Error(ctx, "Auto-deploy failed: environment not found",
+		// Environment doesn't exist - auto-create it
+		h.logger.Info(ctx, "Auto-creating missing environment for auto-deploy",
 			logging.String("environment", service.AutoDeployEnv),
-			logging.String("project_id", service.ProjectID.String()),
-			logging.Error("db_error", err))
-		return
+			logging.String("project_id", service.ProjectID.String()))
+
+		// Generate kubernetes namespace from environment name
+		kubeNamespace := "enclii-" + strings.ToLower(strings.ReplaceAll(service.AutoDeployEnv, "_", "-"))
+
+		env = &types.Environment{
+			ProjectID:     service.ProjectID,
+			Name:          service.AutoDeployEnv,
+			KubeNamespace: kubeNamespace,
+		}
+		if err := h.repos.Environments.Create(env); err != nil {
+			h.logger.Error(ctx, "Auto-deploy failed: could not create environment",
+				logging.String("environment", service.AutoDeployEnv),
+				logging.Error("db_error", err))
+			return
+		}
+
+		h.logger.Info(ctx, "Successfully created environment for auto-deploy",
+			logging.String("environment_id", env.ID.String()),
+			logging.String("environment", service.AutoDeployEnv),
+			logging.String("kube_namespace", kubeNamespace))
 	}
 
 	// Create deployment record

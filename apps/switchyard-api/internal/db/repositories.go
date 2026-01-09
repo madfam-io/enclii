@@ -150,16 +150,27 @@ func (r *ServiceRepository) Create(service *types.Service) error {
 	service.CreatedAt = time.Now()
 	service.UpdatedAt = time.Now()
 
+	// Set sensible defaults for auto-deploy if not provided
+	if service.AutoDeployBranch == "" {
+		service.AutoDeployBranch = "main"
+	}
+	if service.AutoDeployEnv == "" {
+		service.AutoDeployEnv = "production"
+	}
+
 	buildConfigJSON, err := json.Marshal(service.BuildConfig)
 	if err != nil {
 		return fmt.Errorf("failed to marshal build config: %w", err)
 	}
 
 	query := `
-		INSERT INTO services (id, project_id, name, git_repo, app_path, build_config, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO services (id, project_id, name, git_repo, app_path, build_config,
+			auto_deploy, auto_deploy_branch, auto_deploy_env, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
-	_, err = r.db.Exec(query, service.ID, service.ProjectID, service.Name, service.GitRepo, service.AppPath, buildConfigJSON, service.CreatedAt, service.UpdatedAt)
+	_, err = r.db.Exec(query, service.ID, service.ProjectID, service.Name, service.GitRepo,
+		service.AppPath, buildConfigJSON, service.AutoDeploy, service.AutoDeployBranch,
+		service.AutoDeployEnv, service.CreatedAt, service.UpdatedAt)
 	return err
 }
 

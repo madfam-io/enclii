@@ -131,7 +131,9 @@ type CreateServiceRequest struct {
 	Name             string
 	GitRepo          string
 	AppPath          string // Monorepo subdirectory path (e.g., "apps/api")
+	AutoDeploy       *bool  // Enable auto-deploy (defaults to true if nil)
 	AutoDeployBranch string // Branch for auto-deploy (e.g., "main")
+	AutoDeployEnv    string // Environment for auto-deploy (e.g., "production")
 	BuildConfig      types.BuildConfig
 	UserID           string
 	UserEmail        string
@@ -173,6 +175,23 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 		"git_repo":   req.GitRepo,
 	}).Info("Creating new service")
 
+	// Determine auto-deploy settings with sensible defaults
+	autoDeploy := true // Default to enabled
+	if req.AutoDeploy != nil {
+		autoDeploy = *req.AutoDeploy
+	}
+
+	autoDeployBranch := req.AutoDeployBranch
+	if autoDeployBranch == "" {
+		autoDeployBranch = "main"
+	}
+
+	autoDeployEnv := req.AutoDeployEnv
+	if autoDeployEnv == "" {
+		// Try to find an existing environment for auto-deploy
+		autoDeployEnv = s.determineAutoDeployEnv(ctx, projectID)
+	}
+
 	// Create service
 	service := &types.Service{
 		ID:               uuid.New(),
@@ -181,7 +200,9 @@ func (s *ProjectService) CreateService(ctx context.Context, req *CreateServiceRe
 		GitRepo:          req.GitRepo,
 		AppPath:          req.AppPath,
 		BuildConfig:      req.BuildConfig,
-		AutoDeployBranch: req.AutoDeployBranch,
+		AutoDeploy:       autoDeploy,
+		AutoDeployBranch: autoDeployBranch,
+		AutoDeployEnv:    autoDeployEnv,
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
 	}
@@ -322,6 +343,28 @@ func isValidGitRepo(repo string) bool {
 	return strings.HasPrefix(repo, "http://") ||
 		strings.HasPrefix(repo, "https://") ||
 		strings.HasPrefix(repo, "git@")
+}
+
+// determineAutoDeployEnv finds the best environment for auto-deploy
+// Priority: "production" > "prod" > first available environment > "production" (default)
+func (s *ProjectService) determineAutoDeployEnv(_ context.Context, projectID uuid.UUID) string {
+	// First, try to find common production environment names
+	for _, envName := range []string{"production", "prod"} {
+		env, err := s.repos.Environments.GetByProjectAndName(projectID, envName)
+		if err == nil && env != nil {
+			return envName
+		}
+	}
+
+	// Fallback: get first environment in project
+	envs, err := s.repos.Environments.ListByProject(projectID)
+	if err == nil && len(envs) > 0 {
+		return envs[0].Name
+	}
+
+	// Default to "production" even if it doesn't exist yet
+	// The environment will be auto-created during deployment
+	return "production"
 }
 
 // GenerateSlug generates a URL-friendly slug from a name
