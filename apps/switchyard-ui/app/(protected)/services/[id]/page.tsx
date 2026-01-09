@@ -11,6 +11,7 @@ import { EnvVarsTab } from "@/components/env-vars";
 import { PreviewsTab } from "@/components/previews";
 import { SettingsTab } from "@/components/settings";
 import { LogsTab } from "@/components/log-viewer";
+import { DeploymentsTab, BuildLogsViewer } from "@/components/deployments";
 
 interface ServiceDetail {
   id: string;
@@ -196,6 +197,7 @@ export default function ServiceDetailPage() {
           <TabsTrigger value="env-vars">Environment</TabsTrigger>
           <TabsTrigger value="networking">Networking</TabsTrigger>
           <TabsTrigger value="deployments">Deployments</TabsTrigger>
+          <TabsTrigger value="builds">Builds</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
@@ -391,26 +393,12 @@ export default function ServiceDetailPage() {
 
         {/* Deployments Tab */}
         <TabsContent value="deployments">
-          <Card>
-            <CardHeader>
-              <CardTitle>Deployments</CardTitle>
-              <CardDescription>Recent deployment history for this service</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <p>Deployment history coming soon</p>
-                <button
-                  onClick={() => router.push(`/deployments?service=${serviceId}`)}
-                  className="mt-4 text-blue-600 hover:text-blue-800"
-                >
-                  View all deployments →
-                </button>
-              </div>
-            </CardContent>
-          </Card>
+          <DeploymentsTab serviceId={serviceId} serviceName={service.name} />
+        </TabsContent>
+
+        {/* Builds Tab */}
+        <TabsContent value="builds">
+          <BuildLogsViewer serviceId={serviceId} serviceName={service.name} />
         </TabsContent>
 
         {/* Logs Tab */}

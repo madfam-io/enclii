@@ -121,7 +121,14 @@ func NewHandler(
 // - domain_handlers.go: Custom domain management
 // - topology_handlers.go: Service dependency graph
 // - webhook_handlers.go: GitHub webhook handlers
+// - observability_handlers.go: Metrics and monitoring endpoints
 func SetupRoutes(router *gin.Engine, h *Handler) {
+	// HTTP metrics middleware (collect request metrics for all routes)
+	router.Use(h.metrics.HTTPMetricsMiddleware())
+
+	// Prometheus metrics endpoint (for scraping by Prometheus/Grafana)
+	router.GET("/metrics", gin.WrapH(h.metrics.Handler()))
+
 	// Health check (no auth required)
 	router.GET("/health", h.Health)
 	router.GET("/v1/build/status", h.GetBuildStatus)
@@ -299,6 +306,26 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/invitations/:token", h.GetInvitationByToken)
 			protected.POST("/invitations/:token/accept", h.AcceptInvitation)
 			protected.POST("/invitations/:token/decline", h.DeclineInvitation)
+
+			// Usage & Billing
+			protected.GET("/usage", h.GetUsageSummary)
+			protected.GET("/usage/costs", h.GetCostBreakdown)
+
+			// Global Domains (cross-service domain management)
+			protected.GET("/domains", h.GetAllDomains)
+			protected.GET("/domains/stats", h.GetDomainStats)
+
+			// Activity (Audit Logs)
+			protected.GET("/activity", h.GetActivity)
+			protected.GET("/activity/actions", h.GetActivityActions)
+			protected.GET("/activity/resource-types", h.GetActivityResourceTypes)
+
+			// Observability (Metrics & Monitoring)
+			protected.GET("/observability/metrics", h.GetMetricsSnapshot)
+			protected.GET("/observability/metrics/history", h.GetMetricsHistory)
+			protected.GET("/observability/health", h.GetServiceHealth)
+			protected.GET("/observability/errors", h.GetRecentErrors)
+			protected.GET("/observability/alerts", h.GetActiveAlerts)
 		}
 	}
 }

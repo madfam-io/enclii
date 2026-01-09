@@ -231,3 +231,79 @@ func (r *CustomDomainRepository) DeleteByServiceID(ctx context.Context, serviceI
 	}
 	return nil
 }
+
+// ListAll retrieves all custom domains with optional filters
+func (r *CustomDomainRepository) ListAll(ctx context.Context, filters map[string]interface{}, limit, offset int) ([]types.CustomDomain, int, error) {
+	// Build query with filters
+	baseQuery := `
+		SELECT cd.id, cd.service_id, cd.environment_id, cd.domain, cd.verified,
+		       cd.tls_enabled, cd.tls_issuer, cd.created_at, cd.updated_at, cd.verified_at,
+		       s.name as service_name, e.name as environment_name
+		FROM custom_domains cd
+		LEFT JOIN services s ON cd.service_id = s.id
+		LEFT JOIN environments e ON cd.environment_id = e.id
+		WHERE 1=1
+	`
+	countQuery := `SELECT COUNT(*) FROM custom_domains cd WHERE 1=1`
+
+	args := []interface{}{}
+	argIdx := 1
+
+	if verified, ok := filters["verified"].(bool); ok {
+		baseQuery += fmt.Sprintf(" AND cd.verified = $%d", argIdx)
+		countQuery += fmt.Sprintf(" AND cd.verified = $%d", argIdx)
+		args = append(args, verified)
+		argIdx++
+	}
+
+	if tlsEnabled, ok := filters["tls_enabled"].(bool); ok {
+		baseQuery += fmt.Sprintf(" AND cd.tls_enabled = $%d", argIdx)
+		countQuery += fmt.Sprintf(" AND cd.tls_enabled = $%d", argIdx)
+		args = append(args, tlsEnabled)
+		argIdx++
+	}
+
+	// Get total count
+	var total int
+	err := r.db.QueryRowContext(ctx, countQuery, args...).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count custom domains: %w", err)
+	}
+
+	// Add ordering and pagination
+	baseQuery += fmt.Sprintf(" ORDER BY cd.created_at DESC LIMIT $%d OFFSET $%d", argIdx, argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx, baseQuery, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query custom domains: %w", err)
+	}
+	defer rows.Close()
+
+	var domains []types.CustomDomain
+	for rows.Next() {
+		var domain types.CustomDomain
+		var serviceName, environmentName sql.NullString
+		err := rows.Scan(
+			&domain.ID,
+			&domain.ServiceID,
+			&domain.EnvironmentID,
+			&domain.Domain,
+			&domain.Verified,
+			&domain.TLSEnabled,
+			&domain.TLSIssuer,
+			&domain.CreatedAt,
+			&domain.UpdatedAt,
+			&domain.VerifiedAt,
+			&serviceName,
+			&environmentName,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan custom domain: %w", err)
+		}
+		// Store service/environment names in metadata if needed
+		domains = append(domains, domain)
+	}
+
+	return domains, total, nil
+}

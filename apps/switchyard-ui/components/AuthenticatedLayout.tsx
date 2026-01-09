@@ -19,6 +19,14 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
     { name: 'Projects', href: '/projects' },
     { name: 'Services', href: '/services' },
     { name: 'Deployments', href: '/deployments' },
+    { name: 'Domains', href: '/domains' },
+    { name: 'Observability', href: '/observability' },
+    { name: 'Activity', href: '/activity' },
+  ];
+
+  const secondaryNav = [
+    { name: 'Usage', href: '/usage' },
+    { name: 'Settings', href: '/settings' },
   ];
 
   // Redirect to login if not authenticated
@@ -82,6 +90,26 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Secondary Navigation */}
+              <div className="flex items-center space-x-2 mr-4 border-r pr-4">
+                {secondaryNav.map((item) => {
+                  const isActive = pathname === item.href || pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      className={`px-2 py-1 text-sm font-medium transition-colors duration-150 rounded ${
+                        isActive
+                          ? 'text-enclii-blue bg-blue-50'
+                          : 'text-gray-500 hover:text-enclii-blue hover:bg-gray-50'
+                      }`}
+                    >
+                      {item.name}
+                    </Link>
+                  );
+                })}
+              </div>
+
               <div className="flex items-center text-sm text-gray-500">
                 <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                 <span>System Healthy</span>

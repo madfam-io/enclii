@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -11,6 +12,7 @@ import {
   TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiGet } from "@/lib/api";
 
 interface UsageMetric {
   type: string;
@@ -19,62 +21,34 @@ interface UsageMetric {
   included: number;
   unit: string;
   cost: number;
+}
+
+interface UsageMetricDisplay extends UsageMetric {
   icon: React.ReactNode;
+}
+
+interface UsageSummary {
+  period_start: string;
+  period_end: string;
+  metrics: UsageMetric[];
+  total_cost: number;
+  plan_base: number;
+  grand_total: number;
+  plan_name: string;
 }
 
 interface UsageMetersProps {
   projectId: string;
-  metrics?: UsageMetric[];
   className?: string;
 }
 
-const defaultMetrics: UsageMetric[] = [
-  {
-    type: "compute",
-    label: "Compute",
-    used: 156.4,
-    included: 500,
-    unit: "GB-hours",
-    cost: 0,
-    icon: <Cpu className="h-4 w-4" />,
-  },
-  {
-    type: "build",
-    label: "Build Minutes",
-    used: 89,
-    included: 500,
-    unit: "minutes",
-    cost: 0,
-    icon: <Hammer className="h-4 w-4" />,
-  },
-  {
-    type: "storage",
-    label: "Storage",
-    used: 2.4,
-    included: 10,
-    unit: "GB",
-    cost: 0,
-    icon: <HardDrive className="h-4 w-4" />,
-  },
-  {
-    type: "bandwidth",
-    label: "Bandwidth",
-    used: 45.2,
-    included: 500,
-    unit: "GB",
-    cost: 0,
-    icon: <Gauge className="h-4 w-4" />,
-  },
-  {
-    type: "domains",
-    label: "Custom Domains",
-    used: 2,
-    included: -1, // Unlimited
-    unit: "domains",
-    cost: 0,
-    icon: <Globe className="h-4 w-4" />,
-  },
-];
+const iconMap: Record<string, React.ReactNode> = {
+  compute: <Cpu className="h-4 w-4" />,
+  build: <Hammer className="h-4 w-4" />,
+  storage: <HardDrive className="h-4 w-4" />,
+  bandwidth: <Gauge className="h-4 w-4" />,
+  domains: <Globe className="h-4 w-4" />,
+};
 
 function getProgressColor(percentage: number): string {
   if (percentage >= 90) return "bg-red-500";
@@ -91,10 +65,68 @@ function formatNumber(num: number): string {
 
 export function UsageMeters({
   projectId,
-  metrics = defaultMetrics,
   className
 }: UsageMetersProps) {
-  const totalCost = metrics.reduce((sum, m) => sum + m.cost, 0);
+  const [usageData, setUsageData] = useState<UsageSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchUsage = async () => {
+      try {
+        setError(null);
+        const data = await apiGet<UsageSummary>('/v1/usage');
+        setUsageData(data);
+      } catch (err) {
+        console.error('Failed to fetch usage:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch usage');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsage();
+  }, [projectId]);
+
+  if (loading) {
+    return (
+      <Card className={cn("", className)}>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium">
+            Current Period Usage
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="ml-2 text-sm text-muted-foreground">Loading usage...</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className={cn("border-red-200", className)}>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium">
+            Current Period Usage
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-red-600">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const metrics: UsageMetricDisplay[] = (usageData?.metrics || []).map(m => ({
+    ...m,
+    icon: iconMap[m.type] || <TrendingUp className="h-4 w-4" />
+  }));
+
+  const totalCost = usageData?.total_cost || 0;
 
   return (
     <Card className={cn("", className)}>

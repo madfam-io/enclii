@@ -3,6 +3,7 @@ package monitoring
 import (
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -416,10 +417,276 @@ type KubernetesMetrics struct {
 }
 
 func (mc *MetricsCollector) GetSnapshot() (*MetricsSnapshot, error) {
-	// This would collect current metric values and return a snapshot
-	// Implementation would gather data from the Prometheus registry
-	return &MetricsSnapshot{
+	// Gather metrics from the registry
+	metricFamilies, err := mc.registry.Gather()
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot := &MetricsSnapshot{
 		Timestamp: time.Now(),
-		// ... populate with actual metric values
+		HTTPMetrics: HTTPMetrics{
+			RequestsPerSecond: 0,
+			AverageLatency:    0,
+			ErrorRate:         0,
+		},
+		DBMetrics: DatabaseMetrics{
+			ConnectionsOpen:  0,
+			ConnectionsInUse: 0,
+			AverageQueryTime: 0,
+			ErrorRate:        0,
+		},
+		CacheMetrics: CacheMetrics{
+			HitRate:          0,
+			AverageLatency:   0,
+			OperationsPerSec: 0,
+		},
+		BuildMetrics: BuildMetrics{
+			SuccessRate:     0,
+			AverageDuration: 0,
+			QueueLength:     0,
+		},
+		K8sMetrics: KubernetesMetrics{
+			OperationLatency: 0,
+			ErrorRate:        0,
+			ActivePods:       0,
+		},
+	}
+
+	// Parse metric families to populate snapshot
+	var totalRequests, errorRequests float64
+	var totalLatency float64
+	var latencyCount int
+	var cacheHitsTotal, cacheMissesTotal float64
+	var buildsSuccess, buildsTotal float64
+
+	for _, mf := range metricFamilies {
+		name := mf.GetName()
+		metrics := mf.GetMetric()
+
+		switch name {
+		case "enclii_http_requests_total":
+			for _, m := range metrics {
+				val := m.GetCounter().GetValue()
+				totalRequests += val
+				for _, label := range m.GetLabel() {
+					if label.GetName() == "status_code" && label.GetValue()[0] >= '4' {
+						errorRequests += val
+					}
+				}
+			}
+		case "enclii_http_request_duration_seconds":
+			for _, m := range metrics {
+				h := m.GetHistogram()
+				if h != nil {
+					totalLatency += h.GetSampleSum()
+					latencyCount += int(h.GetSampleCount())
+				}
+			}
+		case "enclii_db_connections_open":
+			for _, m := range metrics {
+				snapshot.DBMetrics.ConnectionsOpen = int(m.GetGauge().GetValue())
+			}
+		case "enclii_db_connections_in_use":
+			for _, m := range metrics {
+				snapshot.DBMetrics.ConnectionsInUse = int(m.GetGauge().GetValue())
+			}
+		case "enclii_cache_hits_total":
+			for _, m := range metrics {
+				cacheHitsTotal += m.GetCounter().GetValue()
+			}
+		case "enclii_cache_misses_total":
+			for _, m := range metrics {
+				cacheMissesTotal += m.GetCounter().GetValue()
+			}
+		case "enclii_builds_total":
+			for _, m := range metrics {
+				val := m.GetCounter().GetValue()
+				buildsTotal += val
+				for _, label := range m.GetLabel() {
+					if label.GetName() == "status" && label.GetValue() == "success" {
+						buildsSuccess += val
+					}
+				}
+			}
+		case "enclii_build_duration_seconds":
+			for _, m := range metrics {
+				h := m.GetHistogram()
+				if h != nil && h.GetSampleCount() > 0 {
+					snapshot.BuildMetrics.AverageDuration = h.GetSampleSum() / float64(h.GetSampleCount())
+				}
+			}
+		case "enclii_k8s_operation_duration_seconds":
+			for _, m := range metrics {
+				h := m.GetHistogram()
+				if h != nil && h.GetSampleCount() > 0 {
+					snapshot.K8sMetrics.OperationLatency = h.GetSampleSum() / float64(h.GetSampleCount())
+				}
+			}
+		}
+	}
+
+	// Calculate derived metrics
+	if totalRequests > 0 {
+		snapshot.HTTPMetrics.ErrorRate = errorRequests / totalRequests
+	}
+	if latencyCount > 0 {
+		snapshot.HTTPMetrics.AverageLatency = totalLatency / float64(latencyCount)
+	}
+	cacheTotal := cacheHitsTotal + cacheMissesTotal
+	if cacheTotal > 0 {
+		snapshot.CacheMetrics.HitRate = cacheHitsTotal / cacheTotal
+	}
+	if buildsTotal > 0 {
+		snapshot.BuildMetrics.SuccessRate = buildsSuccess / buildsTotal
+	}
+
+	return snapshot, nil
+}
+
+// MetricsHistory stores time-series data for metrics
+type MetricsHistory struct {
+	TimeRange  string           `json:"time_range"`
+	Resolution string           `json:"resolution"`
+	DataPoints []MetricsDataPoint `json:"data_points"`
+}
+
+type MetricsDataPoint struct {
+	Timestamp        time.Time `json:"timestamp"`
+	RequestsPerSec   float64   `json:"requests_per_sec"`
+	AverageLatencyMs float64   `json:"average_latency_ms"`
+	ErrorRate        float64   `json:"error_rate"`
+	CPUUsage         float64   `json:"cpu_usage"`
+	MemoryUsage      float64   `json:"memory_usage"`
+}
+
+// In-memory metrics history buffer (ring buffer)
+type metricsHistoryBuffer struct {
+	dataPoints []MetricsDataPoint
+	maxSize    int
+	mu         sync.RWMutex
+}
+
+var historyBuffer = &metricsHistoryBuffer{
+	dataPoints: make([]MetricsDataPoint, 0, 1440), // 24h at 1-minute resolution
+	maxSize:    1440,
+}
+
+func init() {
+	// Start background collector for history
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			collectHistoryDataPoint()
+		}
+	}()
+}
+
+func collectHistoryDataPoint() {
+	historyBuffer.mu.Lock()
+	defer historyBuffer.mu.Unlock()
+
+	// Collect current values from Prometheus metrics
+	metricFamilies, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		return
+	}
+
+	dp := MetricsDataPoint{
+		Timestamp: time.Now(),
+	}
+
+	var totalRequests, errorRequests float64
+	var totalLatency float64
+	var latencyCount uint64
+
+	for _, mf := range metricFamilies {
+		name := mf.GetName()
+		metrics := mf.GetMetric()
+
+		switch name {
+		case "enclii_http_requests_total":
+			for _, m := range metrics {
+				totalRequests += m.GetCounter().GetValue()
+				for _, label := range m.GetLabel() {
+					if label.GetName() == "status_code" && len(label.GetValue()) > 0 && label.GetValue()[0] >= '4' {
+						errorRequests += m.GetCounter().GetValue()
+					}
+				}
+			}
+		case "enclii_http_request_duration_seconds":
+			for _, m := range metrics {
+				h := m.GetHistogram()
+				if h != nil {
+					totalLatency += h.GetSampleSum()
+					latencyCount += h.GetSampleCount()
+				}
+			}
+		case "process_cpu_seconds_total":
+			for _, m := range metrics {
+				dp.CPUUsage = m.GetCounter().GetValue()
+			}
+		case "process_resident_memory_bytes":
+			for _, m := range metrics {
+				dp.MemoryUsage = m.GetGauge().GetValue() / (1024 * 1024) // Convert to MB
+			}
+		}
+	}
+
+	if totalRequests > 0 {
+		dp.ErrorRate = errorRequests / totalRequests
+	}
+	if latencyCount > 0 {
+		dp.AverageLatencyMs = (totalLatency / float64(latencyCount)) * 1000
+	}
+
+	// Add to ring buffer
+	if len(historyBuffer.dataPoints) >= historyBuffer.maxSize {
+		historyBuffer.dataPoints = historyBuffer.dataPoints[1:]
+	}
+	historyBuffer.dataPoints = append(historyBuffer.dataPoints, dp)
+}
+
+// GetHistory returns metrics history for a given time range
+func (mc *MetricsCollector) GetHistory(timeRange string) (*MetricsHistory, error) {
+	historyBuffer.mu.RLock()
+	defer historyBuffer.mu.RUnlock()
+
+	now := time.Now()
+	var since time.Time
+	var resolution string
+
+	switch timeRange {
+	case "1h":
+		since = now.Add(-1 * time.Hour)
+		resolution = "1m"
+	case "6h":
+		since = now.Add(-6 * time.Hour)
+		resolution = "5m"
+	case "24h":
+		since = now.Add(-24 * time.Hour)
+		resolution = "15m"
+	case "7d":
+		since = now.Add(-7 * 24 * time.Hour)
+		resolution = "1h"
+	default:
+		since = now.Add(-1 * time.Hour)
+		resolution = "1m"
+		timeRange = "1h"
+	}
+
+	// Filter data points by time range
+	var filteredPoints []MetricsDataPoint
+	for _, dp := range historyBuffer.dataPoints {
+		if dp.Timestamp.After(since) {
+			filteredPoints = append(filteredPoints, dp)
+		}
+	}
+
+	return &MetricsHistory{
+		TimeRange:  timeRange,
+		Resolution: resolution,
+		DataPoints: filteredPoints,
 	}, nil
 }

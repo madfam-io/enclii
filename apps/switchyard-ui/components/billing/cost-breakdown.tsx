@@ -1,20 +1,31 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PieChart,
   Pie,
   Cell,
   ResponsiveContainer,
-  Legend,
   Tooltip
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { apiGet } from "@/lib/api";
 
 interface CostCategory {
   name: string;
   value: number;
   color: string;
+}
+
+interface CostBreakdownResponse {
+  period_start: string;
+  period_end: string;
+  plan_base: number;
+  plan_name: string;
+  categories: CostCategory[];
+  total_usage: number;
+  grand_total: number;
 }
 
 interface CostBreakdownProps {
@@ -24,23 +35,66 @@ interface CostBreakdownProps {
   className?: string;
 }
 
-const defaultCosts: CostCategory[] = [
-  { name: "Compute", value: 12.45, color: "#3b82f6" },
-  { name: "Build", value: 4.20, color: "#22c55e" },
-  { name: "Storage", value: 2.50, color: "#f59e0b" },
-  { name: "Bandwidth", value: 1.85, color: "#8b5cf6" },
-];
-
 export function CostBreakdown({
   projectId,
   periodStart,
   periodEnd,
   className
 }: CostBreakdownProps) {
-  const costs = defaultCosts; // Would fetch from API
-  const totalCost = costs.reduce((sum, c) => sum + c.value, 0);
-  const planBase = 20.00; // Pro plan
-  const grandTotal = planBase + totalCost;
+  const [costData, setCostData] = useState<CostBreakdownResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCosts = async () => {
+      try {
+        setError(null);
+        const data = await apiGet<CostBreakdownResponse>('/v1/usage/costs');
+        setCostData(data);
+      } catch (err) {
+        console.error('Failed to fetch costs:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch costs');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCosts();
+  }, [projectId]);
+
+  if (loading) {
+    return (
+      <Card className={cn("", className)}>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Cost Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="ml-2 text-sm text-muted-foreground">Loading costs...</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className={cn("border-red-200", className)}>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Cost Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-red-600">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const costs = costData?.categories || [];
+  const totalCost = costData?.total_usage || 0;
+  const planBase = costData?.plan_base || 20.00;
+  const grandTotal = costData?.grand_total || planBase + totalCost;
 
   return (
     <Card className={cn("", className)}>
