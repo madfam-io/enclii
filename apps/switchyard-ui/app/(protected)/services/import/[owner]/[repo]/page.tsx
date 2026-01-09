@@ -428,7 +428,7 @@ export default function AnalyzeRepositoryPage({ params }: PageProps) {
                     </SelectTrigger>
                     <SelectContent>
                       {projects.map(project => (
-                        <SelectItem key={project.id} value={project.id}>
+                        <SelectItem key={project.id} value={project.slug}>
                           {project.name}
                         </SelectItem>
                       ))}
