@@ -145,13 +145,21 @@ jobs:
         working-directory: apps/switchyard-api
         run: go build -o ../../bin/switchyard-api ./cmd/api
 
-      - name: Build roundhouse
+      - name: Build roundhouse-api
         working-directory: apps/roundhouse
-        run: go build -o ../../bin/roundhouse ./cmd/main.go
+        run: go build -o ../../bin/roundhouse-api ./cmd/api
 
-      - name: Build waybill
+      - name: Build roundhouse-worker
+        working-directory: apps/roundhouse
+        run: go build -o ../../bin/roundhouse-worker ./cmd/worker
+
+      - name: Build waybill-api
         working-directory: apps/waybill
-        run: go build -o ../../bin/waybill ./cmd/main.go
+        run: go build -o ../../bin/waybill-api ./cmd/api
+
+      - name: Build waybill-aggregator
+        working-directory: apps/waybill
+        run: go build -o ../../bin/waybill-aggregator ./cmd/aggregator
 
       - name: Build CLI
         working-directory: packages/cli
