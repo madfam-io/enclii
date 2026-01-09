@@ -141,7 +141,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	router.POST("/v1/webhooks/github", h.GitHubWebhook)
 
 	// Rate limiters for auth endpoints
-	authRateLimiter := middleware.NewAuthRateLimiter()       // 10 req/min per IP
+	authRateLimiter := middleware.NewAuthRateLimiter()             // 10 req/min per IP
 	strictAuthRateLimiter := middleware.NewStrictAuthRateLimiter() // 5 req/min per IP
 
 	// API v1 routes

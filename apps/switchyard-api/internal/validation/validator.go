@@ -15,13 +15,13 @@ import (
 var (
 	// DNS name validation (RFC 1123)
 	dnsNameRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?$`)
-	
+
 	// Environment variable name validation
 	envVarRegex = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
-	
+
 	// Git repository URL validation
 	gitRepoRegex = regexp.MustCompile(`^(https?://|git@)[\w\.\-]+[:/][\w\.\-]+/[\w\.\-]+\.git$`)
-	
+
 	// Kubernetes namespace validation
 	k8sNameRegex = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 )
@@ -32,7 +32,7 @@ type Validator struct {
 
 func NewValidator() *Validator {
 	validate := validator.New()
-	
+
 	// Register custom validators
 	validate.RegisterValidation("dnsname", validateDNSName)
 	validate.RegisterValidation("envvar", validateEnvVarName)
@@ -42,7 +42,7 @@ func NewValidator() *Validator {
 	validate.RegisterValidation("service_name", validateServiceName)
 	validate.RegisterValidation("safe_string", validateSafeString)
 	validate.RegisterValidation("port_number", validatePortNumber)
-	
+
 	return &Validator{validate: validate}
 }
 
@@ -70,9 +70,9 @@ type CreateProjectRequest struct {
 }
 
 type CreateServiceRequest struct {
-	Name    string            `json:"name" validate:"required,service_name"`
-	GitRepo string            `json:"git_repo" validate:"required,gitrepo"`
-	BuildConfig BuildConfig   `json:"build_config"`
+	Name        string      `json:"name" validate:"required,service_name"`
+	GitRepo     string      `json:"git_repo" validate:"required,gitrepo"`
+	BuildConfig BuildConfig `json:"build_config"`
 }
 
 type BuildConfig struct {
@@ -99,7 +99,7 @@ type BuildRequest struct {
 // Validation functions
 func (v *Validator) ValidateStruct(s interface{}) ValidationErrors {
 	var errors ValidationErrors
-	
+
 	err := v.validate.Struct(s)
 	if err != nil {
 		validatorErrors := err.(validator.ValidationErrors)
@@ -112,7 +112,7 @@ func (v *Validator) ValidateStruct(s interface{}) ValidationErrors {
 			})
 		}
 	}
-	
+
 	return errors
 }
 
@@ -172,7 +172,7 @@ func validateGitRepo(fl validator.FieldLevel) bool {
 	if !gitRepoRegex.MatchString(value) {
 		return false
 	}
-	
+
 	// Additional validation: check if URL is parseable
 	_, err := url.Parse(value)
 	return err == nil
@@ -204,7 +204,7 @@ func validateServiceName(fl validator.FieldLevel) bool {
 
 func validateSafeString(fl validator.FieldLevel) bool {
 	value := fl.Field().String()
-	
+
 	// Check for potentially dangerous characters
 	for _, r := range value {
 		if r < 32 || r == 127 { // Control characters
@@ -214,7 +214,7 @@ func validateSafeString(fl validator.FieldLevel) bool {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -239,18 +239,18 @@ func SanitizeDNSName(input string) string {
 	// Convert to lowercase and remove invalid characters
 	input = strings.ToLower(input)
 	var cleaned strings.Builder
-	
+
 	for _, r := range input {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
 			cleaned.WriteRune(r)
 		}
 	}
-	
+
 	result := cleaned.String()
-	
+
 	// Remove leading/trailing hyphens
 	result = strings.Trim(result, "-")
-	
+
 	// Ensure it's not empty and not too long
 	if len(result) == 0 {
 		result = "default"
@@ -259,18 +259,18 @@ func SanitizeDNSName(input string) string {
 		result = result[:63]
 		result = strings.Trim(result, "-")
 	}
-	
+
 	return result
 }
 
 func SanitizeProjectSlug(input string) string {
 	sanitized := SanitizeDNSName(input)
-	
+
 	// Ensure minimum length
 	if len(sanitized) < 3 {
 		sanitized = sanitized + "-proj"
 	}
-	
+
 	return sanitized
 }
 
@@ -297,13 +297,13 @@ func BindAndValidate[T any](c *gin.Context, obj *T) error {
 	if err := c.ShouldBindJSON(obj); err != nil {
 		return fmt.Errorf("invalid JSON: %w", err)
 	}
-	
+
 	// Validate
 	validator := GetValidatorFromContext(c)
 	if validationErrors := validator.ValidateStruct(obj); len(validationErrors) > 0 {
 		return validationErrors
 	}
-	
+
 	return nil
 }
 
@@ -322,21 +322,21 @@ func ValidatePathParam(c *gin.Context, param string, validator func(string) bool
 	if value == "" {
 		return "", fmt.Errorf("%s parameter is required", param)
 	}
-	
+
 	if !validator(value) {
 		return "", fmt.Errorf("%s", errorMsg)
 	}
-	
+
 	return value, nil
 }
 
 // Query parameter validation
 func ValidateQueryParam(c *gin.Context, param string, defaultValue string, validator func(string) bool, errorMsg string) (string, error) {
 	value := c.DefaultQuery(param, defaultValue)
-	
+
 	if !validator(value) {
 		return "", fmt.Errorf("%s", errorMsg)
 	}
-	
+
 	return value, nil
 }

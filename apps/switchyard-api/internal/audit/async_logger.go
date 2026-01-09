@@ -43,8 +43,8 @@ func NewAsyncLogger(repos *db.Repositories, bufferSize int) *AsyncLogger {
 		repos:        repos,
 		logChan:      make(chan *types.AuditLog, bufferSize),
 		fallbackChan: make(chan *types.AuditLog, bufferSize/2), // SECURITY FIX: Fallback buffer
-		batchSize:    10,              // Write in batches of 10
-		flushTime:    5 * time.Second, // Flush every 5 seconds
+		batchSize:    10,                                       // Write in batches of 10
+		flushTime:    5 * time.Second,                          // Flush every 5 seconds
 		ctx:          ctx,
 		cancel:       cancel,
 	}
@@ -271,8 +271,8 @@ func (l *AsyncLogger) Stats() map[string]interface{} {
 	defer l.mu.Unlock()
 
 	return map[string]interface{}{
-		"primary_buffer_size":    cap(l.logChan),
-		"primary_buffer_pending": len(l.logChan),
+		"primary_buffer_size":     cap(l.logChan),
+		"primary_buffer_pending":  len(l.logChan),
 		"fallback_buffer_size":    cap(l.fallbackChan),
 		"fallback_buffer_pending": len(l.fallbackChan),
 		"error_count":             l.errorCount,

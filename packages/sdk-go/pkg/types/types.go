@@ -35,9 +35,9 @@ type Service struct {
 	BuildConfig BuildConfig `json:"build_config" db:"build_config"`
 	Volumes     []Volume    `json:"volumes,omitempty" db:"volumes"`
 	// AutoDeploy configuration for webhook-triggered deployments
-	AutoDeploy       bool   `json:"auto_deploy" db:"auto_deploy"`               // Enable auto-deploy on successful build
-	AutoDeployBranch string `json:"auto_deploy_branch" db:"auto_deploy_branch"` // Branch to auto-deploy (e.g., "main", "master")
-	AutoDeployEnv    string `json:"auto_deploy_env" db:"auto_deploy_env"`       // Target environment (e.g., "development", "staging")
+	AutoDeploy       bool      `json:"auto_deploy" db:"auto_deploy"`               // Enable auto-deploy on successful build
+	AutoDeployBranch string    `json:"auto_deploy_branch" db:"auto_deploy_branch"` // Branch to auto-deploy (e.g., "main", "master")
+	AutoDeployEnv    string    `json:"auto_deploy_env" db:"auto_deploy_env"`       // Target environment (e.g., "development", "staging")
 	CreatedAt        time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 }
@@ -65,8 +65,8 @@ type Release struct {
 	ImageURI            string        `json:"image_uri" db:"image_uri"`
 	GitSHA              string        `json:"git_sha" db:"git_sha"`
 	Status              ReleaseStatus `json:"status" db:"status"`
-	SBOM                string        `json:"sbom,omitempty" db:"sbom"`                 // Software Bill of Materials (JSON)
-	SBOMFormat          string        `json:"sbom_format,omitempty" db:"sbom_format"`   // e.g., "cyclonedx-json", "spdx-json"
+	SBOM                string        `json:"sbom,omitempty" db:"sbom"`                       // Software Bill of Materials (JSON)
+	SBOMFormat          string        `json:"sbom_format,omitempty" db:"sbom_format"`         // e.g., "cyclonedx-json", "spdx-json"
 	ImageSignature      string        `json:"image_signature,omitempty" db:"image_signature"` // Cosign signature
 	SignatureVerifiedAt *time.Time    `json:"signature_verified_at,omitempty" db:"signature_verified_at"`
 	CreatedAt           time.Time     `json:"created_at" db:"created_at"`
@@ -86,8 +86,8 @@ type Deployment struct {
 	ID            uuid.UUID        `json:"id" db:"id"`
 	ReleaseID     uuid.UUID        `json:"release_id" db:"release_id"`
 	EnvironmentID uuid.UUID        `json:"environment_id" db:"environment_id"`
-	GroupID       *uuid.UUID       `json:"group_id,omitempty" db:"group_id"`       // Deployment group for coordinated multi-service deploys
-	DeployOrder   int              `json:"deploy_order" db:"deploy_order"`         // Order within deployment group (0 = no group or first)
+	GroupID       *uuid.UUID       `json:"group_id,omitempty" db:"group_id"` // Deployment group for coordinated multi-service deploys
+	DeployOrder   int              `json:"deploy_order" db:"deploy_order"`   // Order within deployment group (0 = no group or first)
 	Replicas      int              `json:"replicas" db:"replicas"`
 	Status        DeploymentStatus `json:"status" db:"status"`
 	Health        HealthStatus     `json:"health" db:"health"`
@@ -151,7 +151,7 @@ type EnvVar struct {
 type Volume struct {
 	Name             string `yaml:"name" json:"name"`
 	MountPath        string `yaml:"mountPath" json:"mount_path"`
-	Size             string `yaml:"size" json:"size"`                                       // e.g., "10Gi", "100Mi"
+	Size             string `yaml:"size" json:"size"`                                               // e.g., "10Gi", "100Mi"
 	StorageClassName string `yaml:"storageClassName,omitempty" json:"storage_class_name,omitempty"` // defaults to "standard"
 	AccessMode       string `yaml:"accessMode,omitempty" json:"access_mode,omitempty"`              // defaults to "ReadWriteOnce"
 }
@@ -171,7 +171,7 @@ type User struct {
 	Email        string     `json:"email" db:"email"`
 	PasswordHash string     `json:"-" db:"password_hash"` // Never expose password hash in JSON
 	Name         string     `json:"name" db:"name"`
-	Role         string     `json:"role" db:"role"` // admin, developer, or viewer
+	Role         string     `json:"role" db:"role"`                           // admin, developer, or viewer
 	OIDCSubject  *string    `json:"oidc_subject,omitempty" db:"oidc_subject"` // OIDC subject identifier (sub claim)
 	OIDCIssuer   *string    `json:"oidc_issuer,omitempty" db:"oidc_issuer"`   // OIDC issuer URL (iss claim)
 	Active       bool       `json:"active" db:"active"`
@@ -203,22 +203,22 @@ type ProjectAccess struct {
 
 // AuditLog represents an immutable audit trail entry
 type AuditLog struct {
-	ID           uuid.UUID         `json:"id" db:"id"`
-	Timestamp    time.Time         `json:"timestamp" db:"timestamp"`
-	ActorID      *uuid.UUID        `json:"actor_id,omitempty" db:"actor_id"` // nil for OIDC users without local user row
-	ActorEmail   string            `json:"actor_email" db:"actor_email"`
-	ActorRole    Role              `json:"actor_role" db:"actor_role"`
-	Action       string            `json:"action" db:"action"` // 'deploy', 'scale', 'delete', 'access_logs'
-	ResourceType string            `json:"resource_type" db:"resource_type"` // 'service', 'environment', 'secret'
-	ResourceID   string            `json:"resource_id" db:"resource_id"`
-	ResourceName string            `json:"resource_name" db:"resource_name"`
-	ProjectID    *uuid.UUID        `json:"project_id,omitempty" db:"project_id"`
-	EnvironmentID *uuid.UUID       `json:"environment_id,omitempty" db:"environment_id"`
-	IPAddress    string            `json:"ip_address" db:"ip_address"`
-	UserAgent    string            `json:"user_agent" db:"user_agent"`
-	Outcome      string            `json:"outcome" db:"outcome"` // 'success', 'failure', 'denied'
-	Context      map[string]interface{} `json:"context" db:"context"` // {pr_url, commit_sha, approver, change_ticket}
-	Metadata     map[string]interface{} `json:"metadata,omitempty" db:"metadata"`
+	ID            uuid.UUID              `json:"id" db:"id"`
+	Timestamp     time.Time              `json:"timestamp" db:"timestamp"`
+	ActorID       *uuid.UUID             `json:"actor_id,omitempty" db:"actor_id"` // nil for OIDC users without local user row
+	ActorEmail    string                 `json:"actor_email" db:"actor_email"`
+	ActorRole     Role                   `json:"actor_role" db:"actor_role"`
+	Action        string                 `json:"action" db:"action"`               // 'deploy', 'scale', 'delete', 'access_logs'
+	ResourceType  string                 `json:"resource_type" db:"resource_type"` // 'service', 'environment', 'secret'
+	ResourceID    string                 `json:"resource_id" db:"resource_id"`
+	ResourceName  string                 `json:"resource_name" db:"resource_name"`
+	ProjectID     *uuid.UUID             `json:"project_id,omitempty" db:"project_id"`
+	EnvironmentID *uuid.UUID             `json:"environment_id,omitempty" db:"environment_id"`
+	IPAddress     string                 `json:"ip_address" db:"ip_address"`
+	UserAgent     string                 `json:"user_agent" db:"user_agent"`
+	Outcome       string                 `json:"outcome" db:"outcome"` // 'success', 'failure', 'denied'
+	Context       map[string]interface{} `json:"context" db:"context"` // {pr_url, commit_sha, approver, change_ticket}
+	Metadata      map[string]interface{} `json:"metadata,omitempty" db:"metadata"`
 }
 
 // ApprovalRecord represents deployment provenance and approval evidence
@@ -238,23 +238,23 @@ type ApprovalRecord struct {
 
 // CustomDomain represents a custom domain mapping for a service
 type CustomDomain struct {
-	ID                  uuid.UUID    `json:"id" db:"id"`
-	ServiceID           uuid.UUID    `json:"service_id" db:"service_id"`
-	EnvironmentID       uuid.UUID    `json:"environment_id" db:"environment_id"`
-	Domain              string       `json:"domain" db:"domain"` // e.g., "api.example.com"
-	Verified            bool         `json:"verified" db:"verified"`
-	TLSEnabled          bool         `json:"tls_enabled" db:"tls_enabled"`
-	TLSIssuer           string       `json:"tls_issuer,omitempty" db:"tls_issuer"` // "letsencrypt-prod", "letsencrypt-staging", "selfsigned-issuer"
-	CreatedAt           time.Time    `json:"created_at" db:"created_at"`
-	UpdatedAt           time.Time    `json:"updated_at" db:"updated_at"`
-	VerifiedAt          *time.Time   `json:"verified_at,omitempty" db:"verified_at"`
-	CloudflareTunnelID  *uuid.UUID   `json:"cloudflare_tunnel_id,omitempty" db:"cloudflare_tunnel_id"`
-	IsPlatformDomain    bool         `json:"is_platform_domain" db:"is_platform_domain"`
-	ZeroTrustEnabled    bool         `json:"zero_trust_enabled" db:"zero_trust_enabled"`
-	AccessPolicyID      string       `json:"access_policy_id,omitempty" db:"access_policy_id"`
-	TLSProvider         string       `json:"tls_provider" db:"tls_provider"` // "cert-manager", "cloudflare-for-saas"
-	Status              string       `json:"status" db:"status"`             // "pending", "verifying", "active", "error"
-	DNSCNAME            string       `json:"dns_cname,omitempty" db:"dns_cname"`
+	ID                 uuid.UUID  `json:"id" db:"id"`
+	ServiceID          uuid.UUID  `json:"service_id" db:"service_id"`
+	EnvironmentID      uuid.UUID  `json:"environment_id" db:"environment_id"`
+	Domain             string     `json:"domain" db:"domain"` // e.g., "api.example.com"
+	Verified           bool       `json:"verified" db:"verified"`
+	TLSEnabled         bool       `json:"tls_enabled" db:"tls_enabled"`
+	TLSIssuer          string     `json:"tls_issuer,omitempty" db:"tls_issuer"` // "letsencrypt-prod", "letsencrypt-staging", "selfsigned-issuer"
+	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at" db:"updated_at"`
+	VerifiedAt         *time.Time `json:"verified_at,omitempty" db:"verified_at"`
+	CloudflareTunnelID *uuid.UUID `json:"cloudflare_tunnel_id,omitempty" db:"cloudflare_tunnel_id"`
+	IsPlatformDomain   bool       `json:"is_platform_domain" db:"is_platform_domain"`
+	ZeroTrustEnabled   bool       `json:"zero_trust_enabled" db:"zero_trust_enabled"`
+	AccessPolicyID     string     `json:"access_policy_id,omitempty" db:"access_policy_id"`
+	TLSProvider        string     `json:"tls_provider" db:"tls_provider"` // "cert-manager", "cloudflare-for-saas"
+	Status             string     `json:"status" db:"status"`             // "pending", "verifying", "active", "error"
+	DNSCNAME           string     `json:"dns_cname,omitempty" db:"dns_cname"`
 }
 
 // Route represents an HTTP route configuration for a service
@@ -271,13 +271,13 @@ type Route struct {
 
 // CloudflareAccount represents a platform-level Cloudflare account configuration
 type CloudflareAccount struct {
-	ID                 uuid.UUID `json:"id" db:"id"`
-	Name               string    `json:"name" db:"name"`
-	AccountID          string    `json:"account_id" db:"account_id"`
-	APITokenEncrypted  string    `json:"-" db:"api_token_encrypted"` // Never expose in JSON
-	ZoneID             string    `json:"zone_id,omitempty" db:"zone_id"`
-	CreatedAt          time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
+	ID                uuid.UUID `json:"id" db:"id"`
+	Name              string    `json:"name" db:"name"`
+	AccountID         string    `json:"account_id" db:"account_id"`
+	APITokenEncrypted string    `json:"-" db:"api_token_encrypted"` // Never expose in JSON
+	ZoneID            string    `json:"zone_id,omitempty" db:"zone_id"`
+	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // CloudflareTunnel represents an environment-scoped Cloudflare tunnel
@@ -312,17 +312,17 @@ const (
 
 // TLSProvider constants
 const (
-	TLSProviderCertManager      = "cert-manager"
+	TLSProviderCertManager       = "cert-manager"
 	TLSProviderCloudflareForSaaS = "cloudflare-for-saas"
 )
 
 // ServiceNetworking represents the combined networking info for a service
 type ServiceNetworking struct {
-	ServiceID      uuid.UUID          `json:"service_id"`
-	ServiceName    string             `json:"service_name"`
-	Domains        []DomainInfo       `json:"domains"`
-	InternalRoutes []InternalRoute    `json:"internal_routes"`
-	TunnelStatus   *TunnelStatusInfo  `json:"tunnel_status,omitempty"`
+	ServiceID      uuid.UUID         `json:"service_id"`
+	ServiceName    string            `json:"service_name"`
+	Domains        []DomainInfo      `json:"domains"`
+	InternalRoutes []InternalRoute   `json:"internal_routes"`
+	TunnelStatus   *TunnelStatusInfo `json:"tunnel_status,omitempty"`
 }
 
 // DomainInfo represents detailed domain information for the UI
@@ -366,9 +366,9 @@ type EnvironmentVariable struct {
 	ServiceID      uuid.UUID  `json:"service_id" db:"service_id"`
 	EnvironmentID  *uuid.UUID `json:"environment_id,omitempty" db:"environment_id"` // NULL = all environments
 	Key            string     `json:"key" db:"key"`
-	Value          string     `json:"value" db:"-"`                    // Decrypted value (not stored directly)
-	ValueEncrypted string     `json:"-" db:"value_encrypted"`          // Encrypted value (stored in DB)
-	IsSecret       bool       `json:"is_secret" db:"is_secret"`        // If true, value is masked in API responses
+	Value          string     `json:"value" db:"-"`             // Decrypted value (not stored directly)
+	ValueEncrypted string     `json:"-" db:"value_encrypted"`   // Encrypted value (stored in DB)
+	IsSecret       bool       `json:"is_secret" db:"is_secret"` // If true, value is masked in API responses
 	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 	CreatedBy      *uuid.UUID `json:"created_by,omitempty" db:"created_by"`
@@ -377,14 +377,14 @@ type EnvironmentVariable struct {
 
 // EnvironmentVariableResponse is the API response for env vars (masks secrets)
 type EnvironmentVariableResponse struct {
-	ID             uuid.UUID  `json:"id"`
-	ServiceID      uuid.UUID  `json:"service_id"`
-	EnvironmentID  *uuid.UUID `json:"environment_id,omitempty"`
-	Key            string     `json:"key"`
-	Value          string     `json:"value"` // Masked as "••••••" if is_secret=true
-	IsSecret       bool       `json:"is_secret"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID            uuid.UUID  `json:"id"`
+	ServiceID     uuid.UUID  `json:"service_id"`
+	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
+	Key           string     `json:"key"`
+	Value         string     `json:"value"` // Masked as "••••••" if is_secret=true
+	IsSecret      bool       `json:"is_secret"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 // EnvVarAuditLog represents an audit entry for env var changes
@@ -408,52 +408,52 @@ type EnvVarAuditLog struct {
 type PreviewEnvironmentStatus string
 
 const (
-	PreviewStatusPending  PreviewEnvironmentStatus = "pending"
-	PreviewStatusBuilding PreviewEnvironmentStatus = "building"
+	PreviewStatusPending   PreviewEnvironmentStatus = "pending"
+	PreviewStatusBuilding  PreviewEnvironmentStatus = "building"
 	PreviewStatusDeploying PreviewEnvironmentStatus = "deploying"
-	PreviewStatusActive   PreviewEnvironmentStatus = "active"
-	PreviewStatusSleeping PreviewEnvironmentStatus = "sleeping"
-	PreviewStatusFailed   PreviewEnvironmentStatus = "failed"
-	PreviewStatusClosed   PreviewEnvironmentStatus = "closed"
+	PreviewStatusActive    PreviewEnvironmentStatus = "active"
+	PreviewStatusSleeping  PreviewEnvironmentStatus = "sleeping"
+	PreviewStatusFailed    PreviewEnvironmentStatus = "failed"
+	PreviewStatusClosed    PreviewEnvironmentStatus = "closed"
 )
 
 // PreviewEnvironment represents an ephemeral environment for a pull request
 // This is the killer feature for Vercel/Railway parity
 type PreviewEnvironment struct {
-	ID               uuid.UUID                `json:"id" db:"id"`
-	ProjectID        uuid.UUID                `json:"project_id" db:"project_id"`
-	ServiceID        uuid.UUID                `json:"service_id" db:"service_id"`
-	
+	ID        uuid.UUID `json:"id" db:"id"`
+	ProjectID uuid.UUID `json:"project_id" db:"project_id"`
+	ServiceID uuid.UUID `json:"service_id" db:"service_id"`
+
 	// PR Information
-	PRNumber         int                      `json:"pr_number" db:"pr_number"`
-	PRTitle          string                   `json:"pr_title,omitempty" db:"pr_title"`
-	PRURL            string                   `json:"pr_url,omitempty" db:"pr_url"`
-	PRAuthor         string                   `json:"pr_author,omitempty" db:"pr_author"`
-	PRBranch         string                   `json:"pr_branch" db:"pr_branch"`
-	PRBaseBranch     string                   `json:"pr_base_branch" db:"pr_base_branch"`
-	CommitSHA        string                   `json:"commit_sha" db:"commit_sha"`
-	
+	PRNumber     int    `json:"pr_number" db:"pr_number"`
+	PRTitle      string `json:"pr_title,omitempty" db:"pr_title"`
+	PRURL        string `json:"pr_url,omitempty" db:"pr_url"`
+	PRAuthor     string `json:"pr_author,omitempty" db:"pr_author"`
+	PRBranch     string `json:"pr_branch" db:"pr_branch"`
+	PRBaseBranch string `json:"pr_base_branch" db:"pr_base_branch"`
+	CommitSHA    string `json:"commit_sha" db:"commit_sha"`
+
 	// Preview URL (e.g., pr-123.preview.enclii.app)
-	PreviewSubdomain string                   `json:"preview_subdomain" db:"preview_subdomain"`
-	PreviewURL       string                   `json:"preview_url" db:"preview_url"`
-	
+	PreviewSubdomain string `json:"preview_subdomain" db:"preview_subdomain"`
+	PreviewURL       string `json:"preview_url" db:"preview_url"`
+
 	// Status
-	Status           PreviewEnvironmentStatus `json:"status" db:"status"`
-	StatusMessage    string                   `json:"status_message,omitempty" db:"status_message"`
-	
+	Status        PreviewEnvironmentStatus `json:"status" db:"status"`
+	StatusMessage string                   `json:"status_message,omitempty" db:"status_message"`
+
 	// Auto-sleep configuration
-	AutoSleepAfter   int                      `json:"auto_sleep_after" db:"auto_sleep_after"` // Minutes, 0 = never
-	LastAccessedAt   *time.Time               `json:"last_accessed_at,omitempty" db:"last_accessed_at"`
-	SleepingSince    *time.Time               `json:"sleeping_since,omitempty" db:"sleeping_since"`
-	
+	AutoSleepAfter int        `json:"auto_sleep_after" db:"auto_sleep_after"` // Minutes, 0 = never
+	LastAccessedAt *time.Time `json:"last_accessed_at,omitempty" db:"last_accessed_at"`
+	SleepingSince  *time.Time `json:"sleeping_since,omitempty" db:"sleeping_since"`
+
 	// Resource tracking
-	DeploymentID     *uuid.UUID               `json:"deployment_id,omitempty" db:"deployment_id"`
-	BuildLogsURL     string                   `json:"build_logs_url,omitempty" db:"build_logs_url"`
-	
+	DeploymentID *uuid.UUID `json:"deployment_id,omitempty" db:"deployment_id"`
+	BuildLogsURL string     `json:"build_logs_url,omitempty" db:"build_logs_url"`
+
 	// Timestamps
-	CreatedAt        time.Time                `json:"created_at" db:"created_at"`
-	UpdatedAt        time.Time                `json:"updated_at" db:"updated_at"`
-	ClosedAt         *time.Time               `json:"closed_at,omitempty" db:"closed_at"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+	ClosedAt  *time.Time `json:"closed_at,omitempty" db:"closed_at"`
 }
 
 // PreviewCommentStatus represents the status of a preview comment
@@ -467,45 +467,45 @@ const (
 
 // PreviewComment represents a comment on a preview deployment (like Vercel comments)
 type PreviewComment struct {
-	ID           uuid.UUID            `json:"id" db:"id"`
-	PreviewID    uuid.UUID            `json:"preview_id" db:"preview_id"`
-	UserID       uuid.UUID            `json:"user_id" db:"user_id"`
-	UserEmail    string               `json:"user_email" db:"user_email"`
-	UserName     string               `json:"user_name,omitempty" db:"user_name"`
-	
+	ID        uuid.UUID `json:"id" db:"id"`
+	PreviewID uuid.UUID `json:"preview_id" db:"preview_id"`
+	UserID    uuid.UUID `json:"user_id" db:"user_id"`
+	UserEmail string    `json:"user_email" db:"user_email"`
+	UserName  string    `json:"user_name,omitempty" db:"user_name"`
+
 	// Comment content
-	Content      string               `json:"content" db:"content"`
-	
+	Content string `json:"content" db:"content"`
+
 	// Optional: attach to specific URL path or coordinate
-	Path         string               `json:"path,omitempty" db:"path"`
-	XPosition    *int                 `json:"x_position,omitempty" db:"x_position"`
-	YPosition    *int                 `json:"y_position,omitempty" db:"y_position"`
-	
+	Path      string `json:"path,omitempty" db:"path"`
+	XPosition *int   `json:"x_position,omitempty" db:"x_position"`
+	YPosition *int   `json:"y_position,omitempty" db:"y_position"`
+
 	// Status
-	Status       PreviewCommentStatus `json:"status" db:"status"`
-	ResolvedAt   *time.Time           `json:"resolved_at,omitempty" db:"resolved_at"`
-	ResolvedBy   *uuid.UUID           `json:"resolved_by,omitempty" db:"resolved_by"`
-	
+	Status     PreviewCommentStatus `json:"status" db:"status"`
+	ResolvedAt *time.Time           `json:"resolved_at,omitempty" db:"resolved_at"`
+	ResolvedBy *uuid.UUID           `json:"resolved_by,omitempty" db:"resolved_by"`
+
 	// Timestamps
-	CreatedAt    time.Time            `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time            `json:"updated_at" db:"updated_at"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // PreviewAccessLog represents an access log entry for a preview environment
 type PreviewAccessLog struct {
-	ID             uuid.UUID  `json:"id" db:"id"`
-	PreviewID      uuid.UUID  `json:"preview_id" db:"preview_id"`
-	AccessedAt     time.Time  `json:"accessed_at" db:"accessed_at"`
-	
+	ID         uuid.UUID `json:"id" db:"id"`
+	PreviewID  uuid.UUID `json:"preview_id" db:"preview_id"`
+	AccessedAt time.Time `json:"accessed_at" db:"accessed_at"`
+
 	// Request metadata
-	Path           string     `json:"path,omitempty" db:"path"`
-	UserAgent      string     `json:"user_agent,omitempty" db:"user_agent"`
-	IPAddress      string     `json:"ip_address,omitempty" db:"ip_address"`
-	
+	Path      string `json:"path,omitempty" db:"path"`
+	UserAgent string `json:"user_agent,omitempty" db:"user_agent"`
+	IPAddress string `json:"ip_address,omitempty" db:"ip_address"`
+
 	// Optional: authenticated user
-	UserID         *uuid.UUID `json:"user_id,omitempty" db:"user_id"`
-	
+	UserID *uuid.UUID `json:"user_id,omitempty" db:"user_id"`
+
 	// Response metadata
-	StatusCode     *int       `json:"status_code,omitempty" db:"status_code"`
-	ResponseTimeMs *int       `json:"response_time_ms,omitempty" db:"response_time_ms"`
+	StatusCode     *int `json:"status_code,omitempty" db:"status_code"`
+	ResponseTimeMs *int `json:"response_time_ms,omitempty" db:"response_time_ms"`
 }

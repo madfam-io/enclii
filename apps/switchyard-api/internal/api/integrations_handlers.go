@@ -35,9 +35,9 @@ func (ft *FlexibleTime) UnmarshalJSON(data []byte) error {
 	formats := []string{
 		time.RFC3339Nano,
 		time.RFC3339,
-		"2006-01-02T15:04:05.999999999",  // No timezone (Janua format)
-		"2006-01-02T15:04:05.999999",     // No timezone with microseconds
-		"2006-01-02T15:04:05",            // No timezone basic
+		"2006-01-02T15:04:05.999999999", // No timezone (Janua format)
+		"2006-01-02T15:04:05.999999",    // No timezone with microseconds
+		"2006-01-02T15:04:05",           // No timezone basic
 	}
 
 	var err error
@@ -52,13 +52,13 @@ func (ft *FlexibleTime) UnmarshalJSON(data []byte) error {
 
 // JanuaIntegrationToken represents the response from Janua's integrations API
 type JanuaIntegrationToken struct {
-	Provider        string        `json:"provider"`
-	AccessToken     string        `json:"access_token"`
-	RefreshToken    *string       `json:"refresh_token,omitempty"`
-	TokenExpiresAt  *FlexibleTime `json:"token_expires_at,omitempty"`
-	ProviderUserID  *string       `json:"provider_user_id,omitempty"`
-	ProviderEmail   *string       `json:"provider_email,omitempty"`
-	LinkedAt        FlexibleTime  `json:"linked_at"`
+	Provider       string        `json:"provider"`
+	AccessToken    string        `json:"access_token"`
+	RefreshToken   *string       `json:"refresh_token,omitempty"`
+	TokenExpiresAt *FlexibleTime `json:"token_expires_at,omitempty"`
+	ProviderUserID *string       `json:"provider_user_id,omitempty"`
+	ProviderEmail  *string       `json:"provider_email,omitempty"`
+	LinkedAt       FlexibleTime  `json:"linked_at"`
 }
 
 // JanuaIntegrationStatus represents the status response from Janua
@@ -618,4 +618,3 @@ func (h *Handler) listGitHubBranches(ctx context.Context, accessToken, owner, re
 
 	return branches, nil
 }
-

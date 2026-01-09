@@ -35,11 +35,11 @@ const (
 
 // SBOM represents a software bill of materials
 type SBOM struct {
-	Format    Format    `json:"format"`
-	Content   string    `json:"content"`
-	GeneratedAt time.Time `json:"generated_at"`
-	ImageURI  string    `json:"image_uri"`
-	PackageCount int    `json:"package_count,omitempty"`
+	Format       Format    `json:"format"`
+	Content      string    `json:"content"`
+	GeneratedAt  time.Time `json:"generated_at"`
+	ImageURI     string    `json:"image_uri"`
+	PackageCount int       `json:"package_count,omitempty"`
 }
 
 // GenerateFromImage creates an SBOM from a container image using Syft

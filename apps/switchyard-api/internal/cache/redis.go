@@ -16,30 +16,30 @@ type CacheService interface {
 	Del(ctx context.Context, keys ...string) error
 	Exists(ctx context.Context, keys ...string) (int64, error)
 	Expire(ctx context.Context, key string, ttl time.Duration) error
-	
+
 	// Hash operations
 	HGet(ctx context.Context, key, field string) (string, error)
 	HSet(ctx context.Context, key string, values ...interface{}) error
 	HDel(ctx context.Context, key string, fields ...string) error
 	HExists(ctx context.Context, key, field string) (bool, error)
-	
+
 	// List operations
 	LPush(ctx context.Context, key string, values ...interface{}) error
 	RPop(ctx context.Context, key string) (string, error)
 	LRange(ctx context.Context, key string, start, stop int64) ([]string, error)
-	
+
 	// Set operations for tags
 	SAdd(ctx context.Context, key string, members ...interface{}) error
 	SMembers(ctx context.Context, key string) ([]string, error)
 	SIsMember(ctx context.Context, key string, member interface{}) (bool, error)
-	
+
 	// Pub/Sub
 	Publish(ctx context.Context, channel string, message interface{}) error
 	Subscribe(ctx context.Context, channels ...string) <-chan *redis.Message
-	
+
 	// Health check
 	Ping(ctx context.Context) error
-	
+
 	// Cache invalidation
 	InvalidatePattern(ctx context.Context, pattern string) error
 	InvalidateTags(ctx context.Context, tags ...string) error
@@ -72,22 +72,22 @@ type CacheItem struct {
 
 // Cache key patterns
 const (
-	ProjectCacheKey        = "project:%s"
-	ServiceCacheKey        = "service:%s"
-	ReleaseCacheKey        = "release:%s"
-	DeploymentCacheKey     = "deployment:%s"
-	UserCacheKey          = "user:%s"
+	ProjectCacheKey         = "project:%s"
+	ServiceCacheKey         = "service:%s"
+	ReleaseCacheKey         = "release:%s"
+	DeploymentCacheKey      = "deployment:%s"
+	UserCacheKey            = "user:%s"
 	ProjectServicesCacheKey = "project:%s:services"
 	ServiceReleasesCacheKey = "service:%s:releases"
 	SessionRevokedKey       = "session:revoked:%s" // For JWT session revocation
 
 	// Cache tags for invalidation
-	ProjectTag     = "project"
-	ServiceTag     = "service"
-	ReleaseTag     = "release"
-	DeploymentTag  = "deployment"
-	UserTag        = "user"
-	
+	ProjectTag    = "project"
+	ServiceTag    = "service"
+	ReleaseTag    = "release"
+	DeploymentTag = "deployment"
+	UserTag       = "user"
+
 	// Cache TTL
 	ShortTTL  = 5 * time.Minute
 	MediumTTL = 30 * time.Minute
@@ -110,7 +110,7 @@ func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
@@ -131,14 +131,14 @@ func (r *RedisCache) Get(ctx context.Context, key string) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("failed to get from cache: %w", err)
 	}
-	
+
 	return []byte(val), nil
 }
 
 func (r *RedisCache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	var data []byte
 	var err error
-	
+
 	switch v := value.(type) {
 	case string:
 		data = []byte(v)
@@ -150,11 +150,11 @@ func (r *RedisCache) Set(ctx context.Context, key string, value interface{}, ttl
 			return fmt.Errorf("failed to marshal value: %w", err)
 		}
 	}
-	
+
 	if ttl == 0 {
 		ttl = r.config.DefaultTTL
 	}
-	
+
 	return r.client.Set(ctx, key, data, ttl).Err()
 }
 
@@ -220,7 +220,7 @@ func (r *RedisCache) SIsMember(ctx context.Context, key string, member interface
 func (r *RedisCache) Publish(ctx context.Context, channel string, message interface{}) error {
 	var data []byte
 	var err error
-	
+
 	switch v := message.(type) {
 	case string:
 		data = []byte(v)
@@ -232,7 +232,7 @@ func (r *RedisCache) Publish(ctx context.Context, channel string, message interf
 			return fmt.Errorf("failed to marshal message: %w", err)
 		}
 	}
-	
+
 	return r.client.Publish(ctx, channel, data).Err()
 }
 
@@ -251,11 +251,11 @@ func (r *RedisCache) InvalidatePattern(ctx context.Context, pattern string) erro
 	if err != nil {
 		return fmt.Errorf("failed to get keys by pattern: %w", err)
 	}
-	
+
 	if len(keys) > 0 {
 		return r.Del(ctx, keys...)
 	}
-	
+
 	return nil
 }
 
@@ -267,17 +267,17 @@ func (r *RedisCache) InvalidateTags(ctx context.Context, tags ...string) error {
 			logrus.Errorf("Failed to get keys for tag %s: %v", tag, err)
 			continue
 		}
-		
+
 		if len(keys) > 0 {
 			if err := r.Del(ctx, keys...); err != nil {
 				logrus.Errorf("Failed to delete keys for tag %s: %v", tag, err)
 			}
 		}
-		
+
 		// Clean up the tag set
 		r.Del(ctx, tagKey)
 	}
-	
+
 	return nil
 }
 
@@ -287,7 +287,7 @@ func (r *RedisCache) SetWithTags(ctx context.Context, key string, value interfac
 	if err := r.Set(ctx, key, value, ttl); err != nil {
 		return err
 	}
-	
+
 	// Add to tag sets for invalidation
 	for _, tag := range tags {
 		tagKey := fmt.Sprintf("tag:%s", tag)
@@ -295,7 +295,7 @@ func (r *RedisCache) SetWithTags(ctx context.Context, key string, value interfac
 			logrus.Errorf("Failed to add key %s to tag %s: %v", key, tag, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -306,29 +306,29 @@ func (r *RedisCache) GetOrSet(ctx context.Context, key string, ttl time.Duration
 	if err == nil {
 		return data, nil
 	}
-	
+
 	if err != ErrCacheMiss {
 		logrus.Errorf("Cache get error for key %s: %v", key, err)
 	}
-	
+
 	// Cache miss, fetch from source
 	value, err := fetchFunc()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch data: %w", err)
 	}
-	
+
 	// Store in cache
 	if err := r.Set(ctx, key, value, ttl); err != nil {
 		logrus.Errorf("Failed to set cache for key %s: %v", key, err)
 		// Don't fail the request if cache set fails
 	}
-	
+
 	// Return the data
 	data, err = json.Marshal(value)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal fetched data: %w", err)
 	}
-	
+
 	return data, nil
 }
 

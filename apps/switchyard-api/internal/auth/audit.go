@@ -44,9 +44,9 @@ type AuthAuditLog struct {
 	Event       AuthEvent              `json:"event"`
 	UserID      string                 `json:"user_id,omitempty"`
 	Email       string                 `json:"email,omitempty"`
-	Method      string                 `json:"method,omitempty"` // "local", "external", "oidc"
+	Method      string                 `json:"method,omitempty"`       // "local", "external", "oidc"
 	TokenSource string                 `json:"token_source,omitempty"` // "local", "external"
-	TokenType   string                 `json:"token_type,omitempty"` // "access", "refresh"
+	TokenType   string                 `json:"token_type,omitempty"`   // "access", "refresh"
 	SessionID   string                 `json:"session_id,omitempty"`
 	IP          string                 `json:"ip,omitempty"`
 	UserAgent   string                 `json:"user_agent,omitempty"`

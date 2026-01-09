@@ -60,10 +60,10 @@ const (
 
 // Included resources per plan
 const (
-	includedCompute   = 500.0  // GB-hours
-	includedBuild     = 500.0  // minutes
-	includedStorage   = 10.0   // GB
-	includedBandwidth = 500.0  // GB
+	includedCompute   = 500.0 // GB-hours
+	includedBuild     = 500.0 // minutes
+	includedStorage   = 10.0  // GB
+	includedBandwidth = 500.0 // GB
 )
 
 // GetUsageSummary returns the current usage metrics for billing

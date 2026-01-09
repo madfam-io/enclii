@@ -27,7 +27,7 @@ type Logger interface {
 	Warn(ctx context.Context, msg string, fields ...Field)
 	Error(ctx context.Context, msg string, fields ...Field)
 	Fatal(ctx context.Context, msg string, fields ...Field)
-	
+
 	WithField(key string, value interface{}) Logger
 	WithFields(fields Fields) Logger
 	WithError(err error) Logger
@@ -53,16 +53,16 @@ type StructuredLogger struct {
 // LogConfig holds logging configuration
 type LogConfig struct {
 	Level       string `json:"level"`
-	Format      string `json:"format"`  // "json" or "text"
-	Output      string `json:"output"`  // "stdout", "stderr", or file path
+	Format      string `json:"format"` // "json" or "text"
+	Output      string `json:"output"` // "stdout", "stderr", or file path
 	ServiceName string `json:"service_name"`
 	Version     string `json:"version"`
 	Environment string `json:"environment"`
-	
+
 	// Tracing configuration
-	TracingEnabled  bool   `json:"tracing_enabled"`
-	JaegerEndpoint  string `json:"jaeger_endpoint"`
-	TracingSampler  float64 `json:"tracing_sampler"`
+	TracingEnabled bool    `json:"tracing_enabled"`
+	JaegerEndpoint string  `json:"jaeger_endpoint"`
+	TracingSampler float64 `json:"tracing_sampler"`
 }
 
 // Request ID middleware key
@@ -79,14 +79,14 @@ var (
 // NewStructuredLogger creates a new structured logger
 func NewStructuredLogger(config *LogConfig) (Logger, error) {
 	logger := logrus.New()
-	
+
 	// Set log level
 	level, err := logrus.ParseLevel(config.Level)
 	if err != nil {
 		level = logrus.InfoLevel
 	}
 	logger.SetLevel(level)
-	
+
 	// Set formatter
 	if config.Format == "json" {
 		logger.SetFormatter(&logrus.JSONFormatter{
@@ -104,7 +104,7 @@ func NewStructuredLogger(config *LogConfig) (Logger, error) {
 			FullTimestamp:   true,
 		})
 	}
-	
+
 	// Set output
 	switch config.Output {
 	case "stderr":
@@ -122,19 +122,19 @@ func NewStructuredLogger(config *LogConfig) (Logger, error) {
 			logger.SetOutput(os.Stdout)
 		}
 	}
-	
+
 	// Add default fields
 	defaultFields := logrus.Fields{
 		"service":     config.ServiceName,
 		"version":     config.Version,
 		"environment": config.Environment,
 	}
-	
+
 	structuredLogger := &StructuredLogger{
 		logger: logger,
 		fields: defaultFields,
 	}
-	
+
 	// Initialize tracing if enabled
 	if config.TracingEnabled {
 		if err := initTracing(config); err != nil {
@@ -143,7 +143,7 @@ func NewStructuredLogger(config *LogConfig) (Logger, error) {
 			tracer = otel.Tracer(config.ServiceName)
 		}
 	}
-	
+
 	defaultLogger = structuredLogger
 	return structuredLogger, nil
 }
@@ -153,7 +153,7 @@ func initTracing(config *LogConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize Jaeger exporter: %w", err)
 	}
-	
+
 	tp := trace.NewTracerProvider(
 		trace.WithBatcher(exp),
 		trace.WithResource(resource.NewWithAttributes(
@@ -164,7 +164,7 @@ func initTracing(config *LogConfig) error {
 		)),
 		trace.WithSampler(trace.TraceIDRatioBased(config.TracingSampler)),
 	)
-	
+
 	otel.SetTracerProvider(tp)
 	return nil
 }
@@ -191,17 +191,17 @@ func (l *StructuredLogger) Fatal(ctx context.Context, msg string, fields ...Fiel
 
 func (l *StructuredLogger) log(ctx context.Context, level logrus.Level, msg string, fields ...Field) {
 	entry := l.logger.WithFields(l.fields)
-	
+
 	// Add context fields
 	if ctx != nil {
 		if requestID, ok := ctx.Value(RequestIDKey).(string); ok {
 			entry = entry.WithField("request_id", requestID)
 		}
-		
+
 		if userID, ok := ctx.Value(UserIDKey).(string); ok {
 			entry = entry.WithField("user_id", userID)
 		}
-		
+
 		// Add tracing information
 		if span := oteltrace.SpanFromContext(ctx); span.SpanContext().IsValid() {
 			spanContext := span.SpanContext()
@@ -211,23 +211,23 @@ func (l *StructuredLogger) log(ctx context.Context, level logrus.Level, msg stri
 			})
 		}
 	}
-	
+
 	// Add caller information
 	if pc, file, line, ok := runtime.Caller(2); ok {
 		funcName := runtime.FuncForPC(pc).Name()
 		entry = entry.WithFields(logrus.Fields{
-			"caller": fmt.Sprintf("%s:%d", file, line),
+			"caller":   fmt.Sprintf("%s:%d", file, line),
 			"function": funcName,
 		})
 	}
-	
+
 	// Add custom fields
 	for _, field := range fields {
 		entry = entry.WithField(field.Key, field.Value)
 	}
-	
+
 	entry.Log(level, msg)
-	
+
 	// Add to trace span if available
 	if ctx != nil && level >= logrus.ErrorLevel {
 		if span := oteltrace.SpanFromContext(ctx); span.SpanContext().IsValid() {
@@ -243,7 +243,7 @@ func (l *StructuredLogger) WithField(key string, value interface{}) Logger {
 		newFields[k] = v
 	}
 	newFields[key] = value
-	
+
 	return &StructuredLogger{
 		logger: l.logger,
 		fields: newFields,
@@ -259,7 +259,7 @@ func (l *StructuredLogger) WithFields(fields Fields) Logger {
 	for k, v := range fields {
 		newFields[k] = v
 	}
-	
+
 	return &StructuredLogger{
 		logger: l.logger,
 		fields: newFields,
@@ -283,7 +283,7 @@ func (l *StructuredLogger) WithContext(ctx context.Context) Logger {
 func RequestLoggingMiddleware(logger Logger) gin.HandlerFunc {
 	return gin.LoggerWithFormatter(func(param gin.LogFormatterParams) string {
 		ctx := param.Request.Context()
-		
+
 		fields := []Field{
 			{Key: "client_ip", Value: param.ClientIP},
 			{Key: "method", Value: param.Method},
@@ -294,11 +294,11 @@ func RequestLoggingMiddleware(logger Logger) gin.HandlerFunc {
 			{Key: "request_size", Value: param.Request.ContentLength},
 			{Key: "response_size", Value: param.BodySize},
 		}
-		
+
 		if param.ErrorMessage != "" {
 			fields = append(fields, Field{Key: "error", Value: param.ErrorMessage})
 		}
-		
+
 		// Log based on status code
 		if param.StatusCode >= 500 {
 			logger.Error(ctx, "HTTP request completed", fields...)
@@ -307,7 +307,7 @@ func RequestLoggingMiddleware(logger Logger) gin.HandlerFunc {
 		} else {
 			logger.Info(ctx, "HTTP request completed", fields...)
 		}
-		
+
 		return ""
 	})
 }
@@ -318,14 +318,14 @@ func RequestIDMiddleware() gin.HandlerFunc {
 		if requestID == "" {
 			requestID = uuid.New().String()
 		}
-		
+
 		c.Set(RequestIDKey, requestID)
 		c.Header("X-Request-ID", requestID)
-		
+
 		// Add to context
 		ctx := context.WithValue(c.Request.Context(), RequestIDKey, requestID)
 		c.Request = c.Request.WithContext(ctx)
-		
+
 		c.Next()
 	}
 }
@@ -336,11 +336,11 @@ func TracingMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		
+
 		spanName := fmt.Sprintf("%s %s", c.Request.Method, c.FullPath())
 		ctx, span := tracer.Start(c.Request.Context(), spanName)
 		defer span.End()
-		
+
 		// Set span attributes
 		span.SetAttributes(
 			semconv.HTTPMethodKey.String(c.Request.Method),
@@ -348,16 +348,16 @@ func TracingMiddleware() gin.HandlerFunc {
 			semconv.HTTPUserAgentKey.String(c.Request.UserAgent()),
 			semconv.HTTPClientIPKey.String(c.ClientIP()),
 		)
-		
+
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
-		
+
 		// Set response attributes
 		span.SetAttributes(
 			semconv.HTTPStatusCodeKey.Int(c.Writer.Status()),
 			attribute.Int("http.response_content_length", c.Writer.Size()),
 		)
-		
+
 		// Set span status based on HTTP status
 		if c.Writer.Status() >= 400 {
 			span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", c.Writer.Status()))
@@ -454,15 +454,15 @@ func SetLogLevel(level logrus.Level) {
 // Default configuration
 func DefaultLogConfig() *LogConfig {
 	return &LogConfig{
-		Level:           "info",
-		Format:          "json",
-		Output:          "stdout",
-		ServiceName:     "enclii-switchyard",
-		Version:         "0.1.0",
-		Environment:     "development",
-		TracingEnabled:  true,
-		JaegerEndpoint:  "http://localhost:14268/api/traces",
-		TracingSampler:  0.1, // 10% sampling
+		Level:          "info",
+		Format:         "json",
+		Output:         "stdout",
+		ServiceName:    "enclii-switchyard",
+		Version:        "0.1.0",
+		Environment:    "development",
+		TracingEnabled: true,
+		JaegerEndpoint: "http://localhost:14268/api/traces",
+		TracingSampler: 0.1, // 10% sampling
 	}
 }
 
@@ -473,14 +473,14 @@ func LoggerFromContext(ctx context.Context) Logger {
 
 func FieldsFromGinContext(c *gin.Context) Fields {
 	fields := Fields{}
-	
+
 	if requestID, exists := c.Get(RequestIDKey); exists {
 		fields["request_id"] = requestID
 	}
-	
+
 	if userID, exists := c.Get(UserIDKey); exists {
 		fields["user_id"] = userID
 	}
-	
+
 	return fields
 }

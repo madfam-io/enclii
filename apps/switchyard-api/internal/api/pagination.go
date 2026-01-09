@@ -16,12 +16,12 @@ type PaginationParams struct {
 
 // PaginationResponse is the standard pagination response
 type PaginationResponse struct {
-	Page       int  `json:"page"`
-	Limit      int  `json:"limit"`
+	Page       int   `json:"page"`
+	Limit      int   `json:"limit"`
 	Total      int64 `json:"total"`
-	TotalPages int  `json:"total_pages"`
-	HasNext    bool `json:"has_next"`
-	HasPrev    bool `json:"has_prev"`
+	TotalPages int   `json:"total_pages"`
+	HasNext    bool  `json:"has_next"`
+	HasPrev    bool  `json:"has_prev"`
 }
 
 // DefaultPageSize is the default number of items per page
@@ -84,7 +84,7 @@ func (p *PaginationParams) BuildPaginationResponse(total int64) PaginationRespon
 
 // PaginatedData wraps data with pagination info
 type PaginatedData struct {
-	Data       interface{}         `json:"data"`
+	Data       interface{}        `json:"data"`
 	Pagination PaginationResponse `json:"pagination"`
 }
 

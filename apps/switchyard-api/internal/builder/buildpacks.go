@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/sirupsen/logrus"
 )
 
 type BuildpacksBuilder struct {
@@ -40,11 +40,11 @@ type BuildRequest struct {
 }
 
 type BuildResult struct {
-	ImageURI    string
-	Success     bool
-	Error       error
-	Logs        []string
-	Duration    time.Duration
+	ImageURI string
+	Success  bool
+	Error    error
+	Logs     []string
+	Duration time.Duration
 }
 
 func (b *BuildpacksBuilder) Build(ctx context.Context, req *BuildRequest) *BuildResult {
@@ -286,6 +286,6 @@ func (b *BuildpacksBuilder) BuildService(ctx context.Context, service *types.Ser
 
 	// Execute build
 	result := b.Build(ctx, req)
-	
+
 	return result, result.Error
 }

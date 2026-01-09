@@ -440,8 +440,8 @@ func (s *DeploymentGroupService) executeDependencyOrdered(
 
 	for layerIdx, layer := range layers {
 		s.logger.WithFields(logrus.Fields{
-			"group_id":      group.ID,
-			"layer":         layerIdx,
+			"group_id":       group.ID,
+			"layer":          layerIdx,
 			"services_count": len(layer),
 		}).Debug("Deploying layer")
 
@@ -765,9 +765,9 @@ func (s *DeploymentGroupService) AddServiceDependency(ctx context.Context, req *
 		ResourceID:   dep.ID.String(),
 		Outcome:      "success",
 		Context: map[string]interface{}{
-			"service_id":           req.ServiceID,
+			"service_id":            req.ServiceID,
 			"depends_on_service_id": req.DependsOnServiceID,
-			"dependency_type":      string(depType),
+			"dependency_type":       string(depType),
 		},
 	})
 
@@ -797,7 +797,7 @@ func (s *DeploymentGroupService) RemoveServiceDependency(ctx context.Context, se
 		ResourceType: "service_dependency",
 		Outcome:      "success",
 		Context: map[string]interface{}{
-			"service_id":           serviceID,
+			"service_id":            serviceID,
 			"depends_on_service_id": dependsOnID,
 		},
 	})

@@ -10,7 +10,7 @@ import (
 
 // Signer handles container image signing with Cosign
 type Signer struct {
-	keyless bool          // Use keyless signing (OIDC-based)
+	keyless bool // Use keyless signing (OIDC-based)
 	timeout time.Duration
 }
 
@@ -29,7 +29,7 @@ func NewSigner(keyless bool, timeout time.Duration) *Signer {
 // SignResult represents the result of a signing operation
 type SignResult struct {
 	Success       bool      `json:"success"`
-	Signature     string    `json:"signature"`      // The signature digest
+	Signature     string    `json:"signature"` // The signature digest
 	SignedAt      time.Time `json:"signed_at"`
 	SigningMethod string    `json:"signing_method"` // "keyless" or "key-based"
 	Error         error     `json:"error,omitempty"`

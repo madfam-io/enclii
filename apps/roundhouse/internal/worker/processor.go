@@ -21,17 +21,17 @@ import (
 
 // Processor handles build job processing
 type Processor struct {
-	workerID    string
-	queue       *queue.RedisQueue
-	executor    *builder.Executor
-	cfg         *config.Config
-	logger      *zap.Logger
-	httpClient  *http.Client
+	workerID   string
+	queue      *queue.RedisQueue
+	executor   *builder.Executor
+	cfg        *config.Config
+	logger     *zap.Logger
+	httpClient *http.Client
 
 	// Concurrency control
-	semaphore   chan struct{}
-	wg          sync.WaitGroup
-	shutdown    chan struct{}
+	semaphore chan struct{}
+	wg        sync.WaitGroup
+	shutdown  chan struct{}
 }
 
 // NewProcessor creates a new job processor
@@ -255,9 +255,9 @@ func (p *Processor) gracefulShutdown() error {
 // Stats returns current worker statistics
 func (p *Processor) Stats() map[string]interface{} {
 	return map[string]interface{}{
-		"worker_id":        p.workerID,
-		"max_concurrent":   p.cfg.MaxConcurrentBuilds,
-		"active_builds":    len(p.semaphore),
-		"available_slots":  p.cfg.MaxConcurrentBuilds - len(p.semaphore),
+		"worker_id":       p.workerID,
+		"max_concurrent":  p.cfg.MaxConcurrentBuilds,
+		"active_builds":   len(p.semaphore),
+		"available_slots": p.cfg.MaxConcurrentBuilds - len(p.semaphore),
 	}
 }

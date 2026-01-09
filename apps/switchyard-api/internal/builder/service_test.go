@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 	"github.com/google/uuid"
+	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/sirupsen/logrus"
 )
 
 func TestNewService(t *testing.T) {

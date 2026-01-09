@@ -18,12 +18,12 @@ import (
 
 // Config holds GitHub App configuration
 type Config struct {
-	AppID          int64  // GitHub App ID
-	PrivateKeyPEM  string // PEM-encoded private key
-	WebhookSecret  string // Webhook signing secret
-	ClientID       string // OAuth App client ID (for user auth flow)
-	ClientSecret   string // OAuth App client secret
-	InstallURL     string // URL to install the GitHub App
+	AppID         int64  // GitHub App ID
+	PrivateKeyPEM string // PEM-encoded private key
+	WebhookSecret string // Webhook signing secret
+	ClientID      string // OAuth App client ID (for user auth flow)
+	ClientSecret  string // OAuth App client secret
+	InstallURL    string // URL to install the GitHub App
 }
 
 // Client provides GitHub App API operations
@@ -34,8 +34,8 @@ type Client struct {
 	logger     *logrus.Logger
 
 	// Token cache for installation access tokens
-	tokenCache     map[int64]*InstallationToken
-	tokenCacheMu   sync.RWMutex
+	tokenCache   map[int64]*InstallationToken
+	tokenCacheMu sync.RWMutex
 }
 
 // InstallationToken represents a GitHub App installation access token
@@ -46,18 +46,18 @@ type InstallationToken struct {
 
 // Installation represents a GitHub App installation
 type Installation struct {
-	ID                  int64  `json:"id"`
-	Account             Account `json:"account"`
-	AccessTokensURL     string `json:"access_tokens_url"`
-	RepositoriesURL     string `json:"repositories_url"`
-	AppID               int64  `json:"app_id"`
-	TargetID            int64  `json:"target_id"`
-	TargetType          string `json:"target_type"`
-	Permissions         map[string]string `json:"permissions"`
-	Events              []string `json:"events"`
-	SuspendedAt         *time.Time `json:"suspended_at"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	ID              int64             `json:"id"`
+	Account         Account           `json:"account"`
+	AccessTokensURL string            `json:"access_tokens_url"`
+	RepositoriesURL string            `json:"repositories_url"`
+	AppID           int64             `json:"app_id"`
+	TargetID        int64             `json:"target_id"`
+	TargetType      string            `json:"target_type"`
+	Permissions     map[string]string `json:"permissions"`
+	Events          []string          `json:"events"`
+	SuspendedAt     *time.Time        `json:"suspended_at"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
 }
 
 // Account represents a GitHub user or organization
@@ -71,15 +71,15 @@ type Account struct {
 
 // Repository represents a GitHub repository
 type Repository struct {
-	ID            int64  `json:"id"`
-	Name          string `json:"name"`
-	FullName      string `json:"full_name"`
-	Private       bool   `json:"private"`
-	DefaultBranch string `json:"default_branch"`
-	CloneURL      string `json:"clone_url"`
-	HTMLURL       string `json:"html_url"`
-	Description   string `json:"description"`
-	Language      string `json:"language"`
+	ID            int64     `json:"id"`
+	Name          string    `json:"name"`
+	FullName      string    `json:"full_name"`
+	Private       bool      `json:"private"`
+	DefaultBranch string    `json:"default_branch"`
+	CloneURL      string    `json:"clone_url"`
+	HTMLURL       string    `json:"html_url"`
+	Description   string    `json:"description"`
+	Language      string    `json:"language"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 

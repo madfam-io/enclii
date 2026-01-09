@@ -57,22 +57,22 @@ type TeamResponse struct {
 }
 
 type TeamMemberResponse struct {
-	ID        uuid.UUID `json:"id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Email     string    `json:"email"`
-	Name      *string   `json:"name,omitempty"`
-	Role      string    `json:"role"`
-	JoinedAt  string    `json:"joined_at"`
+	ID       uuid.UUID `json:"id"`
+	UserID   uuid.UUID `json:"user_id"`
+	Email    string    `json:"email"`
+	Name     *string   `json:"name,omitempty"`
+	Role     string    `json:"role"`
+	JoinedAt string    `json:"joined_at"`
 }
 
 type TeamInvitationResponse struct {
-	ID         uuid.UUID `json:"id"`
-	Email      string    `json:"email"`
-	Role       string    `json:"role"`
-	Status     string    `json:"status"`
-	ExpiresAt  string    `json:"expires_at"`
-	InviterID  uuid.UUID `json:"inviter_id"`
-	CreatedAt  string    `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	Status    string    `json:"status"`
+	ExpiresAt string    `json:"expires_at"`
+	InviterID uuid.UUID `json:"inviter_id"`
+	CreatedAt string    `json:"created_at"`
 }
 
 type InvitationDetailsResponse struct {

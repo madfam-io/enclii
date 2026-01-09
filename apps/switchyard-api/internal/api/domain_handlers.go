@@ -25,10 +25,10 @@ func (h *Handler) AddCustomDomain(c *gin.Context) {
 	}
 
 	var req struct {
-		Domain        string `json:"domain" binding:"required"`
-		Environment   string `json:"environment" binding:"required"`
-		TLSEnabled    bool   `json:"tls_enabled"`
-		TLSIssuer     string `json:"tls_issuer"`
+		Domain      string `json:"domain" binding:"required"`
+		Environment string `json:"environment" binding:"required"`
+		TLSEnabled  bool   `json:"tls_enabled"`
+		TLSIssuer   string `json:"tls_issuer"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -107,7 +107,7 @@ func (h *Handler) AddCustomDomain(c *gin.Context) {
 	go h.triggerDomainReconciliation(ctx, serviceUUID, env.ID)
 
 	c.JSON(http.StatusCreated, gin.H{
-		"domain": domain,
+		"domain":  domain,
 		"message": fmt.Sprintf("Custom domain %s added. Configure your DNS to point to the ingress controller.", req.Domain),
 	})
 }
@@ -258,7 +258,7 @@ func (h *Handler) VerifyCustomDomain(c *gin.Context) {
 			logging.Error("error", err),
 			logging.String("domain", domain.Domain))
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "failed to verify DNS record",
+			"error":   "failed to verify DNS record",
 			"details": err.Error(),
 		})
 		return
@@ -266,8 +266,8 @@ func (h *Handler) VerifyCustomDomain(c *gin.Context) {
 
 	if !verified {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "domain not verified",
-			"message": fmt.Sprintf("Add a TXT record to %s with value: %s", domain.Domain, expectedValue),
+			"error":              "domain not verified",
+			"message":            fmt.Sprintf("Add a TXT record to %s with value: %s", domain.Domain, expectedValue),
 			"verification_value": expectedValue,
 		})
 		return
@@ -286,7 +286,7 @@ func (h *Handler) VerifyCustomDomain(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "domain verified successfully",
-		"domain": domain,
+		"domain":  domain,
 	})
 }
 

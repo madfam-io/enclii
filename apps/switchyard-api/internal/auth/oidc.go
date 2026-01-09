@@ -24,7 +24,7 @@ type OIDCManager struct {
 	verifier     *oidc.IDTokenVerifier
 	oauth2Config *oauth2.Config
 	repos        *db.Repositories
-	jwtManager   *JWTManager // Used for issuing local session tokens AND validating external tokens
+	jwtManager   *JWTManager     // Used for issuing local session tokens AND validating external tokens
 	adminEmails  map[string]bool // email -> is admin (for OIDC fallback when tokens don't include roles)
 }
 
@@ -394,9 +394,9 @@ func (o *OIDCManager) AuthMiddleware() gin.HandlerFunc {
 				}
 
 				logrus.WithFields(logrus.Fields{
-					"user_id":  user.ID,
-					"email":    user.Email,
-					"issuer":   externalClaims.Issuer,
+					"user_id": user.ID,
+					"email":   user.Email,
+					"issuer":  externalClaims.Issuer,
 				}).Info("User authenticated via external token")
 
 				c.Next()

@@ -21,9 +21,9 @@ const (
 	EventBuildFailed    EventType = "build.failed"
 
 	// Storage events
-	EventVolumeCreated  EventType = "volume.created"
-	EventVolumeDeleted  EventType = "volume.deleted"
-	EventVolumeResized  EventType = "volume.resized"
+	EventVolumeCreated EventType = "volume.created"
+	EventVolumeDeleted EventType = "volume.deleted"
+	EventVolumeResized EventType = "volume.resized"
 
 	// Network events
 	EventBandwidthUsage EventType = "bandwidth.usage"
@@ -37,27 +37,27 @@ const (
 type MetricType string
 
 const (
-	MetricComputeGBHours   MetricType = "compute_gb_hours"
-	MetricBuildMinutes     MetricType = "build_minutes"
-	MetricStorageGBHours   MetricType = "storage_gb_hours"
-	MetricBandwidthGB      MetricType = "bandwidth_gb"
-	MetricCustomDomains    MetricType = "custom_domains"
+	MetricComputeGBHours MetricType = "compute_gb_hours"
+	MetricBuildMinutes   MetricType = "build_minutes"
+	MetricStorageGBHours MetricType = "storage_gb_hours"
+	MetricBandwidthGB    MetricType = "bandwidth_gb"
+	MetricCustomDomains  MetricType = "custom_domains"
 )
 
 // UsageEvent represents a single usage event
 type UsageEvent struct {
-	ID           uuid.UUID         `json:"id" db:"id"`
-	ProjectID    uuid.UUID         `json:"project_id" db:"project_id"`
-	TeamID       *uuid.UUID        `json:"team_id,omitempty" db:"team_id"`
-	EventType    EventType         `json:"event_type" db:"event_type"`
-	ResourceType string            `json:"resource_type" db:"resource_type"`
-	ResourceID   uuid.UUID         `json:"resource_id" db:"resource_id"`
-	ResourceName string            `json:"resource_name,omitempty" db:"resource_name"`
+	ID           uuid.UUID          `json:"id" db:"id"`
+	ProjectID    uuid.UUID          `json:"project_id" db:"project_id"`
+	TeamID       *uuid.UUID         `json:"team_id,omitempty" db:"team_id"`
+	EventType    EventType          `json:"event_type" db:"event_type"`
+	ResourceType string             `json:"resource_type" db:"resource_type"`
+	ResourceID   uuid.UUID          `json:"resource_id" db:"resource_id"`
+	ResourceName string             `json:"resource_name,omitempty" db:"resource_name"`
 	Metrics      map[string]float64 `json:"metrics" db:"metrics"`
-	Metadata     map[string]string `json:"metadata,omitempty" db:"metadata"`
-	Timestamp    time.Time         `json:"timestamp" db:"timestamp"`
-	ProcessedAt  *time.Time        `json:"processed_at,omitempty" db:"processed_at"`
-	CreatedAt    time.Time         `json:"created_at" db:"created_at"`
+	Metadata     map[string]string  `json:"metadata,omitempty" db:"metadata"`
+	Timestamp    time.Time          `json:"timestamp" db:"timestamp"`
+	ProcessedAt  *time.Time         `json:"processed_at,omitempty" db:"processed_at"`
+	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
 }
 
 // EventRequest is the request to record an event
@@ -95,22 +95,22 @@ type DailyUsage struct {
 
 // UsageSummary represents a usage summary for a project
 type UsageSummary struct {
-	ProjectID       uuid.UUID                `json:"project_id"`
-	PeriodStart     time.Time                `json:"period_start"`
-	PeriodEnd       time.Time                `json:"period_end"`
-	Metrics         map[MetricType]float64   `json:"metrics"`
-	Costs           map[MetricType]float64   `json:"costs"`
-	TotalCost       float64                  `json:"total_cost"`
-	EstimatedMonthly float64                 `json:"estimated_monthly"`
+	ProjectID        uuid.UUID              `json:"project_id"`
+	PeriodStart      time.Time              `json:"period_start"`
+	PeriodEnd        time.Time              `json:"period_end"`
+	Metrics          map[MetricType]float64 `json:"metrics"`
+	Costs            map[MetricType]float64 `json:"costs"`
+	TotalCost        float64                `json:"total_cost"`
+	EstimatedMonthly float64                `json:"estimated_monthly"`
 }
 
 // DeploymentMetrics captures compute resource metrics
 type DeploymentMetrics struct {
-	Replicas      int     `json:"replicas"`
-	CPUMillicores int     `json:"cpu_millicores"`
-	MemoryMB      int     `json:"memory_mb"`
+	Replicas      int `json:"replicas"`
+	CPUMillicores int `json:"cpu_millicores"`
+	MemoryMB      int `json:"memory_mb"`
 	// Calculated
-	GBEquivalent  float64 `json:"gb_equivalent"`
+	GBEquivalent float64 `json:"gb_equivalent"`
 }
 
 // BuildMetrics captures build resource metrics
@@ -118,7 +118,7 @@ type BuildMetrics struct {
 	DurationSeconds float64 `json:"duration_seconds"`
 	ImageSizeMB     float64 `json:"image_size_mb"`
 	// Calculated
-	Minutes         float64 `json:"minutes"`
+	Minutes float64 `json:"minutes"`
 }
 
 // StorageMetrics captures storage resource metrics

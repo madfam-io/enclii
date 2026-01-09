@@ -52,7 +52,7 @@ func (c *CSRFMiddleware) Middleware() gin.HandlerFunc {
 				token,
 				int(c.tokenTTL.Seconds()),
 				"/",
-				"", // domain (empty = current domain)
+				"",   // domain (empty = current domain)
 				true, // secure (HTTPS only)
 				true, // httpOnly
 			)
@@ -87,7 +87,7 @@ func (c *CSRFMiddleware) Middleware() gin.HandlerFunc {
 			}).Warn("CSRF token missing from header")
 
 			ctx.JSON(http.StatusForbidden, gin.H{
-				"error": "CSRF token required in header",
+				"error":  "CSRF token required in header",
 				"header": c.headerName,
 			})
 			ctx.Abort()

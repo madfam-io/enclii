@@ -65,7 +65,7 @@ type User struct {
 
 // CheckStatus represents CI check status
 type CheckStatus struct {
-	State      string `json:"state"`       // success, failure, pending
+	State      string `json:"state"` // success, failure, pending
 	TotalCount int    `json:"total_count"`
 	Statuses   []struct {
 		State   string `json:"state"`

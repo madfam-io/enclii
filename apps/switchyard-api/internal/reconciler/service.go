@@ -35,11 +35,11 @@ type ReconcileRequest struct {
 }
 
 type ReconcileResult struct {
-	Success     bool
-	Message     string
-	K8sObjects  []string
-	NextCheck   *time.Time
-	Error       error
+	Success    bool
+	Message    string
+	K8sObjects []string
+	NextCheck  *time.Time
+	Error      error
 }
 
 func NewServiceReconciler(k8sClient *k8s.Client, logger *logrus.Logger) *ServiceReconciler {
@@ -203,13 +203,13 @@ func (r *ServiceReconciler) ensureNamespace(ctx context.Context, namespace strin
 
 func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace string) (*appsv1.Deployment, *corev1.Service, error) {
 	labels := map[string]string{
-		"app":                    req.Service.Name,
-		"version":                req.Release.Version,
-		"enclii.dev/service":     req.Service.Name,
-		"enclii.dev/project":     req.Service.ProjectID.String(),
-		"enclii.dev/release":     req.Release.ID.String(),
-		"enclii.dev/deployment":  req.Deployment.ID.String(),
-		"enclii.dev/managed-by":  "switchyard",
+		"app":                   req.Service.Name,
+		"version":               req.Release.Version,
+		"enclii.dev/service":    req.Service.Name,
+		"enclii.dev/project":    req.Service.ProjectID.String(),
+		"enclii.dev/release":    req.Release.ID.String(),
+		"enclii.dev/deployment": req.Deployment.ID.String(),
+		"enclii.dev/managed-by": "switchyard",
 	}
 
 	// Default configuration
@@ -429,7 +429,7 @@ func (r *ServiceReconciler) applyService(ctx context.Context, service *corev1.Se
 
 func (r *ServiceReconciler) waitForDeploymentReady(ctx context.Context, namespace, name string, timeout time.Duration) (bool, error) {
 	deploymentClient := r.k8sClient.Clientset.AppsV1().Deployments(namespace)
-	
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -457,7 +457,7 @@ func (r *ServiceReconciler) waitForDeploymentReady(ctx context.Context, namespac
 // Rollback rolls back a deployment to the previous version
 func (r *ServiceReconciler) Rollback(ctx context.Context, namespace, serviceName string) error {
 	deploymentClient := r.k8sClient.Clientset.AppsV1().Deployments(namespace)
-	
+
 	// Get the deployment
 	deployment, err := deploymentClient.Get(ctx, serviceName, metav1.GetOptions{})
 	if err != nil {
@@ -657,6 +657,7 @@ func buildVolumes(volumes []types.Volume, serviceName string) []corev1.Volume {
 	}
 	return podVolumes
 }
+
 // generateIngress creates an Ingress manifest for custom domains
 func (r *ServiceReconciler) generateIngress(req *ReconcileRequest, namespace string) (*networkingv1.Ingress, error) {
 	labels := map[string]string{
@@ -750,9 +751,9 @@ func (r *ServiceReconciler) generateIngress(req *ReconcileRequest, namespace str
 			Namespace: namespace,
 			Labels:    labels,
 			Annotations: map[string]string{
-				"kubernetes.io/ingress.class":                 "nginx",
-				"cert-manager.io/cluster-issuer":              tlsIssuer,
-				"nginx.ingress.kubernetes.io/ssl-redirect":    "true",
+				"kubernetes.io/ingress.class":                    "nginx",
+				"cert-manager.io/cluster-issuer":                 tlsIssuer,
+				"nginx.ingress.kubernetes.io/ssl-redirect":       "true",
 				"nginx.ingress.kubernetes.io/force-ssl-redirect": "true",
 			},
 		},

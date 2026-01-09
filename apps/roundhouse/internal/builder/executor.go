@@ -209,12 +209,12 @@ func (e *Executor) detectBuildType(buildDir string, config *queue.BuildConfig) s
 
 	// Check for common buildpack indicators
 	indicators := []string{
-		"package.json",    // Node.js
+		"package.json",     // Node.js
 		"requirements.txt", // Python
-		"Gemfile",         // Ruby
-		"go.mod",          // Go
-		"pom.xml",         // Java Maven
-		"build.gradle",    // Java Gradle
+		"Gemfile",          // Ruby
+		"go.mod",           // Go
+		"pom.xml",          // Java Maven
+		"build.gradle",     // Java Gradle
 	}
 
 	for _, indicator := range indicators {

@@ -32,20 +32,20 @@ const (
 
 // DeploymentGroup represents a coordinated multi-service deployment
 type DeploymentGroup struct {
-	ID            uuid.UUID             `json:"id"`
-	ProjectID     uuid.UUID             `json:"project_id"`
-	EnvironmentID uuid.UUID             `json:"environment_id"`
-	Name          *string               `json:"name,omitempty"`
-	Status        DeploymentGroupStatus `json:"status"`
+	ID            uuid.UUID               `json:"id"`
+	ProjectID     uuid.UUID               `json:"project_id"`
+	EnvironmentID uuid.UUID               `json:"environment_id"`
+	Name          *string                 `json:"name,omitempty"`
+	Status        DeploymentGroupStatus   `json:"status"`
 	Strategy      DeploymentGroupStrategy `json:"strategy"`
-	TriggeredBy   *string               `json:"triggered_by,omitempty"`
-	GitSHA        *string               `json:"git_sha,omitempty"`
-	PRURL         *string               `json:"pr_url,omitempty"`
-	StartedAt     *time.Time            `json:"started_at,omitempty"`
-	CompletedAt   *time.Time            `json:"completed_at,omitempty"`
-	ErrorMessage  *string               `json:"error_message,omitempty"`
-	CreatedAt     time.Time             `json:"created_at"`
-	UpdatedAt     time.Time             `json:"updated_at"`
+	TriggeredBy   *string                 `json:"triggered_by,omitempty"`
+	GitSHA        *string                 `json:"git_sha,omitempty"`
+	PRURL         *string                 `json:"pr_url,omitempty"`
+	StartedAt     *time.Time              `json:"started_at,omitempty"`
+	CompletedAt   *time.Time              `json:"completed_at,omitempty"`
+	ErrorMessage  *string                 `json:"error_message,omitempty"`
+	CreatedAt     time.Time               `json:"created_at"`
+	UpdatedAt     time.Time               `json:"updated_at"`
 }
 
 // DependencyType represents the type of service dependency

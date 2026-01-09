@@ -94,12 +94,12 @@ func Load() (*Config, error) {
 	viper.SetDefault("oidc-client-id", "enclii")
 	viper.SetDefault("oidc-client-secret", "")
 	viper.SetDefault("oidc-redirect-url", "http://localhost:4200/v1/auth/callback")
-	viper.SetDefault("post-login-redirect-url", "")     // Empty = return JSON (for API clients)
-	viper.SetDefault("external-jwks-url", "")           // Empty = disabled
-	viper.SetDefault("external-issuer", "")             // Expected issuer for external tokens
-	viper.SetDefault("external-jwks-cache-ttl", 300)    // 5 minutes default
-	viper.SetDefault("access-token-expire-minutes", 15) // 15 minutes default (set to 480 for 8 hours)
-	viper.SetDefault("refresh-token-expire-days", 7)    // 7 days default
+	viper.SetDefault("post-login-redirect-url", "")            // Empty = return JSON (for API clients)
+	viper.SetDefault("external-jwks-url", "")                  // Empty = disabled
+	viper.SetDefault("external-issuer", "")                    // Expected issuer for external tokens
+	viper.SetDefault("external-jwks-cache-ttl", 300)           // 5 minutes default
+	viper.SetDefault("access-token-expire-minutes", 15)        // 15 minutes default (set to 480 for 8 hours)
+	viper.SetDefault("refresh-token-expire-days", 7)           // 7 days default
 	viper.SetDefault("janua-api-url", "https://api.janua.dev") // Janua API for OAuth tokens
 	viper.SetDefault("kube-config", os.Getenv("HOME")+"/.kube/config")
 	viper.SetDefault("kube-context", "kind-enclii")
@@ -136,12 +136,12 @@ func Load() (*Config, error) {
 		OIDCClientSecret:          viper.GetString("oidc-client-secret"),
 		OIDCRedirectURL:           viper.GetString("oidc-redirect-url"),
 		PostLoginRedirectURL:      viper.GetString("post-login-redirect-url"),
-		ExternalJWKSURL:          viper.GetString("external-jwks-url"),
-		ExternalIssuer:           viper.GetString("external-issuer"),
-		ExternalJWKSCacheTTL:     viper.GetInt("external-jwks-cache-ttl"),
-		AccessTokenExpireMinutes: viper.GetInt("access-token-expire-minutes"),
-		RefreshTokenExpireDays:   viper.GetInt("refresh-token-expire-days"),
-		JanuaAPIURL:              viper.GetString("janua-api-url"),
+		ExternalJWKSURL:           viper.GetString("external-jwks-url"),
+		ExternalIssuer:            viper.GetString("external-issuer"),
+		ExternalJWKSCacheTTL:      viper.GetInt("external-jwks-cache-ttl"),
+		AccessTokenExpireMinutes:  viper.GetInt("access-token-expire-minutes"),
+		RefreshTokenExpireDays:    viper.GetInt("refresh-token-expire-days"),
+		JanuaAPIURL:               viper.GetString("janua-api-url"),
 		KubeConfig:                viper.GetString("kube-config"),
 		KubeContext:               viper.GetString("kube-context"),
 		BuildkitAddr:              viper.GetString("buildkit-addr"),

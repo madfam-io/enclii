@@ -57,22 +57,22 @@ func TestNewJWTManager(t *testing.T) {
 	// This test is commented out as it would need proper db.Repositories,
 	// not testutil.MockRepositories
 	/*
-	t.Run("works with repositories", func(t *testing.T) {
-		manager, err := NewJWTManager(
-			15*time.Minute,
-			7*24*time.Hour,
-			repos,
-			nil,
-		)
+		t.Run("works with repositories", func(t *testing.T) {
+			manager, err := NewJWTManager(
+				15*time.Minute,
+				7*24*time.Hour,
+				repos,
+				nil,
+			)
 
-		if err != nil {
-			t.Fatalf("NewJWTManager() with repos failed: %v", err)
-		}
+			if err != nil {
+				t.Fatalf("NewJWTManager() with repos failed: %v", err)
+			}
 
-		if manager == nil {
-			t.Fatal("NewJWTManager() returned nil manager")
-		}
-	})
+			if manager == nil {
+				t.Fatal("NewJWTManager() returned nil manager")
+			}
+		})
 	*/
 }
 

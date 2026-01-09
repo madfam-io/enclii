@@ -13,10 +13,10 @@ import (
 
 // Pricing contains the price per unit for each metric
 type Pricing struct {
-	ComputePerGBHour   float64 // $/GB-hour
-	BuildPerMinute     float64 // $/minute
-	StoragePerGBMonth  float64 // $/GB-month
-	BandwidthPerGB     float64 // $/GB egress
+	ComputePerGBHour  float64 // $/GB-hour
+	BuildPerMinute    float64 // $/minute
+	StoragePerGBMonth float64 // $/GB-month
+	BandwidthPerGB    float64 // $/GB egress
 }
 
 // DefaultPricing returns Railway-like default pricing

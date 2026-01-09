@@ -30,33 +30,33 @@ type rateLimiterEntry struct {
 
 type SecurityConfig struct {
 	// Rate limiting
-	RateLimit       int           // requests per second
-	RateBurst       int           // burst capacity
-	RateWindowSize  time.Duration // time window for rate limiting
+	RateLimit      int           // requests per second
+	RateBurst      int           // burst capacity
+	RateWindowSize time.Duration // time window for rate limiting
 
 	// Security headers
-	EnableHSTS      bool
-	EnableCSP       bool
+	EnableHSTS          bool
+	EnableCSP           bool
 	EnableXSSProtection bool
-	EnableNoSniff   bool
-	EnableFrameOptions bool
+	EnableNoSniff       bool
+	EnableFrameOptions  bool
 
 	// Request validation
-	MaxRequestSize  int64         // in bytes
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
+	MaxRequestSize int64 // in bytes
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
 
 	// IP filtering
-	AllowedIPs      []string      // CIDR blocks
-	BlockedIPs      []string      // CIDR blocks
-	TrustedProxies  []string      // for X-Forwarded-For header
+	AllowedIPs     []string // CIDR blocks
+	BlockedIPs     []string // CIDR blocks
+	TrustedProxies []string // for X-Forwarded-For header
 
 	// CORS
-	AllowedOrigins  []string
-	AllowedMethods  []string
-	AllowedHeaders  []string
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
 	AllowCredentials bool
-	MaxAge          int
+	MaxAge           int
 }
 
 func NewSecurityMiddleware(config *SecurityConfig) *SecurityMiddleware {
@@ -119,7 +119,7 @@ func (s *SecurityMiddleware) RateLimitMiddleware() gin.HandlerFunc {
 			}).Warn("Rate limit exceeded")
 
 			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error": "Rate limit exceeded",
+				"error":       "Rate limit exceeded",
 				"retry_after": "60",
 			})
 			c.Header("Retry-After", "60")
@@ -173,7 +173,7 @@ func (s *SecurityMiddleware) RequestSizeLimitMiddleware() gin.HandlerFunc {
 			}).Warn("Request size too large")
 
 			c.JSON(http.StatusRequestEntityTooLarge, gin.H{
-				"error": "Request size too large",
+				"error":    "Request size too large",
 				"max_size": s.config.MaxRequestSize,
 			})
 			c.Abort()
@@ -311,12 +311,12 @@ func (s *SecurityMiddleware) RequestLoggingMiddleware() gin.HandlerFunc {
 		// Log suspicious requests
 		if c.Writer.Status() >= 400 || duration > 5*time.Second {
 			logrus.WithFields(logrus.Fields{
-				"client_ip":    s.getClientIP(c),
-				"method":       c.Request.Method,
-				"path":         c.Request.URL.Path,
-				"status":       c.Writer.Status(),
-				"duration":     duration.String(),
-				"user_agent":   c.Request.UserAgent(),
+				"client_ip":      s.getClientIP(c),
+				"method":         c.Request.Method,
+				"path":           c.Request.URL.Path,
+				"status":         c.Writer.Status(),
+				"duration":       duration.String(),
+				"user_agent":     c.Request.UserAgent(),
 				"content_length": c.Request.ContentLength,
 			}).Info("HTTP request")
 		}
@@ -513,25 +513,25 @@ func (s *SecurityMiddleware) Stop() {
 // Default security configuration
 func DefaultSecurityConfig() *SecurityConfig {
 	return &SecurityConfig{
-		RateLimit:       100,  // 100 requests per second
-		RateBurst:       200,  // 200 burst capacity
-		RateWindowSize:  time.Minute,
-		EnableHSTS:      true,
-		EnableCSP:       true,
+		RateLimit:           100, // 100 requests per second
+		RateBurst:           200, // 200 burst capacity
+		RateWindowSize:      time.Minute,
+		EnableHSTS:          true,
+		EnableCSP:           true,
 		EnableXSSProtection: true,
-		EnableNoSniff:   true,
-		EnableFrameOptions: true,
-		MaxRequestSize:  10 << 20, // 10MB
-		ReadTimeout:     30 * time.Second,
-		WriteTimeout:    30 * time.Second,
+		EnableNoSniff:       true,
+		EnableFrameOptions:  true,
+		MaxRequestSize:      10 << 20, // 10MB
+		ReadTimeout:         30 * time.Second,
+		WriteTimeout:        30 * time.Second,
 		// SECURITY FIX: Restrict CORS origins (was: "*" - CWE-942 vulnerability)
 		// Production: Set via ENCLII_ALLOWED_ORIGINS environment variable (comma-separated)
 		// Development: Defaults to localhost origins only
-		AllowedOrigins:  getAllowedOrigins(),
-		AllowedMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:  []string{"Authorization", "Content-Type", "X-Requested-With", "X-IDP-Token", "X-CSRF-Token"},
+		AllowedOrigins:   getAllowedOrigins(),
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Requested-With", "X-IDP-Token", "X-CSRF-Token"},
 		AllowCredentials: true,
-		MaxAge:          86400, // 24 hours
+		MaxAge:           86400, // 24 hours
 	}
 }
 
@@ -555,10 +555,10 @@ func getAllowedOrigins() []string {
 	// Development defaults - only localhost
 	// This is safe for local development with kind/docker-compose
 	return []string{
-		"http://localhost:3000",  // Next.js dev server
-		"http://localhost:8030",  // Enclii UI (per PORT_REGISTRY)
-		"http://localhost:8080",  // API dev server (legacy)
-		"http://localhost:8001",  // Enclii API (per PORT_REGISTRY)
+		"http://localhost:3000", // Next.js dev server
+		"http://localhost:8030", // Enclii UI (per PORT_REGISTRY)
+		"http://localhost:8080", // API dev server (legacy)
+		"http://localhost:8001", // Enclii API (per PORT_REGISTRY)
 		"http://127.0.0.1:3000",
 		"http://127.0.0.1:8030",
 		"http://127.0.0.1:8080",
@@ -568,14 +568,14 @@ func getAllowedOrigins() []string {
 
 // Security event logging
 type SecurityEvent struct {
-	Timestamp   time.Time `json:"timestamp"`
-	EventType   string    `json:"event_type"`
-	ClientIP    string    `json:"client_ip"`
-	UserAgent   string    `json:"user_agent"`
-	Path        string    `json:"path"`
-	Method      string    `json:"method"`
-	StatusCode  int       `json:"status_code"`
-	Message     string    `json:"message"`
+	Timestamp  time.Time `json:"timestamp"`
+	EventType  string    `json:"event_type"`
+	ClientIP   string    `json:"client_ip"`
+	UserAgent  string    `json:"user_agent"`
+	Path       string    `json:"path"`
+	Method     string    `json:"method"`
+	StatusCode int       `json:"status_code"`
+	Message    string    `json:"message"`
 }
 
 func LogSecurityEvent(eventType, clientIP, userAgent, path, method, message string, statusCode int) {

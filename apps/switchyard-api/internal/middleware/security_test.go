@@ -65,8 +65,8 @@ func TestNewSecurityMiddleware(t *testing.T) {
 
 func TestRateLimitMiddleware(t *testing.T) {
 	config := &SecurityConfig{
-		RateLimit: 2,  // 2 requests per second
-		RateBurst: 2,  // 2 burst capacity
+		RateLimit: 2, // 2 requests per second
+		RateBurst: 2, // 2 burst capacity
 	}
 	middleware := NewSecurityMiddleware(config)
 
@@ -152,13 +152,13 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	expectedHeaders := map[string]string{
-		"Strict-Transport-Security":  "max-age=31536000; includeSubDomains",
-		"Content-Security-Policy":    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'",
-		"X-XSS-Protection":           "1; mode=block",
-		"X-Content-Type-Options":     "nosniff",
-		"X-Frame-Options":            "DENY",
-		"Referrer-Policy":            "strict-origin-when-cross-origin",
-		"Permissions-Policy":         "geolocation=(), microphone=(), camera=()",
+		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+		"Content-Security-Policy":   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'",
+		"X-XSS-Protection":          "1; mode=block",
+		"X-Content-Type-Options":    "nosniff",
+		"X-Frame-Options":           "DENY",
+		"Referrer-Policy":           "strict-origin-when-cross-origin",
+		"Permissions-Policy":        "geolocation=(), microphone=(), camera=()",
 	}
 
 	for header, expected := range expectedHeaders {
@@ -320,51 +320,51 @@ func TestIPFilteringMiddleware(t *testing.T) {
 
 func TestCORSMiddleware(t *testing.T) {
 	tests := []struct {
-		name             string
-		allowedOrigins   []string
-		requestOrigin    string
-		method           string
-		expectedStatus   int
+		name              string
+		allowedOrigins    []string
+		requestOrigin     string
+		method            string
+		expectedStatus    int
 		expectAllowOrigin bool
 	}{
 		{
-			name:             "wildcard origin",
-			allowedOrigins:   []string{"*"},
-			requestOrigin:    "https://example.com",
-			method:           "GET",
-			expectedStatus:   http.StatusOK,
+			name:              "wildcard origin",
+			allowedOrigins:    []string{"*"},
+			requestOrigin:     "https://example.com",
+			method:            "GET",
+			expectedStatus:    http.StatusOK,
 			expectAllowOrigin: true,
 		},
 		{
-			name:             "allowed origin",
-			allowedOrigins:   []string{"https://example.com"},
-			requestOrigin:    "https://example.com",
-			method:           "GET",
-			expectedStatus:   http.StatusOK,
+			name:              "allowed origin",
+			allowedOrigins:    []string{"https://example.com"},
+			requestOrigin:     "https://example.com",
+			method:            "GET",
+			expectedStatus:    http.StatusOK,
 			expectAllowOrigin: true,
 		},
 		{
-			name:             "not allowed origin",
-			allowedOrigins:   []string{"https://example.com"},
-			requestOrigin:    "https://evil.com",
-			method:           "GET",
-			expectedStatus:   http.StatusForbidden,
+			name:              "not allowed origin",
+			allowedOrigins:    []string{"https://example.com"},
+			requestOrigin:     "https://evil.com",
+			method:            "GET",
+			expectedStatus:    http.StatusForbidden,
 			expectAllowOrigin: false,
 		},
 		{
-			name:             "preflight request",
-			allowedOrigins:   []string{"https://example.com"},
-			requestOrigin:    "https://example.com",
-			method:           "OPTIONS",
-			expectedStatus:   http.StatusNoContent,
+			name:              "preflight request",
+			allowedOrigins:    []string{"https://example.com"},
+			requestOrigin:     "https://example.com",
+			method:            "OPTIONS",
+			expectedStatus:    http.StatusNoContent,
 			expectAllowOrigin: true,
 		},
 		{
-			name:             "no allowed origins configured",
-			allowedOrigins:   nil,
-			requestOrigin:    "https://example.com",
-			method:           "GET",
-			expectedStatus:   http.StatusOK,
+			name:              "no allowed origins configured",
+			allowedOrigins:    nil,
+			requestOrigin:     "https://example.com",
+			method:            "GET",
+			expectedStatus:    http.StatusOK,
 			expectAllowOrigin: true,
 		},
 	}
@@ -545,15 +545,15 @@ func TestGetClientIP(t *testing.T) {
 		expectedIP     string
 	}{
 		{
-			name:          "direct connection",
-			remoteAddr:    "192.168.1.100:12345",
-			expectedIP:    "192.168.1.100",
+			name:       "direct connection",
+			remoteAddr: "192.168.1.100:12345",
+			expectedIP: "192.168.1.100",
 		},
 		{
-			name:          "X-Real-IP header",
-			remoteAddr:    "10.0.0.1:12345",
-			xRealIP:       "192.168.1.100",
-			expectedIP:    "192.168.1.100",
+			name:       "X-Real-IP header",
+			remoteAddr: "10.0.0.1:12345",
+			xRealIP:    "192.168.1.100",
+			expectedIP: "192.168.1.100",
 		},
 		{
 			name:           "X-Forwarded-For with trusted proxy",

@@ -52,23 +52,23 @@ type ComplianceReceipt struct {
 
 // PullRequestEvidence captures PR metadata
 type PullRequestEvidence struct {
-	URL          string    `json:"url"`
-	Number       int       `json:"number"`
-	Title        string    `json:"title"`
-	State        string    `json:"state"`
-	MergedAt     time.Time `json:"merged_at"`
-	MergeCommit  string    `json:"merge_commit_sha"`
-	Repository   string    `json:"repository"`
-	BaseBranch   string    `json:"base_branch"`
-	HeadCommitSHA string   `json:"head_commit_sha"`
+	URL           string    `json:"url"`
+	Number        int       `json:"number"`
+	Title         string    `json:"title"`
+	State         string    `json:"state"`
+	MergedAt      time.Time `json:"merged_at"`
+	MergeCommit   string    `json:"merge_commit_sha"`
+	Repository    string    `json:"repository"`
+	BaseBranch    string    `json:"base_branch"`
+	HeadCommitSHA string    `json:"head_commit_sha"`
 }
 
 // ApprovalEvidence captures who approved the PR
 type ApprovalEvidence struct {
-	Approver    string    `json:"approver"`
-	ApproverEmail string  `json:"approver_email,omitempty"`
-	State       string    `json:"state"`
-	SubmittedAt time.Time `json:"submitted_at"`
+	Approver      string    `json:"approver"`
+	ApproverEmail string    `json:"approver_email,omitempty"`
+	State         string    `json:"state"`
+	SubmittedAt   time.Time `json:"submitted_at"`
 }
 
 // CIEvidence captures CI check results
@@ -99,14 +99,14 @@ func GenerateReceipt(
 		GitCommitSHA:   gitCommitSHA,
 		ImageURI:       imageURI,
 		PullRequest: PullRequestEvidence{
-			URL:          pr.HTMLURL,
-			Number:       pr.Number,
-			Title:        pr.Title,
-			State:        pr.State,
-			MergedAt:     pr.MergedAt,
-			MergeCommit:  pr.MergeCommit,
-			Repository:   fmt.Sprintf("%s/%s", pr.Base.Repo.Owner.Login, pr.Base.Repo.Name),
-			BaseBranch:   pr.Base.Ref,
+			URL:           pr.HTMLURL,
+			Number:        pr.Number,
+			Title:         pr.Title,
+			State:         pr.State,
+			MergedAt:      pr.MergedAt,
+			MergeCommit:   pr.MergeCommit,
+			Repository:    fmt.Sprintf("%s/%s", pr.Base.Repo.Owner.Login, pr.Base.Repo.Name),
+			BaseBranch:    pr.Base.Ref,
 			HeadCommitSHA: pr.Head.SHA,
 		},
 		Approvals:       []ApprovalEvidence{},

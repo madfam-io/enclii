@@ -23,9 +23,9 @@ func TestValidator_ValidateStruct(t *testing.T) {
 	validator := NewValidator()
 
 	tests := []struct {
-		name      string
-		input     interface{}
-		wantError bool
+		name       string
+		input      interface{}
+		wantError  bool
 		errorCount int
 	}{
 		{
@@ -429,9 +429,9 @@ func TestSanitizeDNSName(t *testing.T) {
 
 func TestSanitizeProjectSlug(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		minLen   int
+		name   string
+		input  string
+		minLen int
 	}{
 		{"normal slug", "my-project", 3},
 		{"short slug", "ab", 3}, // Will be extended

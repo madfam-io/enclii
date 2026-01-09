@@ -221,13 +221,13 @@ func (s *DeploymentService) Rollback(ctx context.Context, req *RollbackRequest) 
 	}
 
 	// Get release
-	release, err := s.repos.Releases.GetByID( deployment.ReleaseID)
+	release, err := s.repos.Releases.GetByID(deployment.ReleaseID)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrReleaseNotFound)
 	}
 
 	// Get previous release for the service
-	releases, err := s.repos.Releases.ListByService( release.ServiceID)
+	releases, err := s.repos.Releases.ListByService(release.ServiceID)
 	if err != nil {
 		return nil, errors.Wrap(err, errors.ErrDatabaseError)
 	}

@@ -16,29 +16,29 @@ import (
 
 // Local development environment configuration
 type LocalConfig struct {
-	FoundryPath   string
-	JanuaPath     string
-	EncliiPath    string
-	ComposeFile   string
-	Network       string
-	PostgresHost  string
-	PostgresPort  string
-	RedisHost     string
-	RedisPort     string
+	FoundryPath  string
+	JanuaPath    string
+	EncliiPath   string
+	ComposeFile  string
+	Network      string
+	PostgresHost string
+	PostgresPort string
+	RedisHost    string
+	RedisPort    string
 }
 
 func getLocalConfig() *LocalConfig {
 	labspace := os.Getenv("HOME") + "/labspace"
 	return &LocalConfig{
-		FoundryPath:   filepath.Join(labspace, "solarpunk-foundry"),
-		JanuaPath:     filepath.Join(labspace, "janua"),
-		EncliiPath:    filepath.Join(labspace, "enclii"),
-		ComposeFile:   "ops/local/docker-compose.shared.yml",
-		Network:       "madfam-shared-network",
-		PostgresHost:  "localhost",
-		PostgresPort:  "5432",
-		RedisHost:     "localhost",
-		RedisPort:     "6379",
+		FoundryPath:  filepath.Join(labspace, "solarpunk-foundry"),
+		JanuaPath:    filepath.Join(labspace, "janua"),
+		EncliiPath:   filepath.Join(labspace, "enclii"),
+		ComposeFile:  "ops/local/docker-compose.shared.yml",
+		Network:      "madfam-shared-network",
+		PostgresHost: "localhost",
+		PostgresPort: "5432",
+		RedisHost:    "localhost",
+		RedisPort:    "6379",
 	}
 }
 
@@ -238,9 +238,9 @@ func runLocalDown(keepInfra bool) error {
 
 	// Stop application processes (pkill gracefully)
 	stopProcesses := []string{
-		"uvicorn",       // Janua API
-		"next-server",   // Next.js apps
-		"switchyard",    // Enclii API
+		"uvicorn",     // Janua API
+		"next-server", // Next.js apps
+		"switchyard",  // Enclii API
 	}
 
 	for _, proc := range stopProcesses {

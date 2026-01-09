@@ -49,7 +49,7 @@ func (r *PreviewEnvironmentRepository) Create(ctx context.Context, preview *type
 // GetByID retrieves a preview environment by ID
 func (r *PreviewEnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID) (*types.PreviewEnvironment, error) {
 	preview := &types.PreviewEnvironment{}
-	
+
 	query := `
 		SELECT id, project_id, service_id, pr_number, pr_title, pr_url, pr_author,
 		       pr_branch, pr_base_branch, commit_sha, preview_subdomain, preview_url,
@@ -58,11 +58,11 @@ func (r *PreviewEnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID
 		FROM preview_environments
 		WHERE id = $1
 	`
-	
+
 	var prTitle, prURL, prAuthor, statusMessage, buildLogsURL sql.NullString
 	var lastAccessedAt, sleepingSince, closedAt sql.NullTime
 	var deploymentID sql.NullString
-	
+
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&preview.ID, &preview.ProjectID, &preview.ServiceID, &preview.PRNumber,
 		&prTitle, &prURL, &prAuthor, &preview.PRBranch, &preview.PRBaseBranch,
@@ -74,7 +74,7 @@ func (r *PreviewEnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if prTitle.Valid {
 		preview.PRTitle = prTitle.String
 	}
@@ -103,14 +103,14 @@ func (r *PreviewEnvironmentRepository) GetByID(ctx context.Context, id uuid.UUID
 		id, _ := uuid.Parse(deploymentID.String)
 		preview.DeploymentID = &id
 	}
-	
+
 	return preview, nil
 }
 
 // GetByServiceAndPR retrieves a preview environment by service ID and PR number
 func (r *PreviewEnvironmentRepository) GetByServiceAndPR(ctx context.Context, serviceID uuid.UUID, prNumber int) (*types.PreviewEnvironment, error) {
 	preview := &types.PreviewEnvironment{}
-	
+
 	query := `
 		SELECT id, project_id, service_id, pr_number, pr_title, pr_url, pr_author,
 		       pr_branch, pr_base_branch, commit_sha, preview_subdomain, preview_url,
@@ -119,11 +119,11 @@ func (r *PreviewEnvironmentRepository) GetByServiceAndPR(ctx context.Context, se
 		FROM preview_environments
 		WHERE service_id = $1 AND pr_number = $2
 	`
-	
+
 	var prTitle, prURL, prAuthor, statusMessage, buildLogsURL sql.NullString
 	var lastAccessedAt, sleepingSince, closedAt sql.NullTime
 	var deploymentID sql.NullString
-	
+
 	err := r.db.QueryRowContext(ctx, query, serviceID, prNumber).Scan(
 		&preview.ID, &preview.ProjectID, &preview.ServiceID, &preview.PRNumber,
 		&prTitle, &prURL, &prAuthor, &preview.PRBranch, &preview.PRBaseBranch,
@@ -135,7 +135,7 @@ func (r *PreviewEnvironmentRepository) GetByServiceAndPR(ctx context.Context, se
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if prTitle.Valid {
 		preview.PRTitle = prTitle.String
 	}
@@ -164,7 +164,7 @@ func (r *PreviewEnvironmentRepository) GetByServiceAndPR(ctx context.Context, se
 		id, _ := uuid.Parse(deploymentID.String)
 		preview.DeploymentID = &id
 	}
-	
+
 	return preview, nil
 }
 
@@ -179,7 +179,7 @@ func (r *PreviewEnvironmentRepository) ListByService(ctx context.Context, servic
 		WHERE service_id = $1
 		ORDER BY created_at DESC
 	`
-	
+
 	return r.queryPreviews(ctx, query, serviceID)
 }
 
@@ -194,7 +194,7 @@ func (r *PreviewEnvironmentRepository) ListByProject(ctx context.Context, projec
 		WHERE project_id = $1
 		ORDER BY created_at DESC
 	`
-	
+
 	return r.queryPreviews(ctx, query, projectID)
 }
 
@@ -209,7 +209,7 @@ func (r *PreviewEnvironmentRepository) ListActive(ctx context.Context) ([]*types
 		WHERE status IN ('pending', 'building', 'deploying', 'active', 'sleeping')
 		ORDER BY created_at DESC
 	`
-	
+
 	return r.queryPreviews(ctx, query)
 }
 
@@ -226,7 +226,7 @@ func (r *PreviewEnvironmentRepository) ListSleepCandidates(ctx context.Context) 
 		  AND last_accessed_at < NOW() - (auto_sleep_after || ' minutes')::INTERVAL
 		ORDER BY last_accessed_at ASC
 	`
-	
+
 	return r.queryPreviews(ctx, query)
 }
 
@@ -241,7 +241,7 @@ func (r *PreviewEnvironmentRepository) UpdateStatus(ctx context.Context, id uuid
 	if err != nil {
 		return err
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
@@ -249,7 +249,7 @@ func (r *PreviewEnvironmentRepository) UpdateStatus(ctx context.Context, id uuid
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
 	}
-	
+
 	return nil
 }
 
@@ -326,7 +326,7 @@ func (r *PreviewEnvironmentRepository) Delete(ctx context.Context, id uuid.UUID)
 	if err != nil {
 		return err
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
@@ -334,7 +334,7 @@ func (r *PreviewEnvironmentRepository) Delete(ctx context.Context, id uuid.UUID)
 	if rowsAffected == 0 {
 		return sql.ErrNoRows
 	}
-	
+
 	return nil
 }
 
@@ -345,14 +345,14 @@ func (r *PreviewEnvironmentRepository) queryPreviews(ctx context.Context, query 
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	var previews []*types.PreviewEnvironment
 	for rows.Next() {
 		preview := &types.PreviewEnvironment{}
 		var prTitle, prURL, prAuthor, statusMessage, buildLogsURL sql.NullString
 		var lastAccessedAt, sleepingSince, closedAt sql.NullTime
 		var deploymentID sql.NullString
-		
+
 		err := rows.Scan(
 			&preview.ID, &preview.ProjectID, &preview.ServiceID, &preview.PRNumber,
 			&prTitle, &prURL, &prAuthor, &preview.PRBranch, &preview.PRBaseBranch,
@@ -364,7 +364,7 @@ func (r *PreviewEnvironmentRepository) queryPreviews(ctx context.Context, query 
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan preview: %w", err)
 		}
-		
+
 		if prTitle.Valid {
 			preview.PRTitle = prTitle.String
 		}
@@ -393,10 +393,10 @@ func (r *PreviewEnvironmentRepository) queryPreviews(ctx context.Context, query 
 			id, _ := uuid.Parse(deploymentID.String)
 			preview.DeploymentID = &id
 		}
-		
+
 		previews = append(previews, preview)
 	}
-	
+
 	return previews, nil
 }
 
@@ -415,7 +415,7 @@ func (r *PreviewCommentRepository) Create(ctx context.Context, comment *types.Pr
 	comment.CreatedAt = time.Now()
 	comment.UpdatedAt = time.Now()
 	comment.Status = types.CommentStatusActive
-	
+
 	query := `
 		INSERT INTO preview_comments (
 			id, preview_id, user_id, user_email, user_name, content,
@@ -441,13 +441,13 @@ func (r *PreviewCommentRepository) ListByPreview(ctx context.Context, previewID 
 		WHERE preview_id = $1 AND status != 'deleted'
 		ORDER BY created_at ASC
 	`
-	
+
 	rows, err := r.db.QueryContext(ctx, query, previewID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	var comments []*types.PreviewComment
 	for rows.Next() {
 		comment := &types.PreviewComment{}
@@ -455,7 +455,7 @@ func (r *PreviewCommentRepository) ListByPreview(ctx context.Context, previewID 
 		var xPos, yPos sql.NullInt32
 		var resolvedAt sql.NullTime
 		var resolvedBy sql.NullString
-		
+
 		err := rows.Scan(
 			&comment.ID, &comment.PreviewID, &comment.UserID, &comment.UserEmail,
 			&userName, &comment.Content, &path, &xPos, &yPos, &comment.Status,
@@ -464,7 +464,7 @@ func (r *PreviewCommentRepository) ListByPreview(ctx context.Context, previewID 
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if userName.Valid {
 			comment.UserName = userName.String
 		}
@@ -486,10 +486,10 @@ func (r *PreviewCommentRepository) ListByPreview(ctx context.Context, previewID 
 			id, _ := uuid.Parse(resolvedBy.String)
 			comment.ResolvedBy = &id
 		}
-		
+
 		comments = append(comments, comment)
 	}
-	
+
 	return comments, nil
 }
 
@@ -528,7 +528,7 @@ func NewPreviewAccessLogRepository(db *sql.DB) *PreviewAccessLogRepository {
 func (r *PreviewAccessLogRepository) Log(ctx context.Context, log *types.PreviewAccessLog) error {
 	log.ID = uuid.New()
 	log.AccessedAt = time.Now()
-	
+
 	query := `
 		INSERT INTO preview_access_logs (
 			id, preview_id, accessed_at, path, user_agent, ip_address,
@@ -548,7 +548,7 @@ func (r *PreviewAccessLogRepository) GetRecentByPreview(ctx context.Context, pre
 	if limit <= 0 {
 		limit = 100
 	}
-	
+
 	query := `
 		SELECT id, preview_id, accessed_at, path, user_agent, ip_address,
 		       user_id, status_code, response_time_ms
@@ -557,20 +557,20 @@ func (r *PreviewAccessLogRepository) GetRecentByPreview(ctx context.Context, pre
 		ORDER BY accessed_at DESC
 		LIMIT $2
 	`
-	
+
 	rows, err := r.db.QueryContext(ctx, query, previewID, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	var logs []*types.PreviewAccessLog
 	for rows.Next() {
 		log := &types.PreviewAccessLog{}
 		var path, userAgent, ipAddress sql.NullString
 		var userID sql.NullString
 		var statusCode, responseTimeMs sql.NullInt32
-		
+
 		err := rows.Scan(
 			&log.ID, &log.PreviewID, &log.AccessedAt, &path, &userAgent,
 			&ipAddress, &userID, &statusCode, &responseTimeMs,
@@ -578,7 +578,7 @@ func (r *PreviewAccessLogRepository) GetRecentByPreview(ctx context.Context, pre
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if path.Valid {
 			log.Path = path.String
 		}
@@ -600,9 +600,9 @@ func (r *PreviewAccessLogRepository) GetRecentByPreview(ctx context.Context, pre
 			r := int(responseTimeMs.Int32)
 			log.ResponseTimeMs = &r
 		}
-		
+
 		logs = append(logs, log)
 	}
-	
+
 	return logs, nil
 }

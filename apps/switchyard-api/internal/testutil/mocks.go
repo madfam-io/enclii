@@ -12,10 +12,10 @@ import (
 
 // MockProjectRepository is a mock implementation of ProjectRepositoryInterface
 type MockProjectRepository struct {
-	mu       sync.RWMutex
-	projects map[uuid.UUID]*types.Project
-	slugMap  map[string]*types.Project
-	CreateFn func(*types.Project) error
+	mu        sync.RWMutex
+	projects  map[uuid.UUID]*types.Project
+	slugMap   map[string]*types.Project
+	CreateFn  func(*types.Project) error
 	GetByIDFn func(context.Context, uuid.UUID) (*types.Project, error)
 }
 

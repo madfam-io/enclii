@@ -17,10 +17,10 @@ import (
 // R2Client provides Cloudflare R2 object storage operations
 // R2 is S3-compatible, so we use the AWS SDK with custom endpoint
 type R2Client struct {
-	client     *s3.Client
-	bucket     string
-	accountID  string
-	presigner  *s3.PresignClient
+	client    *s3.Client
+	bucket    string
+	accountID string
+	presigner *s3.PresignClient
 }
 
 // R2Config holds configuration for Cloudflare R2
@@ -30,7 +30,7 @@ type R2Config struct {
 	AccessKeySecret string
 	BucketName      string
 	// Optional: custom endpoint for testing
-	Endpoint        string
+	Endpoint string
 }
 
 // NewR2Client creates a new Cloudflare R2 storage client
@@ -245,12 +245,12 @@ type StorageManager struct {
 // StorageConfig holds storage configuration
 type StorageConfig struct {
 	// Bucket prefixes for different content types
-	BackupPrefix    string
-	BuildLogPrefix  string
-	ArtifactPrefix  string
+	BackupPrefix   string
+	BuildLogPrefix string
+	ArtifactPrefix string
 
 	// Retention policies
-	BackupRetentionDays  int
+	BackupRetentionDays   int
 	BuildLogRetentionDays int
 }
 

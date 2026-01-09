@@ -15,16 +15,16 @@ import (
 
 // ServiceHealth represents the health status of a service
 type ServiceHealth struct {
-	ServiceID     string    `json:"service_id"`
-	ServiceName   string    `json:"service_name"`
-	ProjectSlug   string    `json:"project_slug"`
-	Status        string    `json:"status"` // healthy, degraded, unhealthy, unknown
-	Uptime        float64   `json:"uptime"` // percentage
-	ResponseTime  float64   `json:"response_time_ms"`
-	ErrorRate     float64   `json:"error_rate"`
-	LastChecked   time.Time `json:"last_checked"`
-	PodCount      int       `json:"pod_count"`
-	ReadyPods     int       `json:"ready_pods"`
+	ServiceID    string    `json:"service_id"`
+	ServiceName  string    `json:"service_name"`
+	ProjectSlug  string    `json:"project_slug"`
+	Status       string    `json:"status"` // healthy, degraded, unhealthy, unknown
+	Uptime       float64   `json:"uptime"` // percentage
+	ResponseTime float64   `json:"response_time_ms"`
+	ErrorRate    float64   `json:"error_rate"`
+	LastChecked  time.Time `json:"last_checked"`
+	PodCount     int       `json:"pod_count"`
+	ReadyPods    int       `json:"ready_pods"`
 }
 
 // ServiceHealthResponse contains health status for all services

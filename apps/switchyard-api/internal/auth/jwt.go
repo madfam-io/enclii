@@ -34,9 +34,9 @@ type JWTManager struct {
 	cache           SessionRevoker // For session revocation
 
 	// External JWKS validation (for CLI/API direct access with external tokens)
-	externalJWKSURL    string
-	externalIssuer     string
-	externalJWKSCache  *jwksCache
+	externalJWKSURL   string
+	externalIssuer    string
+	externalJWKSCache *jwksCache
 
 	// Admin email mapping for external tokens (grants admin role based on email)
 	adminEmails map[string]bool
@@ -44,14 +44,14 @@ type JWTManager struct {
 
 // jwksCache caches external JWKS keys with TTL and stale-while-revalidate support
 type jwksCache struct {
-	mu              sync.RWMutex
-	keys            map[string]*rsa.PublicKey // kid -> public key
-	expiresAt       time.Time
-	cacheTTL        time.Duration
-	lastFetchTime   time.Time
-	lastFetchError  error
+	mu               sync.RWMutex
+	keys             map[string]*rsa.PublicKey // kid -> public key
+	expiresAt        time.Time
+	cacheTTL         time.Duration
+	lastFetchTime    time.Time
+	lastFetchError   error
 	consecutiveFails int
-	staleThreshold  time.Duration // Warn if cache is stale beyond this
+	staleThreshold   time.Duration // Warn if cache is stale beyond this
 }
 
 // SessionRevoker defines the interface for revoking sessions
@@ -62,12 +62,12 @@ type SessionRevoker interface {
 }
 
 type Claims struct {
-	UserID      uuid.UUID `json:"user_id"`
-	Email       string    `json:"email"`
-	Role        string    `json:"role"`
-	ProjectIDs  []string  `json:"project_ids,omitempty"`
-	SessionID   string    `json:"session_id"` // Unique session identifier for revocation
-	TokenType   string    `json:"token_type"` // "access" or "refresh"
+	UserID     uuid.UUID `json:"user_id"`
+	Email      string    `json:"email"`
+	Role       string    `json:"role"`
+	ProjectIDs []string  `json:"project_ids,omitempty"`
+	SessionID  string    `json:"session_id"` // Unique session identifier for revocation
+	TokenType  string    `json:"token_type"` // "access" or "refresh"
 	jwt.RegisteredClaims
 }
 
@@ -78,7 +78,7 @@ type TokenPair struct {
 	TokenType    string    `json:"token_type"`
 	// IDPToken is the access token from the identity provider (e.g., Janua)
 	// Used for calling IDP-specific APIs like OAuth account linking
-	IDPToken     string    `json:"idp_token,omitempty"`
+	IDPToken string `json:"idp_token,omitempty"`
 	// IDPTokenExpiresAt is when the IDP token expires
 	IDPTokenExpiresAt *time.Time `json:"idp_token_expires_at,omitempty"`
 }
@@ -166,12 +166,12 @@ func (j *JWTManager) GenerateTokenPair(user *User) (*TokenPair, error) {
 
 	// Generate access token
 	accessClaims := &Claims{
-		UserID:    user.ID,
-		Email:     user.Email,
-		Role:      user.Role,
+		UserID:     user.ID,
+		Email:      user.Email,
+		Role:       user.Role,
 		ProjectIDs: user.ProjectIDs,
-		SessionID: sessionID,
-		TokenType: "access",
+		SessionID:  sessionID,
+		TokenType:  "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -275,11 +275,11 @@ func (j *JWTManager) RefreshToken(refreshTokenString string) (*TokenPair, error)
 
 	// Create user from claims
 	user := &User{
-		ID:    claims.UserID,
-		Email: claims.Email,
-		Role:  claims.Role,
+		ID:         claims.UserID,
+		Email:      claims.Email,
+		Role:       claims.Role,
 		ProjectIDs: claims.ProjectIDs,
-		Active: true,
+		Active:     true,
 	}
 
 	newTokens, err := j.GenerateTokenPair(user)
@@ -629,6 +629,7 @@ func (j *JWTManager) ExportPublicKey() (string, error) {
 
 	return string(pubKeyPEM), nil
 }
+
 // GetJWKS returns the JSON Web Key Set for token verification
 // This allows external services to verify tokens we issue
 func (j *JWTManager) GetJWKS() map[string]interface{} {
@@ -862,17 +863,17 @@ func (j *JWTManager) handleJWKSFetchError(err error) error {
 
 		// Log warning about stale cache
 		logrus.WithFields(logrus.Fields{
-			"error":            err.Error(),
+			"error":             err.Error(),
 			"consecutive_fails": j.externalJWKSCache.consecutiveFails,
-			"cache_age":        cacheAge.String(),
-			"cached_keys":      len(j.externalJWKSCache.keys),
+			"cache_age":         cacheAge.String(),
+			"cached_keys":       len(j.externalJWKSCache.keys),
 		}).Warn("JWKS fetch failed, using cached keys (stale-while-revalidate)")
 
 		// Alert if cache is stale beyond threshold
 		if cacheAge > j.externalJWKSCache.staleThreshold {
 			logrus.WithFields(logrus.Fields{
-				"cache_age":        cacheAge.String(),
-				"stale_threshold":  j.externalJWKSCache.staleThreshold.String(),
+				"cache_age":         cacheAge.String(),
+				"stale_threshold":   j.externalJWKSCache.staleThreshold.String(),
 				"consecutive_fails": j.externalJWKSCache.consecutiveFails,
 			}).Error("CRITICAL: JWKS cache is stale beyond threshold - authentication may fail if keys rotate")
 		}
@@ -883,7 +884,7 @@ func (j *JWTManager) handleJWKSFetchError(err error) error {
 
 	// No cached keys available - this is a hard failure
 	logrus.WithFields(logrus.Fields{
-		"error":            err.Error(),
+		"error":             err.Error(),
 		"consecutive_fails": j.externalJWKSCache.consecutiveFails,
 	}).Error("JWKS fetch failed and no cached keys available")
 

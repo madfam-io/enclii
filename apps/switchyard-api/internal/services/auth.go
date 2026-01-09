@@ -312,12 +312,12 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *RefreshTokenRequest
 
 // LogoutRequest represents a logout request
 type LogoutRequest struct {
-	UserID     string
-	UserEmail  string
-	UserRole   string
+	UserID      string
+	UserEmail   string
+	UserRole    string
 	TokenString string
-	IP         string
-	UserAgent  string
+	IP          string
+	UserAgent   string
 }
 
 // Logout logs out a user (revokes session tokens)

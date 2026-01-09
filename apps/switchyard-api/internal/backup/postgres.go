@@ -21,25 +21,25 @@ type BackupManager struct {
 }
 
 type BackupConfig struct {
-	DatabaseURL    string
-	BackupDir      string
-	RetentionDays  int
-	S3Bucket       string
-	S3Region       string
-	S3AccessKey    string
-	S3SecretKey    string
-	
+	DatabaseURL   string
+	BackupDir     string
+	RetentionDays int
+	S3Bucket      string
+	S3Region      string
+	S3AccessKey   string
+	S3SecretKey   string
+
 	// Backup schedule
-	Schedule       string        // cron format
-	BackupTimeout  time.Duration
-	
+	Schedule      string // cron format
+	BackupTimeout time.Duration
+
 	// Compression
 	EnableCompression bool
 	CompressionLevel  int
-	
+
 	// Encryption
-	EnableEncryption  bool
-	EncryptionKey     string
+	EnableEncryption bool
+	EncryptionKey    string
 }
 
 type BackupInfo struct {
@@ -65,20 +65,20 @@ func NewBackupManager(config *BackupConfig) *BackupManager {
 	if config.BackupDir == "" {
 		config.BackupDir = "/var/backups/enclii"
 	}
-	
+
 	if config.BackupTimeout == 0 {
 		config.BackupTimeout = 30 * time.Minute
 	}
-	
+
 	if config.RetentionDays == 0 {
 		config.RetentionDays = 30
 	}
-	
+
 	// Ensure backup directory exists
 	if err := os.MkdirAll(config.BackupDir, 0755); err != nil {
 		logrus.Errorf("Failed to create backup directory: %v", err)
 	}
-	
+
 	return &BackupManager{config: config}
 }
 
@@ -86,34 +86,34 @@ func NewBackupManager(config *BackupConfig) *BackupManager {
 func (bm *BackupManager) CreateBackup(ctx context.Context, databaseName string) (*BackupInfo, error) {
 	timestamp := time.Now().Format("20060102-150405")
 	filename := fmt.Sprintf("%s_%s.sql", databaseName, timestamp)
-	
+
 	if bm.config.EnableCompression {
 		filename += ".gz"
 	}
-	
+
 	if bm.config.EnableEncryption {
 		filename += ".enc"
 	}
-	
+
 	backupPath := filepath.Join(bm.config.BackupDir, filename)
-	
+
 	logrus.WithFields(logrus.Fields{
 		"database": databaseName,
 		"file":     filename,
 	}).Info("Starting database backup")
-	
+
 	// Create context with timeout
 	backupCtx, cancel := context.WithTimeout(ctx, bm.config.BackupTimeout)
 	defer cancel()
 
 	// Build pg_dump command
 	cmd := bm.buildPgDumpCommand(backupCtx, databaseName, backupPath)
-	
+
 	// Execute backup
 	start := time.Now()
 	output, err := cmd.CombinedOutput()
 	duration := time.Since(start)
-	
+
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error":    err.Error(),
@@ -122,19 +122,19 @@ func (bm *BackupManager) CreateBackup(ctx context.Context, databaseName string) 
 		}).Error("Backup failed")
 		return nil, fmt.Errorf("backup failed: %w", err)
 	}
-	
+
 	// Get file info
 	fileInfo, err := os.Stat(backupPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get backup file info: %w", err)
 	}
-	
+
 	// Calculate checksum
 	checksum, err := bm.calculateChecksum(backupPath)
 	if err != nil {
 		logrus.Warnf("Failed to calculate checksum: %v", err)
 	}
-	
+
 	backupInfo := &BackupInfo{
 		Filename:     filename,
 		Size:         fileInfo.Size(),
@@ -145,13 +145,13 @@ func (bm *BackupManager) CreateBackup(ctx context.Context, databaseName string) 
 		Checksum:     checksum,
 		StorageType:  "local",
 	}
-	
+
 	logrus.WithFields(logrus.Fields{
 		"file":     filename,
 		"size":     fileInfo.Size(),
 		"duration": duration,
 	}).Info("Backup completed successfully")
-	
+
 	// Upload to S3 if configured
 	if bm.config.S3Bucket != "" {
 		if err := bm.uploadToS3(backupPath, filename); err != nil {
@@ -160,14 +160,14 @@ func (bm *BackupManager) CreateBackup(ctx context.Context, databaseName string) 
 			backupInfo.StorageType = "s3"
 		}
 	}
-	
+
 	return backupInfo, nil
 }
 
 // RestoreBackup restores a database from backup
 func (bm *BackupManager) RestoreBackup(ctx context.Context, options *RestoreOptions) error {
 	backupPath := filepath.Join(bm.config.BackupDir, options.BackupFile)
-	
+
 	// Check if backup file exists locally
 	if _, err := os.Stat(backupPath); os.IsNotExist(err) {
 		// Try to download from S3 if configured
@@ -179,33 +179,33 @@ func (bm *BackupManager) RestoreBackup(ctx context.Context, options *RestoreOpti
 			return fmt.Errorf("backup file not found: %s", backupPath)
 		}
 	}
-	
+
 	logrus.WithFields(logrus.Fields{
-		"backup_file": options.BackupFile,
-		"database":    options.DatabaseName,
+		"backup_file":   options.BackupFile,
+		"database":      options.DatabaseName,
 		"drop_existing": options.DropExisting,
 	}).Info("Starting database restore")
-	
+
 	// Drop existing database if requested
 	if options.DropExisting {
 		if err := bm.dropDatabase(options.DatabaseName); err != nil {
 			return fmt.Errorf("failed to drop existing database: %w", err)
 		}
 	}
-	
+
 	// Create database if it doesn't exist
 	if err := bm.createDatabase(options.DatabaseName); err != nil {
 		logrus.Warnf("Database creation failed (may already exist): %v", err)
 	}
-	
+
 	// Build pg_restore command
 	cmd := bm.buildPgRestoreCommand(ctx, options.DatabaseName, backupPath)
-	
+
 	// Execute restore
 	start := time.Now()
 	output, err := cmd.CombinedOutput()
 	duration := time.Since(start)
-	
+
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error":    err.Error(),
@@ -214,12 +214,12 @@ func (bm *BackupManager) RestoreBackup(ctx context.Context, options *RestoreOpti
 		}).Error("Restore failed")
 		return fmt.Errorf("restore failed: %w", err)
 	}
-	
+
 	logrus.WithFields(logrus.Fields{
 		"database": options.DatabaseName,
 		"duration": duration,
 	}).Info("Restore completed successfully")
-	
+
 	return nil
 }
 
@@ -229,29 +229,29 @@ func (bm *BackupManager) ListBackups() ([]*BackupInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read backup directory: %w", err)
 	}
-	
+
 	var backups []*BackupInfo
-	
+
 	for _, file := range files {
-		if file.IsDir() || !strings.HasSuffix(file.Name(), ".sql") && 
-		   !strings.HasSuffix(file.Name(), ".sql.gz") &&
-		   !strings.HasSuffix(file.Name(), ".sql.gz.enc") {
+		if file.IsDir() || !strings.HasSuffix(file.Name(), ".sql") &&
+			!strings.HasSuffix(file.Name(), ".sql.gz") &&
+			!strings.HasSuffix(file.Name(), ".sql.gz.enc") {
 			continue
 		}
-		
+
 		fileInfo, err := file.Info()
 		if err != nil {
 			continue
 		}
-		
+
 		// Parse filename to extract database name and timestamp
 		parts := strings.Split(file.Name(), "_")
 		if len(parts) < 2 {
 			continue
 		}
-		
+
 		databaseName := parts[0]
-		
+
 		backupInfo := &BackupInfo{
 			Filename:     file.Name(),
 			Size:         fileInfo.Size(),
@@ -261,15 +261,15 @@ func (bm *BackupManager) ListBackups() ([]*BackupInfo, error) {
 			Encrypted:    strings.Contains(file.Name(), ".enc"),
 			StorageType:  "local",
 		}
-		
+
 		backups = append(backups, backupInfo)
 	}
-	
+
 	// Sort by creation time (newest first)
 	sort.Slice(backups, func(i, j int) bool {
 		return backups[i].CreatedAt.After(backups[j].CreatedAt)
 	})
-	
+
 	return backups, nil
 }
 
@@ -279,10 +279,10 @@ func (bm *BackupManager) CleanupOldBackups() error {
 	if err != nil {
 		return err
 	}
-	
+
 	cutoffTime := time.Now().AddDate(0, 0, -bm.config.RetentionDays)
 	var deletedCount int
-	
+
 	for _, backup := range backups {
 		if backup.CreatedAt.Before(cutoffTime) {
 			backupPath := filepath.Join(bm.config.BackupDir, backup.Filename)
@@ -290,49 +290,49 @@ func (bm *BackupManager) CleanupOldBackups() error {
 				logrus.Errorf("Failed to delete old backup %s: %v", backup.Filename, err)
 				continue
 			}
-			
+
 			// Delete from S3 if configured
 			if bm.config.S3Bucket != "" {
 				if err := bm.deleteFromS3(backup.Filename); err != nil {
 					logrus.Errorf("Failed to delete backup from S3: %v", err)
 				}
 			}
-			
+
 			deletedCount++
 			logrus.WithField("file", backup.Filename).Info("Deleted old backup")
 		}
 	}
-	
+
 	if deletedCount > 0 {
 		logrus.WithField("count", deletedCount).Info("Cleaned up old backups")
 	}
-	
+
 	return nil
 }
 
 // VerifyBackup verifies the integrity of a backup
 func (bm *BackupManager) VerifyBackup(backupFile string) error {
 	backupPath := filepath.Join(bm.config.BackupDir, backupFile)
-	
+
 	// Check if file exists and is readable
 	file, err := os.Open(backupPath)
 	if err != nil {
 		return fmt.Errorf("cannot open backup file: %w", err)
 	}
 	defer file.Close()
-	
+
 	// Basic verification - check if it's a valid SQL dump
 	buffer := make([]byte, 1024)
 	n, err := file.Read(buffer)
 	if err != nil && err != io.EOF {
 		return fmt.Errorf("cannot read backup file: %w", err)
 	}
-	
+
 	content := string(buffer[:n])
 	if !strings.Contains(content, "PostgreSQL database dump") {
 		return fmt.Errorf("backup file does not appear to be a valid PostgreSQL dump")
 	}
-	
+
 	logrus.WithField("file", backupFile).Info("Backup verification passed")
 	return nil
 }
@@ -430,14 +430,14 @@ func (bm *BackupManager) parsePassword() string {
 func (bm *BackupManager) dropDatabase(databaseName string) error {
 	cmd := exec.Command("dropdb", "-h", bm.parseHost(), "-p", bm.parsePort(), "-U", bm.parseUsername(), databaseName)
 	cmd.Env = append(os.Environ(), "PGPASSWORD="+bm.parsePassword())
-	
+
 	return cmd.Run()
 }
 
 func (bm *BackupManager) createDatabase(databaseName string) error {
 	cmd := exec.Command("createdb", "-h", bm.parseHost(), "-p", bm.parsePort(), "-U", bm.parseUsername(), databaseName)
 	cmd.Env = append(os.Environ(), "PGPASSWORD="+bm.parsePassword())
-	
+
 	return cmd.Run()
 }
 
@@ -453,7 +453,7 @@ func (bm *BackupManager) uploadToS3(localPath, key string) error {
 		"s3_key":     key,
 		"bucket":     bm.config.S3Bucket,
 	}).Info("Uploading backup to S3")
-	
+
 	// Implementation would use AWS SDK to upload file
 	return nil
 }
@@ -464,7 +464,7 @@ func (bm *BackupManager) downloadFromS3(key, localPath string) error {
 		"local_path": localPath,
 		"bucket":     bm.config.S3Bucket,
 	}).Info("Downloading backup from S3")
-	
+
 	// Implementation would use AWS SDK to download file
 	return nil
 }
@@ -481,15 +481,15 @@ type DisasterRecoveryManager struct {
 }
 
 type DRConfig struct {
-	PrimaryDB   string
-	StandbyDB   string
-	SyncMode    string // "sync" or "async"
+	PrimaryDB    string
+	StandbyDB    string
+	SyncMode     string // "sync" or "async"
 	AutoFailover bool
-	
+
 	// Health check intervals
 	HealthCheckInterval time.Duration
 	FailureThreshold    int
-	
+
 	// Recovery settings
 	RecoveryTimeout time.Duration
 }
@@ -504,16 +504,16 @@ func NewDisasterRecoveryManager(backupManager *BackupManager, config *DRConfig) 
 // InitiateFailover initiates failover to standby database
 func (dr *DisasterRecoveryManager) InitiateFailover(ctx context.Context) error {
 	logrus.Warn("Initiating disaster recovery failover")
-	
+
 	// 1. Stop accepting new connections to primary
 	// 2. Wait for ongoing transactions to complete
 	// 3. Promote standby to primary
 	// 4. Update connection strings/DNS
 	// 5. Notify administrators
-	
+
 	// This is a simplified implementation
 	// In production, this would involve complex coordination
-	
+
 	logrus.Info("Failover completed successfully")
 	return nil
 }
@@ -521,12 +521,12 @@ func (dr *DisasterRecoveryManager) InitiateFailover(ctx context.Context) error {
 // PerformPointInTimeRecovery performs point-in-time recovery
 func (dr *DisasterRecoveryManager) PerformPointInTimeRecovery(ctx context.Context, targetTime time.Time) error {
 	logrus.WithField("target_time", targetTime).Info("Starting point-in-time recovery")
-	
+
 	// 1. Find the appropriate backup before the target time
 	// 2. Restore from that backup
 	// 3. Apply WAL files up to the target time
 	// 4. Start the database
-	
+
 	return nil
 }
 

@@ -23,15 +23,15 @@ type LoginRequest struct {
 
 // LoginResponse represents a successful login response
 type LoginResponse struct {
-	User              *types.User `json:"user"`
-	AccessToken       string      `json:"access_token"`
-	RefreshToken      string      `json:"refresh_token"`
-	ExpiresAt         time.Time   `json:"expires_at"`
-	TokenType         string      `json:"token_type"`
+	User         *types.User `json:"user"`
+	AccessToken  string      `json:"access_token"`
+	RefreshToken string      `json:"refresh_token"`
+	ExpiresAt    time.Time   `json:"expires_at"`
+	TokenType    string      `json:"token_type"`
 	// IDPToken is the access token from the identity provider (e.g., Janua)
 	// Used for calling IDP-specific APIs like OAuth account linking
-	IDPToken          string      `json:"idp_token,omitempty"`
-	IDPTokenExpiresAt *time.Time  `json:"idp_token_expires_at,omitempty"`
+	IDPToken          string     `json:"idp_token,omitempty"`
+	IDPTokenExpiresAt *time.Time `json:"idp_token_expires_at,omitempty"`
 }
 
 // RefreshRequest represents a token refresh request
@@ -265,9 +265,9 @@ func (h *Handler) OIDCSilentCheck(c *gin.Context) {
 		state,
 		60, // 1 minute (shorter for silent check)
 		"/",
-		"",    // domain
-		true,  // secure
-		true,  // httpOnly
+		"",   // domain
+		true, // secure
+		true, // httpOnly
 	)
 	c.SetSameSite(http.SameSiteLaxMode)
 
@@ -282,7 +282,7 @@ func (h *Handler) OIDCSilentCheck(c *gin.Context) {
 	authURL := oidcMgr.GetSilentAuthURL(state, silentCallbackURL)
 
 	logrus.WithFields(logrus.Fields{
-		"auth_url":       authURL[:50] + "...",
+		"auth_url":        authURL[:50] + "...",
 		"silent_callback": silentCallbackURL,
 	}).Debug("Generated silent auth URL")
 
@@ -514,9 +514,9 @@ func (h *Handler) OIDCLogin(c *gin.Context) {
 		state,
 		300, // 5 minutes
 		"/",
-		"",    // domain (empty = current domain)
-		true,  // secure (HTTPS only)
-		true,  // httpOnly
+		"",   // domain (empty = current domain)
+		true, // secure (HTTPS only)
+		true, // httpOnly
 	)
 	c.SetSameSite(http.SameSiteLaxMode)
 

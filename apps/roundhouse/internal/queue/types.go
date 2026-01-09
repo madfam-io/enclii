@@ -86,7 +86,7 @@ type EnqueueRequest struct {
 
 // EnqueueResponse is the response after enqueueing a build
 type EnqueueResponse struct {
-	JobID     uuid.UUID `json:"job_id"`
-	Position  int       `json:"position"`
+	JobID          uuid.UUID `json:"job_id"`
+	Position       int       `json:"position"`
 	EstimatedStart time.Time `json:"estimated_start,omitempty"`
 }

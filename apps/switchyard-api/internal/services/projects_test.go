@@ -101,8 +101,8 @@ func TestGenerateSlug(t *testing.T) {
 		{"App@123", "app123"},
 		{"Multiple   Spaces", "multiple-spaces"},
 		{"---test---", "test"},
-		{"a", "a-"},      // Will append timestamp
-		{"ab", "ab-"},    // Will append timestamp
+		{"a", "a-"},   // Will append timestamp
+		{"ab", "ab-"}, // Will append timestamp
 	}
 
 	for _, tt := range tests {

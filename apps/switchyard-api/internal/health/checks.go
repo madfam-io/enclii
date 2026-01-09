@@ -28,12 +28,12 @@ const (
 
 // CheckResult represents the result of a health check
 type CheckResult struct {
-	Status      HealthStatus      `json:"status"`
-	Message     string            `json:"message,omitempty"`
-	Duration    time.Duration     `json:"duration"`
-	Timestamp   time.Time         `json:"timestamp"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-	Error       string            `json:"error,omitempty"`
+	Status    HealthStatus           `json:"status"`
+	Message   string                 `json:"message,omitempty"`
+	Duration  time.Duration          `json:"duration"`
+	Timestamp time.Time              `json:"timestamp"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	Error     string                 `json:"error,omitempty"`
 }
 
 // OverallHealth represents the overall system health
@@ -50,17 +50,17 @@ type HealthChecker interface {
 	Name() string
 	Check(ctx context.Context) CheckResult
 	Timeout() time.Duration
-	Critical() bool  // If true, failure of this check marks overall status as unhealthy
+	Critical() bool // If true, failure of this check marks overall status as unhealthy
 }
 
 // HealthManager manages all health checks
 type HealthManager struct {
-	checkers    []HealthChecker
-	startTime   time.Time
-	version     string
-	checkCache  map[string]CheckResult
-	cacheMutex  sync.RWMutex
-	cacheTTL    time.Duration
+	checkers   []HealthChecker
+	startTime  time.Time
+	version    string
+	checkCache map[string]CheckResult
+	cacheMutex sync.RWMutex
+	cacheTTL   time.Duration
 }
 
 // NewHealthManager creates a new health manager
@@ -83,16 +83,16 @@ func (hm *HealthManager) AddChecker(checker HealthChecker) {
 func (hm *HealthManager) CheckHealth(ctx context.Context) OverallHealth {
 	results := make(map[string]CheckResult)
 	overallStatus := HealthStatusHealthy
-	
+
 	// Run all health checks in parallel
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	
+
 	for _, checker := range hm.checkers {
 		wg.Add(1)
 		go func(c HealthChecker) {
 			defer wg.Done()
-			
+
 			// Check cache first
 			if cachedResult := hm.getCachedResult(c.Name()); cachedResult != nil {
 				mu.Lock()
@@ -100,19 +100,19 @@ func (hm *HealthManager) CheckHealth(ctx context.Context) OverallHealth {
 				mu.Unlock()
 				return
 			}
-			
+
 			// Create context with timeout
 			checkCtx, cancel := context.WithTimeout(ctx, c.Timeout())
 			defer cancel()
-			
+
 			result := c.Check(checkCtx)
-			
+
 			// Cache the result
 			hm.setCachedResult(c.Name(), result)
-			
+
 			mu.Lock()
 			results[c.Name()] = result
-			
+
 			// Update overall status
 			if c.Critical() && result.Status == HealthStatusUnhealthy {
 				overallStatus = HealthStatusUnhealthy
@@ -122,9 +122,9 @@ func (hm *HealthManager) CheckHealth(ctx context.Context) OverallHealth {
 			mu.Unlock()
 		}(checker)
 	}
-	
+
 	wg.Wait()
-	
+
 	return OverallHealth{
 		Status:    overallStatus,
 		Version:   hm.version,
@@ -138,24 +138,24 @@ func (hm *HealthManager) CheckHealth(ctx context.Context) OverallHealth {
 func (hm *HealthManager) CheckReadiness(ctx context.Context) OverallHealth {
 	results := make(map[string]CheckResult)
 	overallStatus := HealthStatusHealthy
-	
+
 	for _, checker := range hm.checkers {
 		if !checker.Critical() {
 			continue
 		}
-		
+
 		checkCtx, cancel := context.WithTimeout(ctx, checker.Timeout())
 		result := checker.Check(checkCtx)
 		cancel()
-		
+
 		results[checker.Name()] = result
-		
+
 		if result.Status == HealthStatusUnhealthy {
 			overallStatus = HealthStatusUnhealthy
 			break // Fast fail for readiness
 		}
 	}
-	
+
 	return OverallHealth{
 		Status:    overallStatus,
 		Version:   hm.version,
@@ -169,20 +169,20 @@ func (hm *HealthManager) CheckReadiness(ctx context.Context) OverallHealth {
 func (hm *HealthManager) getCachedResult(name string) *CheckResult {
 	hm.cacheMutex.RLock()
 	defer hm.cacheMutex.RUnlock()
-	
+
 	if result, exists := hm.checkCache[name]; exists {
 		if time.Since(result.Timestamp) < hm.cacheTTL {
 			return &result
 		}
 	}
-	
+
 	return nil
 }
 
 func (hm *HealthManager) setCachedResult(name string, result CheckResult) {
 	hm.cacheMutex.Lock()
 	defer hm.cacheMutex.Unlock()
-	
+
 	hm.checkCache[name] = result
 }
 
@@ -191,16 +191,16 @@ func (hm *HealthManager) HealthHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer cancel()
-		
+
 		health := hm.CheckHealth(ctx)
-		
+
 		statusCode := http.StatusOK
 		if health.Status == HealthStatusUnhealthy {
 			statusCode = http.StatusServiceUnavailable
 		} else if health.Status == HealthStatusDegraded {
 			statusCode = http.StatusOK // Still operational
 		}
-		
+
 		c.JSON(statusCode, health)
 	}
 }
@@ -209,14 +209,14 @@ func (hm *HealthManager) ReadinessHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 		defer cancel()
-		
+
 		readiness := hm.CheckReadiness(ctx)
-		
+
 		statusCode := http.StatusOK
 		if readiness.Status == HealthStatusUnhealthy {
 			statusCode = http.StatusServiceUnavailable
 		}
-		
+
 		c.JSON(statusCode, readiness)
 	}
 }
@@ -251,7 +251,7 @@ func (d *DatabaseHealthChecker) Name() string {
 
 func (d *DatabaseHealthChecker) Check(ctx context.Context) CheckResult {
 	start := time.Now()
-	
+
 	// Test basic connectivity
 	if err := d.db.PingContext(ctx); err != nil {
 		return CheckResult{
@@ -262,7 +262,7 @@ func (d *DatabaseHealthChecker) Check(ctx context.Context) CheckResult {
 			Error:     err.Error(),
 		}
 	}
-	
+
 	// Test with a query
 	var version string
 	if err := d.db.QueryRowContext(ctx, "SELECT version()").Scan(&version); err != nil {
@@ -274,30 +274,30 @@ func (d *DatabaseHealthChecker) Check(ctx context.Context) CheckResult {
 			Error:     err.Error(),
 		}
 	}
-	
+
 	// Check connection pool stats
 	stats := d.db.Stats()
 	metadata := map[string]interface{}{
 		"open_connections": stats.OpenConnections,
-		"in_use":          stats.InUse,
-		"idle":            stats.Idle,
-		"version":         version[:50], // Truncate for brevity
+		"in_use":           stats.InUse,
+		"idle":             stats.Idle,
+		"version":          version[:50], // Truncate for brevity
 	}
-	
+
 	status := HealthStatusHealthy
 	message := "Database is healthy"
-	
+
 	// Check for potential issues
 	if stats.WaitCount > 0 {
 		status = HealthStatusDegraded
 		message = fmt.Sprintf("Database has connection waits: %d", stats.WaitCount)
 	}
-	
+
 	if stats.OpenConnections == stats.MaxOpenConnections {
 		status = HealthStatusDegraded
 		message = "Database connection pool at maximum capacity"
 	}
-	
+
 	return CheckResult{
 		Status:    status,
 		Message:   message,
@@ -334,7 +334,7 @@ func (r *RedisHealthChecker) Name() string {
 
 func (r *RedisHealthChecker) Check(ctx context.Context) CheckResult {
 	start := time.Now()
-	
+
 	if err := r.cache.Ping(ctx); err != nil {
 		return CheckResult{
 			Status:    HealthStatusUnhealthy,
@@ -344,11 +344,11 @@ func (r *RedisHealthChecker) Check(ctx context.Context) CheckResult {
 			Error:     err.Error(),
 		}
 	}
-	
+
 	// Test set/get operation
 	testKey := "health:check"
 	testValue := time.Now().String()
-	
+
 	if err := r.cache.Set(ctx, testKey, testValue, 30*time.Second); err != nil {
 		return CheckResult{
 			Status:    HealthStatusDegraded,
@@ -358,7 +358,7 @@ func (r *RedisHealthChecker) Check(ctx context.Context) CheckResult {
 			Error:     err.Error(),
 		}
 	}
-	
+
 	if _, err := r.cache.Get(ctx, testKey); err != nil {
 		return CheckResult{
 			Status:    HealthStatusDegraded,
@@ -368,10 +368,10 @@ func (r *RedisHealthChecker) Check(ctx context.Context) CheckResult {
 			Error:     err.Error(),
 		}
 	}
-	
+
 	// Clean up test key
 	r.cache.Del(ctx, testKey)
-	
+
 	return CheckResult{
 		Status:    HealthStatusHealthy,
 		Message:   "Redis is healthy",
@@ -407,7 +407,7 @@ func (k *KubernetesHealthChecker) Name() string {
 
 func (k *KubernetesHealthChecker) Check(ctx context.Context) CheckResult {
 	start := time.Now()
-	
+
 	// Try to list pods in a test namespace
 	pods, err := k.client.ListPods(ctx, "enclii-system", "")
 	if err != nil {
@@ -419,11 +419,11 @@ func (k *KubernetesHealthChecker) Check(ctx context.Context) CheckResult {
 			Error:     err.Error(),
 		}
 	}
-	
+
 	metadata := map[string]interface{}{
 		"pods_count": len(pods.Items),
 	}
-	
+
 	return CheckResult{
 		Status:    HealthStatusHealthy,
 		Message:   "Kubernetes API is accessible",
@@ -460,7 +460,7 @@ func (d *DiskSpaceHealthChecker) Name() string {
 
 func (d *DiskSpaceHealthChecker) Check(ctx context.Context) CheckResult {
 	start := time.Now()
-	
+
 	// This is a simplified check - in production you'd use syscalls to get disk stats
 	// For now, we'll just check if the path exists
 	if _, err := os.Stat(d.path); err != nil {
@@ -472,7 +472,7 @@ func (d *DiskSpaceHealthChecker) Check(ctx context.Context) CheckResult {
 			Error:     err.Error(),
 		}
 	}
-	
+
 	// In a real implementation, you would calculate actual disk usage
 	// For now, simulate healthy disk space
 	return CheckResult{
@@ -512,31 +512,31 @@ func (m *MemoryHealthChecker) Name() string {
 
 func (m *MemoryHealthChecker) Check(ctx context.Context) CheckResult {
 	start := time.Now()
-	
+
 	// Get memory stats
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	
+
 	// Calculate memory usage percentage (simplified)
 	usedMB := float64(memStats.Alloc) / 1024 / 1024
 	sysMB := float64(memStats.Sys) / 1024 / 1024
-	
+
 	metadata := map[string]interface{}{
-		"alloc_mb":     usedMB,
-		"sys_mb":       sysMB,
-		"gc_count":     memStats.NumGC,
-		"goroutines":   runtime.NumGoroutine(),
+		"alloc_mb":   usedMB,
+		"sys_mb":     sysMB,
+		"gc_count":   memStats.NumGC,
+		"goroutines": runtime.NumGoroutine(),
 	}
-	
+
 	status := HealthStatusHealthy
 	message := "Memory usage is normal"
-	
+
 	// Simple check - in production you'd compare against system memory
 	if usedMB > 1000 { // More than 1GB allocated
 		status = HealthStatusDegraded
 		message = fmt.Sprintf("High memory usage: %.2f MB", usedMB)
 	}
-	
+
 	return CheckResult{
 		Status:    status,
 		Message:   message,

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/sbom"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/signing"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/sirupsen/logrus"
 )
 
 // Service orchestrates the complete build process: clone → build → SBOM → sign → cleanup
@@ -83,18 +83,18 @@ func NewService(cfg *Config, logger *logrus.Logger) *Service {
 }
 
 type CompleteBuildResult struct {
-	ImageURI       string
-	GitSHA         string
-	Success        bool
-	Error          error
-	Logs           []string
-	Duration       time.Duration
-	ClonePath      string
-	SBOM           *sbom.SBOM       // Software Bill of Materials
-	SBOMFormat     string           // e.g., "cyclonedx-json"
-	SBOMGenerated  bool             // Whether SBOM was successfully generated
-	Signature      *signing.SignResult // Image signature information
-	ImageSigned    bool             // Whether image was successfully signed
+	ImageURI      string
+	GitSHA        string
+	Success       bool
+	Error         error
+	Logs          []string
+	Duration      time.Duration
+	ClonePath     string
+	SBOM          *sbom.SBOM          // Software Bill of Materials
+	SBOMFormat    string              // e.g., "cyclonedx-json"
+	SBOMGenerated bool                // Whether SBOM was successfully generated
+	Signature     *signing.SignResult // Image signature information
+	ImageSigned   bool                // Whether image was successfully signed
 }
 
 // BuildFromGit clones a repository and builds it

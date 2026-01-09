@@ -12,12 +12,12 @@ import (
 )
 
 const (
-	buildQueueKey     = "roundhouse:queue:builds"
-	priorityQueueKey  = "roundhouse:queue:priority"
-	jobHashKeyPrefix  = "roundhouse:job:"
-	logsStreamPrefix  = "roundhouse:logs:"
-	statsKey          = "roundhouse:stats"
-	activeWorkersKey  = "roundhouse:workers:active"
+	buildQueueKey    = "roundhouse:queue:builds"
+	priorityQueueKey = "roundhouse:queue:priority"
+	jobHashKeyPrefix = "roundhouse:job:"
+	logsStreamPrefix = "roundhouse:logs:"
+	statsKey         = "roundhouse:stats"
+	activeWorkersKey = "roundhouse:workers:active"
 )
 
 // RedisQueue implements the build queue using Redis

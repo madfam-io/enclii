@@ -8,8 +8,8 @@ import (
 
 type Config struct {
 	// Server
-	APIPort    string `mapstructure:"API_PORT"`
-	WorkerID   string `mapstructure:"WORKER_ID"`
+	APIPort  string `mapstructure:"API_PORT"`
+	WorkerID string `mapstructure:"WORKER_ID"`
 
 	// Database
 	DatabaseURL string `mapstructure:"DATABASE_URL"`
@@ -39,7 +39,7 @@ type Config struct {
 	SwitchyardAPIKey      string `mapstructure:"SWITCHYARD_API_KEY"`
 
 	// Worker settings
-	MaxConcurrentBuilds int `mapstructure:"MAX_CONCURRENT_BUILDS"`
+	MaxConcurrentBuilds int           `mapstructure:"MAX_CONCURRENT_BUILDS"`
 	PollInterval        time.Duration `mapstructure:"POLL_INTERVAL"`
 }
 

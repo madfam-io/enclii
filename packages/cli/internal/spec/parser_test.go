@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"gopkg.in/yaml.v3"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"gopkg.in/yaml.v3"
 )
 
 func TestParseServiceSpec(t *testing.T) {

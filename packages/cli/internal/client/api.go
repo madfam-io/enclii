@@ -55,7 +55,7 @@ func (c *APIClient) makeRequest(ctx context.Context, method, path string, body i
 	// Set headers
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
-	
+
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
@@ -107,7 +107,7 @@ func (c *APIClient) handleResponse(resp *http.Response, result interface{}) erro
 		var apiErr struct {
 			Error string `json:"error"`
 		}
-		
+
 		if err := json.Unmarshal(body, &apiErr); err == nil && apiErr.Error != "" {
 			return APIError{
 				StatusCode: resp.StatusCode,
@@ -355,7 +355,6 @@ func (c *APIClient) Health(ctx context.Context) (*HealthResponse, error) {
 	return &health, nil
 }
 
-
 // Request/Response types
 type DeployRequest struct {
 	ReleaseID   string            `json:"release_id"`
@@ -381,14 +380,14 @@ type LogLine struct {
 }
 
 type ServiceStatus struct {
-	ServiceID   string                   `json:"service_id"`
-	Environment string                   `json:"environment"`
-	Status      types.DeploymentStatus   `json:"status"`
-	Health      types.HealthStatus       `json:"health"`
-	Replicas    int                      `json:"replicas"`
-	Version     string                   `json:"version"`
-	Uptime      time.Duration            `json:"uptime"`
-	LastDeploy  time.Time                `json:"last_deploy"`
+	ServiceID   string                 `json:"service_id"`
+	Environment string                 `json:"environment"`
+	Status      types.DeploymentStatus `json:"status"`
+	Health      types.HealthStatus     `json:"health"`
+	Replicas    int                    `json:"replicas"`
+	Version     string                 `json:"version"`
+	Uptime      time.Duration          `json:"uptime"`
+	LastDeploy  time.Time              `json:"last_deploy"`
 }
 
 type DeploymentWithRelease struct {

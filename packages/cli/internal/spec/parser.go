@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/yaml.v3"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"gopkg.in/yaml.v3"
 )
 
 type Parser struct{}
@@ -266,11 +266,11 @@ func (p *Parser) validateAutoDetection(projectDir string) error {
 
 	checkFiles := map[string]string{
 		"package.json":     "Node.js",
-		"go.mod":          "Go",
+		"go.mod":           "Go",
 		"requirements.txt": "Python",
-		"Gemfile":         "Ruby",
-		"pom.xml":         "Java",
-		"Dockerfile":      "Docker",
+		"Gemfile":          "Ruby",
+		"pom.xml":          "Java",
+		"Dockerfile":       "Docker",
 	}
 
 	for file, tech := range checkFiles {

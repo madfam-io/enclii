@@ -156,9 +156,9 @@ func (h *Handlers) GetInvoices(c *gin.Context) {
 func (h *Handlers) GetPlans(c *gin.Context) {
 	plans := []gin.H{
 		{
-			"id":          "hobby",
-			"name":        "Hobby",
-			"description": "For personal projects and experiments",
+			"id":            "hobby",
+			"name":          "Hobby",
+			"description":   "For personal projects and experiments",
 			"price_monthly": 5.0,
 			"includes": gin.H{
 				"compute_gb_hours": 500,
@@ -175,9 +175,9 @@ func (h *Handlers) GetPlans(c *gin.Context) {
 			},
 		},
 		{
-			"id":          "pro",
-			"name":        "Pro",
-			"description": "For production applications",
+			"id":            "pro",
+			"name":          "Pro",
+			"description":   "For production applications",
 			"price_monthly": 20.0,
 			"includes": gin.H{
 				"compute_gb_hours": 2000,
@@ -200,9 +200,9 @@ func (h *Handlers) GetPlans(c *gin.Context) {
 			},
 		},
 		{
-			"id":          "team",
-			"name":        "Team",
-			"description": "For teams and organizations",
+			"id":            "team",
+			"name":          "Team",
+			"description":   "For teams and organizations",
 			"price_monthly": 50.0,
 			"includes": gin.H{
 				"compute_gb_hours": 5000,

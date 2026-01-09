@@ -68,7 +68,7 @@ func deployService(cfg *config.Config, environment string, wait bool, specFile s
 		return fmt.Errorf("failed to ensure project: %w", err)
 	}
 
-	// 4. Ensure service exists  
+	// 4. Ensure service exists
 	service, err := ensureService(ctx, apiClient, project, serviceSpec)
 	if err != nil {
 		return fmt.Errorf("failed to ensure service: %w", err)

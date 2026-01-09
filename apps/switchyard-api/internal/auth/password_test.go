@@ -176,7 +176,7 @@ func TestComparePassword_SpecialCharacters(t *testing.T) {
 		"p@ssw0rd!",
 		"пароль", // Cyrillic
 		"密码",     // Chinese
-		"🔒🔑",    // Emojis
+		"🔒🔑",     // Emojis
 		"pass\nword\twith\rwhitespace",
 		"pass\"word'with`quotes",
 	}

@@ -21,17 +21,17 @@ type Controller struct {
 	repositories      *db.Repositories
 	serviceReconciler *ServiceReconciler
 	logger            *logrus.Logger
-	
+
 	// Control channels
 	stopCh   chan struct{}
 	workCh   chan *ReconcileWork
 	resultCh chan *ReconcileWorkResult
-	
+
 	// Worker management
-	workers    int
-	wg         sync.WaitGroup
-	started    bool
-	mu         sync.RWMutex
+	workers int
+	wg      sync.WaitGroup
+	started bool
+	mu      sync.RWMutex
 }
 
 type ReconcileWork struct {
@@ -48,14 +48,14 @@ type ReconcileWorkResult struct {
 
 func NewController(database *sql.DB, repositories *db.Repositories, k8sClient *k8s.Client, logger *logrus.Logger) *Controller {
 	return &Controller{
-		db:           database,
-		repositories: repositories,
+		db:                database,
+		repositories:      repositories,
 		serviceReconciler: NewServiceReconciler(k8sClient, logger),
-		logger:       logger,
-		stopCh:       make(chan struct{}),
-		workCh:       make(chan *ReconcileWork, 100),
-		resultCh:     make(chan *ReconcileWorkResult, 100),
-		workers:      5, // Number of concurrent reconcilers
+		logger:            logger,
+		stopCh:            make(chan struct{}),
+		workCh:            make(chan *ReconcileWork, 100),
+		resultCh:          make(chan *ReconcileWorkResult, 100),
+		workers:           5, // Number of concurrent reconcilers
 	}
 }
 
@@ -63,28 +63,28 @@ func NewController(database *sql.DB, repositories *db.Repositories, k8sClient *k
 func (c *Controller) Start(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if c.started {
 		return fmt.Errorf("controller already started")
 	}
-	
+
 	c.started = true
 	c.logger.Info("Starting reconciliation controller")
-	
+
 	// Start worker goroutines
 	for i := 0; i < c.workers; i++ {
 		c.wg.Add(1)
 		go c.worker(ctx, i)
 	}
-	
+
 	// Start result processor
 	c.wg.Add(1)
 	go c.resultProcessor(ctx)
-	
+
 	// Start work scheduler
 	c.wg.Add(1)
 	go c.workScheduler(ctx)
-	
+
 	c.logger.WithField("workers", c.workers).Info("Reconciliation controller started")
 	return nil
 }
@@ -93,11 +93,11 @@ func (c *Controller) Start(ctx context.Context) error {
 func (c *Controller) Stop() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	if !c.started {
 		return
 	}
-	
+
 	c.logger.Info("Stopping reconciliation controller")
 	close(c.stopCh)
 	c.wg.Wait()
@@ -113,7 +113,7 @@ func (c *Controller) ScheduleReconciliation(deploymentID string, priority int) {
 		Attempt:      1,
 		ScheduledAt:  time.Now(),
 	}
-	
+
 	select {
 	case c.workCh <- work:
 		c.logger.WithFields(logrus.Fields{
@@ -128,10 +128,10 @@ func (c *Controller) ScheduleReconciliation(deploymentID string, priority int) {
 // worker processes reconciliation work
 func (c *Controller) worker(ctx context.Context, workerID int) {
 	defer c.wg.Done()
-	
+
 	logger := c.logger.WithField("worker", workerID)
 	logger.Debug("Starting reconciliation worker")
-	
+
 	for {
 		select {
 		case <-c.stopCh:
@@ -142,7 +142,7 @@ func (c *Controller) worker(ctx context.Context, workerID int) {
 			return
 		case work := <-c.workCh:
 			result := c.processWork(ctx, work, logger)
-			
+
 			select {
 			case c.resultCh <- &ReconcileWorkResult{Work: work, Result: result}:
 			case <-c.stopCh:
@@ -160,10 +160,10 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 		"deployment": work.DeploymentID,
 		"attempt":    work.Attempt,
 	})
-	
+
 	logger.Info("Processing reconciliation work")
 	start := time.Now()
-	
+
 	// Get deployment details from database
 	deployment, err := c.repositories.Deployments.GetByID(ctx, work.DeploymentID)
 	if err != nil {
@@ -228,27 +228,27 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 		Environment: environment,
 		EnvVars:     envVars,
 	}
-	
+
 	// Perform reconciliation
 	result := c.serviceReconciler.Reconcile(ctx, req)
-	
+
 	duration := time.Since(start)
 	logger.WithFields(logrus.Fields{
 		"success":  result.Success,
 		"duration": duration,
 		"message":  result.Message,
 	}).Info("Completed reconciliation work")
-	
+
 	return result
 }
 
 // resultProcessor handles reconciliation results
 func (c *Controller) resultProcessor(ctx context.Context) {
 	defer c.wg.Done()
-	
+
 	logger := c.logger.WithField("component", "result-processor")
 	logger.Debug("Starting result processor")
-	
+
 	for {
 		select {
 		case <-c.stopCh:
@@ -267,12 +267,12 @@ func (c *Controller) resultProcessor(ctx context.Context) {
 func (c *Controller) handleResult(ctx context.Context, workResult *ReconcileWorkResult, logger *logrus.Entry) {
 	work := workResult.Work
 	result := workResult.Result
-	
+
 	logger = logger.WithFields(logrus.Fields{
 		"deployment": work.DeploymentID,
 		"success":    result.Success,
 	})
-	
+
 	// Update deployment status in database
 	var status types.DeploymentStatus
 	var health types.HealthStatus
@@ -327,13 +327,13 @@ func (c *Controller) handleResult(ctx context.Context, workResult *ReconcileWork
 // workScheduler periodically checks for pending deployments
 func (c *Controller) workScheduler(ctx context.Context) {
 	defer c.wg.Done()
-	
+
 	logger := c.logger.WithField("component", "work-scheduler")
 	logger.Debug("Starting work scheduler")
-	
+
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-c.stopCh:
@@ -356,12 +356,12 @@ func (c *Controller) schedulePendingWork(ctx context.Context, logger *logrus.Ent
 		logger.WithError(err).Error("Failed to get pending deployments")
 		return
 	}
-	
+
 	for _, deployment := range deployments {
 		// Calculate priority based on age
 		age := time.Since(deployment.CreatedAt)
 		priority := int(age.Minutes()) // Older deployments get higher priority
-		
+
 		select {
 		case c.workCh <- &ReconcileWork{
 			DeploymentID: deployment.ID.String(),
@@ -378,7 +378,7 @@ func (c *Controller) schedulePendingWork(ctx context.Context, logger *logrus.Ent
 			logger.WithField("deployment", deployment.ID).Debug("Work queue full, skipping deployment")
 		}
 	}
-	
+
 	if len(deployments) > 0 {
 		logger.WithField("count", len(deployments)).Debug("Scheduled pending deployments")
 	}
@@ -388,12 +388,12 @@ func (c *Controller) schedulePendingWork(ctx context.Context, logger *logrus.Ent
 func (c *Controller) GetStatus() map[string]interface{} {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	return map[string]interface{}{
-		"started":       c.started,
-		"workers":       c.workers,
-		"work_queue":    len(c.workCh),
-		"result_queue":  len(c.resultCh),
+		"started":      c.started,
+		"workers":      c.workers,
+		"work_queue":   len(c.workCh),
+		"result_queue": len(c.resultCh),
 	}
 }
 
@@ -401,19 +401,19 @@ func (c *Controller) GetStatus() map[string]interface{} {
 func (c *Controller) HealthCheck() error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	
+
 	if !c.started {
 		return fmt.Errorf("controller not started")
 	}
-	
+
 	// Check if work channels are functional
 	if len(c.workCh) == cap(c.workCh) {
 		return fmt.Errorf("work queue is full")
 	}
-	
+
 	if len(c.resultCh) == cap(c.resultCh) {
 		return fmt.Errorf("result queue is full")
 	}
-	
+
 	return nil
 }

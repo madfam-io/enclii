@@ -24,8 +24,8 @@ var (
 
 	httpRequestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "enclii_http_request_duration_seconds",
-			Help: "HTTP request duration in seconds",
+			Name:    "enclii_http_request_duration_seconds",
+			Help:    "HTTP request duration in seconds",
 			Buckets: []float64{0.001, 0.01, 0.1, 0.5, 1.0, 2.5, 5.0, 10.0},
 		},
 		[]string{"method", "endpoint"},
@@ -50,8 +50,8 @@ var (
 
 	dbQueryDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "enclii_db_query_duration_seconds",
-			Help: "Database query duration in seconds",
+			Name:    "enclii_db_query_duration_seconds",
+			Help:    "Database query duration in seconds",
 			Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0},
 		},
 		[]string{"query_type"},
@@ -84,8 +84,8 @@ var (
 
 	cacheOperationDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "enclii_cache_operation_duration_seconds",
-			Help: "Cache operation duration in seconds",
+			Name:    "enclii_cache_operation_duration_seconds",
+			Help:    "Cache operation duration in seconds",
 			Buckets: []float64{0.0001, 0.001, 0.01, 0.1, 1.0},
 		},
 		[]string{"operation", "cache_name"},
@@ -102,8 +102,8 @@ var (
 
 	buildDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "enclii_build_duration_seconds",
-			Help: "Build duration in seconds",
+			Name:    "enclii_build_duration_seconds",
+			Help:    "Build duration in seconds",
 			Buckets: []float64{10, 30, 60, 120, 300, 600, 1200, 1800}, // 10s to 30m
 		},
 		[]string{"build_type"},
@@ -120,8 +120,8 @@ var (
 
 	deploymentDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "enclii_deployment_duration_seconds",
-			Help: "Deployment duration in seconds",
+			Name:    "enclii_deployment_duration_seconds",
+			Help:    "Deployment duration in seconds",
 			Buckets: []float64{5, 15, 30, 60, 120, 300, 600}, // 5s to 10m
 		},
 		[]string{"environment"},
@@ -138,8 +138,8 @@ var (
 	// Kubernetes metrics
 	k8sOperationDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "enclii_k8s_operation_duration_seconds",
-			Help: "Kubernetes operation duration in seconds",
+			Name:    "enclii_k8s_operation_duration_seconds",
+			Help:    "Kubernetes operation duration in seconds",
 			Buckets: []float64{0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0},
 		},
 		[]string{"operation", "resource_type"},
@@ -237,12 +237,12 @@ func (mc *MetricsCollector) Handler() http.Handler {
 func (mc *MetricsCollector) HTTPMetricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		
+
 		c.Next()
-		
+
 		duration := time.Since(start)
 		status := strconv.Itoa(c.Writer.Status())
-		
+
 		httpRequestsTotal.WithLabelValues(c.Request.Method, c.FullPath(), status).Inc()
 		httpRequestDuration.WithLabelValues(c.Request.Method, c.FullPath()).Observe(duration.Seconds())
 	}
@@ -367,22 +367,22 @@ func NewBusinessMetrics() *BusinessMetrics {
 
 // Alerting thresholds (for use with Prometheus AlertManager)
 const (
-	HighErrorRateThreshold    = 0.05  // 5%
-	HighLatencyThreshold      = 2.0   // 2 seconds
-	LowCacheHitRateThreshold  = 0.8   // 80%
-	HighDBConnUsageThreshold  = 0.8   // 80% of max connections
-	LongBuildTimeThreshold    = 600   // 10 minutes
-	LongDeployTimeThreshold   = 300   // 5 minutes
+	HighErrorRateThreshold   = 0.05 // 5%
+	HighLatencyThreshold     = 2.0  // 2 seconds
+	LowCacheHitRateThreshold = 0.8  // 80%
+	HighDBConnUsageThreshold = 0.8  // 80% of max connections
+	LongBuildTimeThreshold   = 600  // 10 minutes
+	LongDeployTimeThreshold  = 300  // 5 minutes
 )
 
 // Metrics export for external monitoring systems
 type MetricsSnapshot struct {
-	Timestamp    time.Time            `json:"timestamp"`
-	HTTPMetrics  HTTPMetrics          `json:"http"`
-	DBMetrics    DatabaseMetrics      `json:"database"`
-	CacheMetrics CacheMetrics         `json:"cache"`
-	BuildMetrics BuildMetrics         `json:"builds"`
-	K8sMetrics   KubernetesMetrics    `json:"kubernetes"`
+	Timestamp    time.Time         `json:"timestamp"`
+	HTTPMetrics  HTTPMetrics       `json:"http"`
+	DBMetrics    DatabaseMetrics   `json:"database"`
+	CacheMetrics CacheMetrics      `json:"cache"`
+	BuildMetrics BuildMetrics      `json:"builds"`
+	K8sMetrics   KubernetesMetrics `json:"kubernetes"`
 }
 
 type HTTPMetrics struct {
@@ -392,28 +392,28 @@ type HTTPMetrics struct {
 }
 
 type DatabaseMetrics struct {
-	ConnectionsOpen   int     `json:"connections_open"`
-	ConnectionsInUse  int     `json:"connections_in_use"`
-	AverageQueryTime  float64 `json:"average_query_time"`
-	ErrorRate         float64 `json:"error_rate"`
+	ConnectionsOpen  int     `json:"connections_open"`
+	ConnectionsInUse int     `json:"connections_in_use"`
+	AverageQueryTime float64 `json:"average_query_time"`
+	ErrorRate        float64 `json:"error_rate"`
 }
 
 type CacheMetrics struct {
-	HitRate           float64 `json:"hit_rate"`
-	AverageLatency    float64 `json:"average_latency"`
-	OperationsPerSec  float64 `json:"operations_per_second"`
+	HitRate          float64 `json:"hit_rate"`
+	AverageLatency   float64 `json:"average_latency"`
+	OperationsPerSec float64 `json:"operations_per_second"`
 }
 
 type BuildMetrics struct {
-	SuccessRate       float64 `json:"success_rate"`
-	AverageDuration   float64 `json:"average_duration"`
-	QueueLength       int     `json:"queue_length"`
+	SuccessRate     float64 `json:"success_rate"`
+	AverageDuration float64 `json:"average_duration"`
+	QueueLength     int     `json:"queue_length"`
 }
 
 type KubernetesMetrics struct {
-	OperationLatency  float64 `json:"operation_latency"`
-	ErrorRate         float64 `json:"error_rate"`
-	ActivePods        int     `json:"active_pods"`
+	OperationLatency float64 `json:"operation_latency"`
+	ErrorRate        float64 `json:"error_rate"`
+	ActivePods       int     `json:"active_pods"`
 }
 
 func (mc *MetricsCollector) GetSnapshot() (*MetricsSnapshot, error) {
@@ -546,8 +546,8 @@ func (mc *MetricsCollector) GetSnapshot() (*MetricsSnapshot, error) {
 
 // MetricsHistory stores time-series data for metrics
 type MetricsHistory struct {
-	TimeRange  string           `json:"time_range"`
-	Resolution string           `json:"resolution"`
+	TimeRange  string             `json:"time_range"`
+	Resolution string             `json:"resolution"`
 	DataPoints []MetricsDataPoint `json:"data_points"`
 }
 
