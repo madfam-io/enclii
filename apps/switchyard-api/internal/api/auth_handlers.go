@@ -1,7 +1,9 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -350,7 +352,35 @@ func (h *Handler) OIDCCallback(c *gin.Context) {
 		return
 	}
 
-	// Return tokens to client
+	// If PostLoginRedirectURL is configured, redirect to UI with tokens
+	if h.config.PostLoginRedirectURL != "" {
+		// Build redirect URL with tokens in query params
+		// Using query params because UI's useSearchParams() only reads query params
+		redirectURL := fmt.Sprintf("%s?access_token=%s&refresh_token=%s&expires_at=%d&token_type=%s",
+			h.config.PostLoginRedirectURL,
+			url.QueryEscape(tokens.AccessToken),
+			url.QueryEscape(tokens.RefreshToken),
+			tokens.ExpiresAt.Unix(),
+			tokens.TokenType,
+		)
+
+		// Also include IDP token if present
+		if tokens.IDPToken != "" {
+			redirectURL += fmt.Sprintf("&idp_token=%s&idp_token_expires_at=%d",
+				url.QueryEscape(tokens.IDPToken),
+				tokens.IDPTokenExpiresAt.Unix(),
+			)
+		}
+
+		logrus.WithFields(logrus.Fields{
+			"redirect_url": h.config.PostLoginRedirectURL,
+		}).Info("Redirecting to UI after OIDC authentication")
+
+		c.Redirect(http.StatusFound, redirectURL)
+		return
+	}
+
+	// Fallback: return JSON (for API clients)
 	c.JSON(http.StatusOK, LoginResponse{
 		AccessToken:       tokens.AccessToken,
 		RefreshToken:      tokens.RefreshToken,

@@ -57,6 +57,14 @@ interface AuthContextType {
   // OIDC methods
   loginWithOIDC: () => void;
   handleOAuthCallback: (code: string, state?: string) => Promise<void>;
+  storeTokensFromRedirect: (tokens: {
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: Date;
+    tokenType: string;
+    idpToken?: string;
+    idpTokenExpiresAt?: Date;
+  }) => Promise<void>;
 
   // Common methods
   logout: () => Promise<void>;
@@ -455,6 +463,49 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  /**
+   * Store tokens received via redirect (backend redirect flow).
+   * This is used when the API callback redirects to UI with tokens in query params.
+   */
+  const storeTokensFromRedirect = async (redirectTokens: {
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: Date;
+    tokenType: string;
+    idpToken?: string;
+    idpTokenExpiresAt?: Date;
+  }): Promise<void> => {
+    setIsLoading(true);
+
+    try {
+      const tokenInfo: TokenInfo = {
+        accessToken: redirectTokens.accessToken,
+        refreshToken: redirectTokens.refreshToken,
+        expiresAt: redirectTokens.expiresAt.getTime(),
+        tokenType: redirectTokens.tokenType,
+        idpToken: redirectTokens.idpToken,
+        idpTokenExpiresAt: redirectTokens.idpTokenExpiresAt?.getTime(),
+      };
+
+      // Extract user info from token
+      const claims = parseJwt(redirectTokens.accessToken);
+      const userData: User = {
+        id: (claims?.sub as string) || (claims?.user_id as string) || "",
+        email: (claims?.email as string) || "",
+        name: claims?.name as string,
+        roles: (claims?.roles as string[]) || [],
+      };
+
+      setTokens(tokenInfo);
+      setUser(userData);
+      storage.setTokens(tokenInfo);
+      storage.setUser(userData);
+      scheduleTokenRefresh(tokenInfo.expiresAt);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // ==========================================================================
   // COMMON METHODS
   // ==========================================================================
@@ -575,6 +626,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     register,
     loginWithOIDC,
     handleOAuthCallback,
+    storeTokensFromRedirect,
     logout,
     refreshTokens,
     getAccessToken,

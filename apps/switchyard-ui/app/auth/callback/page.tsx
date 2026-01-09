@@ -11,7 +11,7 @@ import { useAuth } from "@/contexts/AuthContext";
 function AuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { handleOAuthCallback } = useAuth();
+  const { handleOAuthCallback, storeTokensFromRedirect } = useAuth();
 
   const [status, setStatus] = useState<"processing" | "success" | "error">(
     "processing",
@@ -41,7 +41,45 @@ function AuthCallbackContent() {
         return;
       }
 
-      // Get authorization code
+      // Check for tokens in query params (backend redirect flow)
+      // This happens when the API callback redirects to UI with tokens
+      const accessToken = searchParams.get("access_token");
+      const refreshToken = searchParams.get("refresh_token");
+
+      if (accessToken && refreshToken) {
+        // Tokens provided directly via redirect - store them
+        const expiresAt = searchParams.get("expires_at");
+        const tokenType = searchParams.get("token_type");
+        const idpToken = searchParams.get("idp_token");
+        const idpTokenExpiresAt = searchParams.get("idp_token_expires_at");
+
+        try {
+          await storeTokensFromRedirect({
+            accessToken,
+            refreshToken,
+            expiresAt: expiresAt ? new Date(parseInt(expiresAt) * 1000) : new Date(Date.now() + 15 * 60 * 1000),
+            tokenType: tokenType || "Bearer",
+            idpToken: idpToken || undefined,
+            idpTokenExpiresAt: idpTokenExpiresAt ? new Date(parseInt(idpTokenExpiresAt) * 1000) : undefined,
+          });
+
+          setStatus("success");
+
+          // Redirect to dashboard after short delay
+          setTimeout(() => {
+            const returnUrl = localStorage.getItem("auth_return_url") || "/";
+            localStorage.removeItem("auth_return_url");
+            router.push(returnUrl);
+          }, 1500);
+        } catch (err) {
+          console.error("Failed to store tokens from redirect:", err);
+          setStatus("error");
+          setErrorMessage("Failed to complete authentication");
+        }
+        return;
+      }
+
+      // Get authorization code (old flow - UI calls API callback)
       const code = searchParams.get("code");
       const state = searchParams.get("state");
 
@@ -75,7 +113,7 @@ function AuthCallbackContent() {
     }
 
     processCallback();
-  }, [searchParams, handleOAuthCallback, router]);
+  }, [searchParams, handleOAuthCallback, storeTokensFromRedirect, router]);
 
   return (
     <div className="text-center">

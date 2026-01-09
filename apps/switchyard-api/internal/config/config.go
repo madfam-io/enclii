@@ -23,10 +23,11 @@ type Config struct {
 	AuthMode string // "local" (default) or "oidc"
 
 	// OIDC Configuration
-	OIDCIssuer       string
-	OIDCClientID     string
-	OIDCClientSecret string
-	OIDCRedirectURL  string
+	OIDCIssuer           string
+	OIDCClientID         string
+	OIDCClientSecret     string
+	OIDCRedirectURL      string
+	PostLoginRedirectURL string // URL to redirect to after successful OIDC login (e.g., UI callback)
 
 	// External Token Validation (for CLI/API direct access)
 	ExternalJWKSURL    string // JWKS URL for validating external tokens (e.g., Janua)
@@ -89,6 +90,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("oidc-client-id", "enclii")
 	viper.SetDefault("oidc-client-secret", "")
 	viper.SetDefault("oidc-redirect-url", "http://localhost:4200/v1/auth/callback")
+	viper.SetDefault("post-login-redirect-url", "")     // Empty = return JSON (for API clients)
 	viper.SetDefault("external-jwks-url", "")           // Empty = disabled
 	viper.SetDefault("external-issuer", "")             // Expected issuer for external tokens
 	viper.SetDefault("external-jwks-cache-ttl", 300)    // 5 minutes default
@@ -127,6 +129,7 @@ func Load() (*Config, error) {
 		OIDCClientID:              viper.GetString("oidc-client-id"),
 		OIDCClientSecret:          viper.GetString("oidc-client-secret"),
 		OIDCRedirectURL:           viper.GetString("oidc-redirect-url"),
+		PostLoginRedirectURL:      viper.GetString("post-login-redirect-url"),
 		ExternalJWKSURL:           viper.GetString("external-jwks-url"),
 		ExternalIssuer:            viper.GetString("external-issuer"),
 		ExternalJWKSCacheTTL:      viper.GetInt("external-jwks-cache-ttl"),
