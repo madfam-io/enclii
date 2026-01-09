@@ -108,7 +108,7 @@ func (q *RedisQueue) Dequeue(ctx context.Context, timeout time.Duration) (*Build
 
 	var jobID string
 	if len(result) > 0 {
-		jobID = result[0].Member
+		jobID = result[0].Member.(string)
 	} else {
 		// Fall back to regular queue with blocking pop
 		res, err := q.client.BRPop(ctx, timeout, buildQueueKey).Result()
