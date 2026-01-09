@@ -99,7 +99,7 @@ func showLogs(cfg *config.Config, serviceName, environment string, follow bool, 
 	deploymentResp, err := apiClient.GetLatestDeployment(ctx, targetService.ID.String())
 	if err != nil {
 		fmt.Printf("❌ Failed to get latest deployment: %v\n", err)
-		fmt.Println("💡 Try deploying the service first: enclii deploy --env %s\n", environment)
+		fmt.Printf("💡 Try deploying the service first: enclii deploy --env %s\n", environment)
 		return err
 	}
 

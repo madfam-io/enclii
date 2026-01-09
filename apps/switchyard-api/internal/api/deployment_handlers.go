@@ -254,7 +254,7 @@ func (h *Handler) GetServiceStatus(c *gin.Context) {
 
 	// Cache for 30 seconds
 	if statusJSON, err := json.Marshal(status); err == nil {
-		h.cache.Set(ctx, cacheKey, statusJSON, 30*time.Second)
+		_ = h.cache.Set(ctx, cacheKey, statusJSON, 30*time.Second)
 	}
 
 	c.JSON(http.StatusOK, status)
@@ -419,7 +419,7 @@ func (h *Handler) RollbackDeployment(c *gin.Context) {
 
 	// Clear cache
 	cacheKey := fmt.Sprintf("service:status:%s", service.ID.String())
-	h.cache.Del(ctx, cacheKey)
+	_ = h.cache.Del(ctx, cacheKey)
 
 	// Record rollback metrics
 	monitoring.RecordDeployment("production", "rollback", 0)

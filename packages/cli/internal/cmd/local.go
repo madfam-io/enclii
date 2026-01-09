@@ -268,7 +268,7 @@ func runLocalStatus() error {
 	lcfg := getLocalConfig()
 
 	fmt.Println("📊 MADFAM Local Environment Status")
-	fmt.Println("===================================\n")
+	fmt.Println("===================================")
 
 	// Check Docker containers
 	fmt.Println("🐳 Infrastructure (Docker):")

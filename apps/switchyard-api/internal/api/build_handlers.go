@@ -83,7 +83,7 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	case <-ctx.Done():
 		h.logger.Error(ctx, "Build timed out waiting for semaphore",
 			logging.String("release_id", release.ID.String()))
-		h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
+		_ = h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	// Persist the actual image URI to the database (builder generates versioned tags)
 	if err := h.repos.Releases.UpdateImageURI(release.ID, buildResult.ImageURI); err != nil {
 		h.logger.Error(ctx, "Failed to update release image URI", logging.Error("db_error", err))
-		h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
+		_ = h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
 		return
 	}
 	h.logger.Info(ctx, "✓ Release image URI updated", logging.String("image_uri", buildResult.ImageURI))
@@ -152,7 +152,7 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 
 	if err := h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusReady); err != nil {
 		h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
-		h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
+		_ = h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
 		return
 	}
 
