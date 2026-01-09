@@ -12,9 +12,13 @@ COPY apps/switchyard-api/go.mod apps/switchyard-api/go.sum ./apps/switchyard-api
 COPY packages/sdk-go/go.mod ./packages/sdk-go/
 
 # Create stub directories for other modules referenced in go.work
-RUN mkdir -p apps/reconcilers packages/cli && \
+RUN mkdir -p apps/reconcilers apps/roundhouse apps/waybill packages/cli && \
     echo 'module github.com/madfam/enclii/apps/reconcilers' > apps/reconcilers/go.mod && \
     echo 'go 1.24' >> apps/reconcilers/go.mod && \
+    echo 'module github.com/madfam/enclii/apps/roundhouse' > apps/roundhouse/go.mod && \
+    echo 'go 1.24' >> apps/roundhouse/go.mod && \
+    echo 'module github.com/madfam/enclii/apps/waybill' > apps/waybill/go.mod && \
+    echo 'go 1.24' >> apps/waybill/go.mod && \
     echo 'module github.com/madfam/enclii/packages/cli' > packages/cli/go.mod && \
     echo 'go 1.24' >> packages/cli/go.mod
 
