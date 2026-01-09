@@ -285,8 +285,7 @@ jobs:
       - name: Build and push roundhouse
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: apps/roundhouse/Dockerfile
+          context: apps/roundhouse
           push: true
           tags: ghcr.io/${{ github.repository }}/roundhouse:${{ github.sha }}
           cache-from: type=gha
@@ -295,8 +294,7 @@ jobs:
       - name: Build and push waybill
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: apps/waybill/Dockerfile
+          context: apps/waybill
           push: true
           tags: ghcr.io/${{ github.repository }}/waybill:${{ github.sha }}
           cache-from: type=gha
