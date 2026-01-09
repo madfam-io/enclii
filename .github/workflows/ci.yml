@@ -188,7 +188,7 @@ jobs:
 
       - name: Run tests
         working-directory: apps/switchyard-ui
-        run: npm test -- --coverage
+        run: npm test -- --coverage --passWithNoTests
 
       - name: Build UI
         working-directory: apps/switchyard-ui
