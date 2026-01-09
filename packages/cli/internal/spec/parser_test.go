@@ -56,6 +56,13 @@ func TestParseServiceSpec(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Change to tmpDir so auto-detection works (ParseServiceSpec uses os.Getwd())
+	originalDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(originalDir)
+
 	// Test parsing
 	parser := NewParser()
 	parsedSpec, err := parser.ParseServiceSpec(serviceYamlPath)

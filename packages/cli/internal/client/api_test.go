@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -248,8 +249,8 @@ func TestAPIClient_ErrorHandling(t *testing.T) {
 	_, err := client.GetProject(ctx, "nonexistent")
 
 	require.Error(t, err)
-	apiErr, ok := err.(APIError)
-	require.True(t, ok)
+	var apiErr APIError
+	require.True(t, errors.As(err, &apiErr))
 	assert.Equal(t, 404, apiErr.StatusCode)
 	assert.Equal(t, "Project not found", apiErr.Message)
 }
@@ -310,8 +311,8 @@ func TestAPIClient_Authentication(t *testing.T) {
 	_, err = client.Health(ctx)
 
 	require.Error(t, err)
-	apiErr, ok := err.(APIError)
-	require.True(t, ok)
+	var apiErr APIError
+	require.True(t, errors.As(err, &apiErr))
 	assert.Equal(t, 401, apiErr.StatusCode)
 }
 
