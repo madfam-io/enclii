@@ -50,6 +50,24 @@ resource "cloudflare_tunnel_config" "enclii" {
       service  = "http://grafana:3000"
     }
 
+    # Landing page (apex domain)
+    ingress_rule {
+      hostname = var.domain
+      service  = "http://landing-page:4204"
+    }
+
+    # Landing page (www subdomain)
+    ingress_rule {
+      hostname = "www.${var.domain}"
+      service  = "http://landing-page:4204"
+    }
+
+    # Documentation site
+    ingress_rule {
+      hostname = "docs.${var.domain}"
+      service  = "http://docs-site:80"
+    }
+
     # Default catch-all
     ingress_rule {
       service = "http_status:404"
@@ -91,6 +109,33 @@ resource "cloudflare_record" "metrics" {
 resource "cloudflare_record" "grafana" {
   zone_id = data.cloudflare_zone.main.id
   name    = "grafana"
+  value   = cloudflare_tunnel.enclii.cname
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_record" "landing" {
+  zone_id = data.cloudflare_zone.main.id
+  name    = "@"  # Apex domain
+  value   = cloudflare_tunnel.enclii.cname
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_record" "www" {
+  zone_id = data.cloudflare_zone.main.id
+  name    = "www"
+  value   = cloudflare_tunnel.enclii.cname
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_record" "docs" {
+  zone_id = data.cloudflare_zone.main.id
+  name    = "docs"
   value   = cloudflare_tunnel.enclii.cname
   type    = "CNAME"
   proxied = true

@@ -70,13 +70,13 @@ data:
 
       # Landing page (apex domain)
       - hostname: enclii.dev
-        service: http://landing-page:3000
+        service: http://landing-page:4204
         originRequest:
           noTLSVerify: false
 
       # Landing page (www subdomain)
       - hostname: www.enclii.dev
-        service: http://landing-page:3000
+        service: http://landing-page:4204
         originRequest:
           noTLSVerify: false
 
@@ -254,7 +254,7 @@ spec:
               app: landing-page
       ports:
         - protocol: TCP
-          port: 3000
+          port: 4204
     # Allow connection to Cloudflare (required for tunnel)
     - to:
         - ipBlock:
