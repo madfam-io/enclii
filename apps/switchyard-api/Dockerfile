@@ -43,9 +43,15 @@ FROM alpine:3.20
 # - tzdata: for timezone support
 # - wget: for health checks
 # - git: for cloning repositories
-# - docker-cli: for building and pushing images (requires Docker socket mount)
-# - curl: for downloading pack CLI
-RUN apk --no-cache add ca-certificates tzdata wget git docker-cli curl bash
+# - curl: for downloading pack CLI and Docker CLI
+RUN apk --no-cache add ca-certificates tzdata wget git curl bash
+
+# Install Docker CLI from official releases (Alpine's docker-cli is too old)
+# Required for building and pushing images via Docker socket mount
+ENV DOCKER_VERSION=27.4.1
+RUN curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" | tar -xz -C /tmp \
+    && mv /tmp/docker/docker /usr/local/bin/ \
+    && rm -rf /tmp/docker
 
 # Install Cloud Native Buildpacks pack CLI
 ENV PACK_VERSION=0.35.1
