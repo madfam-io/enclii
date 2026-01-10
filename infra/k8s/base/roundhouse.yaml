@@ -1,0 +1,52 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: roundhouse
+  labels:
+    app: roundhouse
+    app.kubernetes.io/name: roundhouse
+    app.kubernetes.io/component: build-pipeline
+    app.kubernetes.io/part-of: enclii
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: roundhouse
+  template:
+    metadata:
+      labels:
+        app: roundhouse
+        app.kubernetes.io/name: roundhouse
+        app.kubernetes.io/component: build-pipeline
+        app.kubernetes.io/part-of: enclii
+    spec:
+      containers:
+        - name: roundhouse-worker
+          image: ghcr.io/madfam-io/enclii/roundhouse:1ead1b30fdb4732051596d2d2ca7726dde4acf7c
+          imagePullPolicy: Always
+          env:
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: enclii-secrets
+                  key: redis-url
+            - name: REGISTRY
+              value: "ghcr.io/madfam-io"
+            - name: CALLBACK_URL
+              value: "http://switchyard-api:4200"
+            - name: BUILD_WORK_DIR
+              value: "/var/lib/roundhouse/builds"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: build-work
+              mountPath: /var/lib/roundhouse/builds
+      volumes:
+        - name: build-work
+          emptyDir: {}
