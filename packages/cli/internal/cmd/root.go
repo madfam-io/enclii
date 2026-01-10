@@ -43,6 +43,7 @@ Learn more at https://enclii.dev`,
 	rootCmd.AddCommand(NewRollbackCommand(cfg))
 	rootCmd.AddCommand(NewVersionCommand())
 	rootCmd.AddCommand(NewLocalCommand(cfg))
+	rootCmd.AddCommand(NewServicesSyncCommand(cfg))
 
 	return rootCmd
 }
