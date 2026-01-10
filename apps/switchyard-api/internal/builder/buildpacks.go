@@ -131,11 +131,12 @@ func (b *BuildpacksBuilder) buildWithBuildpacks(ctx context.Context, req *BuildR
 	result.Logs = append(result.Logs, "Building with Cloud Native Buildpacks...")
 
 	// Create build command
+	// Note: pack CLI uses Docker volumes for caching by default
+	// The --cache-dir flag doesn't exist; use --cache-image for remote caching
 	args := []string{
 		"build", result.ImageURI,
 		"--path", req.SourcePath,
 		"--builder", "paketocommunity/builder-ubi-base:latest",
-		"--cache-dir", b.cacheDir,
 		"--publish",
 	}
 
