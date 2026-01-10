@@ -18,7 +18,7 @@ spec:
   build:
     # Source from MADFAM GitHub org
     source:
-      repo: github.com/madfam-io/digifab-harvest-benchmark
+      repo: github.com/madfam-org/digifab-harvest-benchmark
       branch: main
       path: services/api
 
@@ -287,7 +287,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/digifab-harvest-benchmark
+      repo: github.com/madfam-org/digifab-harvest-benchmark
       branch: main
       path: apps/web
     builder: nixpacks

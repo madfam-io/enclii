@@ -22,7 +22,7 @@ spec:
         value: production
     source:
       git:
-        repository: https://github.com/madfam-io/enclii
+        repository: https://github.com/madfam-org/enclii
         branch: main
         path: apps/switchyard-ui # Build only this subdirectory
         autoDeploy: true

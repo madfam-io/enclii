@@ -19,7 +19,7 @@ You are implementing the remaining features for **Enclii**, a Railway-style PaaS
 - **API:** https://api.enclii.dev (running but DB not initialized)
 - **UI:** https://app.enclii.dev (running)
 - **Auth:** Janua SSO at https://auth.madfam.io (OIDC/OAuth 2.0)
-- **Registry:** ghcr.io/madfam-io
+- **Registry:** ghcr.io/madfam-org
 
 ---
 
@@ -63,7 +63,7 @@ spec:
     spec:
       initContainers:
       - name: migrate
-        image: ghcr.io/madfam-io/enclii-api:latest
+        image: ghcr.io/madfam-org/enclii-api:latest
         command: ["/app/switchyard-api", "migrate", "up"]
         env:
         - name: DATABASE_URL
@@ -150,12 +150,12 @@ func (v *JWTValidator) getKey(token *jwt.Token) (interface{}, error) {
 **Current State:**
 - Webhook endpoint exists: `POST /v1/webhooks/github`
 - `ENCLII_GITHUB_WEBHOOK_SECRET` is configured in pod
-- But NO webhook exists on `madfam-io/enclii` GitHub repo
+- But NO webhook exists on `madfam-org/enclii` GitHub repo
 
 **Required Action:**
 ```bash
 # Create GitHub webhook via gh CLI or API
-gh api repos/madfam-io/enclii/hooks -X POST \
+gh api repos/madfam-org/enclii/hooks -X POST \
   -f name=web \
   -f active=true \
   -f events[]="push" \
@@ -185,15 +185,15 @@ INSERT INTO environments (id, project_id, name, kube_namespace) VALUES
 -- Register services with git_repo for webhook matching
 INSERT INTO services (id, project_id, name, git_repo, auto_deploy, auto_deploy_env, build_config) VALUES
   ('550e8400-e29b-41d4-a716-446655440010', '550e8400-e29b-41d4-a716-446655440000',
-   'switchyard-api', 'https://github.com/madfam-io/enclii', true, 'prod',
+   'switchyard-api', 'https://github.com/madfam-org/enclii', true, 'prod',
    '{"type":"dockerfile","dockerfile":"apps/switchyard-api/Dockerfile","context":"."}'),
 
   ('550e8400-e29b-41d4-a716-446655440011', '550e8400-e29b-41d4-a716-446655440000',
-   'switchyard-ui', 'https://github.com/madfam-io/enclii', true, 'prod',
+   'switchyard-ui', 'https://github.com/madfam-org/enclii', true, 'prod',
    '{"type":"dockerfile","dockerfile":"apps/switchyard-ui/Dockerfile","context":"."}'),
 
   ('550e8400-e29b-41d4-a716-446655440012', '550e8400-e29b-41d4-a716-446655440000',
-   'docs-site', 'https://github.com/madfam-io/enclii', true, 'prod',
+   'docs-site', 'https://github.com/madfam-org/enclii', true, 'prod',
    '{"type":"dockerfile","dockerfile":"apps/docs-site/Dockerfile","context":"."}');
 ```
 
@@ -243,7 +243,7 @@ POST   /v1/projects/:project/services/:id/deploy - Trigger manual deploy
 **Required Implementation:**
 1. **Build Queue:** Async build processing with status tracking
 2. **Build Logs:** Real-time log streaming during build
-3. **Build Artifacts:** Push to ghcr.io/madfam-io with proper tags
+3. **Build Artifacts:** Push to ghcr.io/madfam-org with proper tags
 4. **SBOM Generation:** CycloneDX SBOM on successful build
 5. **Image Signing:** Cosign signature on push
 
@@ -887,7 +887,7 @@ OIDC_REDIRECT_URI=https://app.enclii.dev/api/auth/callback
 GITHUB_WEBHOOK_SECRET=0a619aa7b0bf6b1bf75e252dacfc02a2afac33e4ccbe19a9ff0077bdc9d33508
 
 # Container Registry
-REGISTRY_URL=ghcr.io/madfam-io
+REGISTRY_URL=ghcr.io/madfam-org
 REGISTRY_USERNAME=<github-username>
 REGISTRY_PASSWORD=<github-pat>
 

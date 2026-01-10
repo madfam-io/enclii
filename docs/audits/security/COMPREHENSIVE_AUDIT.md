@@ -1,6 +1,6 @@
 # Enclii Comprehensive Security Audit Report
 **Date**: November 20, 2025
-**Repository**: https://github.com/madfam-io/enclii
+**Repository**: https://github.com/madfam-org/enclii
 **Scope**: Full codebase including backend (Go), frontend (Next.js), CLI, and Kubernetes infrastructure
 **Assessment Type**: Thorough Security Posture Audit
 

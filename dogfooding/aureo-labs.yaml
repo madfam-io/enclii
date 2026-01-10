@@ -15,7 +15,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/aureo-labs
+      repo: github.com/madfam-org/aureo-labs
       branch: main
     builder: nixpacks
     buildEnv:

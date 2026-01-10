@@ -1361,7 +1361,7 @@ EOF
 
 ### Community
 - Discord: https://discord.gg/enclii
-- GitHub Issues: https://github.com/madfam-io/enclii/issues
+- GitHub Issues: https://github.com/madfam-org/enclii/issues
 - Stack Overflow: Tag `enclii`
 
 ### Professional Services

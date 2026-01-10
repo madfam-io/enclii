@@ -19,7 +19,7 @@ spec:
   tls:
     - hosts:
         - npm.madfam.io
-      secretName: npm-madfam-io-tls
+      secretName: npm-madfam-org-tls
   rules:
     - host: npm.madfam.io
       http:

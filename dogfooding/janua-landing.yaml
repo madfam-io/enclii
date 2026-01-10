@@ -1,7 +1,7 @@
 # Janua Landing Page Service Specification
 # Marketing and landing page for Janua
 #
-# Repository: https://github.com/madfam-io/janua
+# Repository: https://github.com/madfam-org/janua
 # Path: apps/landing
 # Port: 3001 (per PORT_REGISTRY.md)
 
@@ -24,7 +24,7 @@ spec:
   # ==========================================================================
   source:
     git:
-      repository: https://github.com/madfam-io/janua
+      repository: https://github.com/madfam-org/janua
       branch: main
       path: apps/landing
       autoDeploy: true

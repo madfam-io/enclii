@@ -15,7 +15,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/brepflow
+      repo: github.com/madfam-org/brepflow
       branch: main
       path: apps/web
     builder: nixpacks

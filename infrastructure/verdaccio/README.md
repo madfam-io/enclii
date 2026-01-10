@@ -9,7 +9,7 @@ Private npm registry for MADFAM ecosystem packages using Verdaccio.
 docker-compose up -d
 
 # 2. Create initial admin user
-docker exec -it npm-madfam-io npx verdaccio-htpasswd -b /verdaccio/conf/htpasswd admin <password>
+docker exec -it npm-madfam-org npx verdaccio-htpasswd -b /verdaccio/conf/htpasswd admin <password>
 
 # 3. Configure npm/pnpm to use registry
 npm config set @madfam:registry https://npm.madfam.io

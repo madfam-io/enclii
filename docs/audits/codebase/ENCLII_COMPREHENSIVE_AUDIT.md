@@ -2,7 +2,7 @@
 ## Executive Summary & Master Report
 
 **Audit Date:** November 19, 2025
-**Repository:** github.com/madfam-io/enclii
+**Repository:** github.com/madfam-org/enclii
 **Branch:** claude/codebase-audit-01L8H31f8BbKDeMXfTFDAPwJ
 **Auditor:** Claude Code (Anthropic)
 **Total Development Time Analyzed:** ~15,586 lines of Go code, 4 TypeScript files, 16 K8s manifests

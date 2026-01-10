@@ -394,7 +394,7 @@ Exit codes: 0 (success), 10 (validation), 20 (build failed), 30 (deploy failed),
   - `https://status.enclii.dev` (referenced)
 - ❌ Broken relative links possible (scattered locations)
 - ❌ No sitemap or documentation index
-- ⚠️ Some links reference GitHub URLs with wrong organization (madfam vs madfam-io)
+- ⚠️ Some links reference GitHub URLs with wrong organization (madfam vs madfam-org)
 
 **Example Issues:**
 ```
@@ -1085,7 +1085,7 @@ enclii deploy -s web -e stage --wait --timeout 10m
 - `security@enclii.dev` - No verified contact
 
 ### Potentially Wrong Organization Names
-- `github.com/madfam/enclii` vs `github.com/madfam-io/enclii`
+- `github.com/madfam/enclii` vs `github.com/madfam-org/enclii`
 
 ---
 

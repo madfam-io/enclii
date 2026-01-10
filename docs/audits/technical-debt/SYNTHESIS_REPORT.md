@@ -2,7 +2,7 @@
 ## Synthesis Report from All Previous Audits
 
 **Synthesis Date:** November 20, 2025  
-**Repository:** github.com/madfam-io/enclii  
+**Repository:** github.com/madfam-org/enclii  
 **Total Audits Synthesized:** 15 comprehensive audit reports  
 **Data Sources:** Code audits, security reviews, infrastructure analysis, testing assessment, documentation review, dependency analysis  
 **Codebase Size:** 21,864 lines of Go code + TypeScript UI (86 Go files)  

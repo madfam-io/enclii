@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: waybill-aggregator
-          image: ghcr.io/madfam-io/enclii/waybill:1ead1b30fdb4732051596d2d2ca7726dde4acf7c
+          image: ghcr.io/madfam-org/enclii/waybill:1ead1b30fdb4732051596d2d2ca7726dde4acf7c
           imagePullPolicy: Always
           env:
             - name: DATABASE_URL

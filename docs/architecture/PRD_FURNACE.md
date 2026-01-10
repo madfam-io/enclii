@@ -435,7 +435,7 @@ CREATE TABLE furnace_models (
 
 ## Port Allocation
 
-Per [solarpunk-foundry/docs/PORT_ALLOCATION.md](https://github.com/madfam-io/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Furnace uses internal ports within Enclii's infrastructure:
+Per [solarpunk-foundry/docs/PORT_ALLOCATION.md](https://github.com/madfam-org/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Furnace uses internal ports within Enclii's infrastructure:
 
 | Port | Service | Purpose |
 |------|---------|---------|

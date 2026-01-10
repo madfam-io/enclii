@@ -21,13 +21,13 @@ These service specs will demonstrate:
 ### Core Platform
 
 - **`switchyard-api.yaml`** - Control plane REST API
-  - Built from: `github.com/madfam-io/enclii`
+  - Built from: `github.com/madfam-org/enclii`
   - Exposed at: `api.enclii.io`
   - 3 replicas (HA)
   - Autoscaling: 3-10 pods based on CPU/memory
 
 - **`switchyard-ui.yaml`** - Web dashboard (Next.js)
-  - Built from: `github.com/madfam-io/enclii`
+  - Built from: `github.com/madfam-org/enclii`
   - Exposed at: `app.enclii.io`
   - 2 replicas
   - Autoscaling: 2-8 pods
@@ -35,21 +35,21 @@ These service specs will demonstrate:
 ### Janua (Authentication Platform)
 
 - **`janua-api.yaml`** - Authentication API (OAuth/OIDC)
-  - Built from: `github.com/madfam-io/janua` → `apps/api`
+  - Built from: `github.com/madfam-org/janua` → `apps/api`
   - Exposed at: `api.janua.dev`
   - Port: 8000 (per PORT_REGISTRY.md)
   - 3 replicas (auth is critical)
   - Autoscaling: 3-10 pods
 
 - **`janua-dashboard.yaml`** - Authentication Dashboard UI
-  - Built from: `github.com/madfam-io/janua` → `apps/dashboard`
+  - Built from: `github.com/madfam-org/janua` → `apps/dashboard`
   - Exposed at: `app.janua.dev`
   - Port: 3002 (per PORT_REGISTRY.md)
   - 2 replicas
   - Autoscaling: 2-5 pods
 
 - **`janua-landing.yaml`** - Janua Marketing Site
-  - Built from: `github.com/madfam-io/janua` → `apps/landing`
+  - Built from: `github.com/madfam-org/janua` → `apps/landing`
   - Exposed at: `janua.dev`, `www.janua.dev`
   - Port: 3001 (per PORT_REGISTRY.md)
   - 2 replicas
@@ -129,13 +129,13 @@ All services have `autoDeploy: true`, which means:
 # Enclii API (from Enclii repo)
 source:
   git:
-    repository: https://github.com/madfam-io/enclii
+    repository: https://github.com/madfam-org/enclii
     branch: main
 
 # Janua (from separate Janua repo)
 source:
   git:
-    repository: https://github.com/madfam-io/janua
+    repository: https://github.com/madfam-org/janua
     branch: main
 ```
 

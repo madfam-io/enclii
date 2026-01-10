@@ -338,5 +338,5 @@ To add new examples:
 ## Support
 
 - Documentation: https://docs.enclii.dev
-- Issues: https://github.com/madfam-io/enclii/issues
-- Discussions: https://github.com/madfam-io/enclii/discussions
+- Issues: https://github.com/madfam-org/enclii/issues
+- Discussions: https://github.com/madfam-org/enclii/discussions

@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: roundhouse-worker
-          image: ghcr.io/madfam-io/enclii/roundhouse:1ead1b30fdb4732051596d2d2ca7726dde4acf7c
+          image: ghcr.io/madfam-org/enclii/roundhouse:1ead1b30fdb4732051596d2d2ca7726dde4acf7c
           imagePullPolicy: Always
           env:
             - name: REDIS_URL
@@ -32,7 +32,7 @@ spec:
                   name: enclii-secrets
                   key: redis-url
             - name: REGISTRY
-              value: "ghcr.io/madfam-io"
+              value: "ghcr.io/madfam-org"
             - name: CALLBACK_URL
               value: "http://switchyard-api:4200"
             - name: BUILD_WORK_DIR

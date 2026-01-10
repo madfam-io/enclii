@@ -664,7 +664,7 @@ func (c *Controller) createMissingRecords(ctx context.Context, service *types.Se
 }
 
 // extractVersionFromImage extracts version string from an image URI
-// e.g., "ghcr.io/madfam-io/enclii/waybill:1ead1b30fdb4" -> "1ead1b30"
+// e.g., "ghcr.io/madfam-org/enclii/waybill:1ead1b30fdb4" -> "1ead1b30"
 func extractVersionFromImage(imageURI string) string {
 	// Find the tag after the last ":"
 	lastColon := -1
@@ -688,7 +688,7 @@ func extractVersionFromImage(imageURI string) string {
 }
 
 // extractGitSHAFromImage extracts git SHA from an image URI
-// e.g., "ghcr.io/madfam-io/enclii/waybill:1ead1b30fdb4" -> "1ead1b30fdb4"
+// e.g., "ghcr.io/madfam-org/enclii/waybill:1ead1b30fdb4" -> "1ead1b30fdb4"
 func extractGitSHAFromImage(imageURI string) string {
 	// Find the tag after the last ":"
 	lastColon := -1

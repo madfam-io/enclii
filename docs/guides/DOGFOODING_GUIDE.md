@@ -12,7 +12,7 @@ This document describes how Enclii deploys **itself** using its own platform, an
 
 ## Current Production Status
 
-### Enclii Services (github.com/madfam-io/enclii)
+### Enclii Services (github.com/madfam-org/enclii)
 | Service | URL | Port | Status | Auto-Deploy |
 |---------|-----|------|--------|-------------|
 | Switchyard API | api.enclii.dev | 4200 | ✅ Running | ✅ Enabled |
@@ -21,7 +21,7 @@ This document describes how Enclii deploys **itself** using its own platform, an
 | Landing Page | enclii.dev | - | 🔲 Pending | ✅ Enabled |
 | Status Page | status.enclii.dev | - | 🔲 Pending | ✅ Enabled |
 
-### Janua Services (github.com/madfam-io/janua)
+### Janua Services (github.com/madfam-org/janua)
 | Service | URL | Port | Status | Auto-Deploy |
 |---------|-----|------|--------|-------------|
 | Janua API | api.janua.madfam.io | 4100 | ✅ Running | ✅ Enabled |
@@ -31,7 +31,7 @@ This document describes how Enclii deploys **itself** using its own platform, an
 | Janua Website | janua.madfam.io | 4104 | 🔲 Pending | ✅ Enabled |
 | Janua Landing | landing.janua.madfam.io | - | 🔲 Pending | ✅ Enabled |
 
-### Solarpunk Foundry Services (github.com/madfam-io/solarpunk-foundry)
+### Solarpunk Foundry Services (github.com/madfam-org/solarpunk-foundry)
 | Service | URL | Port | Status | Auto-Deploy |
 |---------|-----|------|--------|-------------|
 | Solarpunk Docs | docs.madfam.io | 3000 | 🔲 Pending | ✅ Enabled |
@@ -41,9 +41,9 @@ This document describes how Enclii deploys **itself** using its own platform, an
 
 | Repository | Webhook Configured | Webhook ID | Events |
 |------------|-------------------|------------|--------|
-| madfam-io/enclii | ✅ Active | 585841923 | push, pull_request |
-| madfam-io/janua | 🔲 Pending | - | push, pull_request |
-| madfam-io/solarpunk-foundry | 🔲 Pending | - | push, pull_request |
+| madfam-org/enclii | ✅ Active | 585841923 | push, pull_request |
+| madfam-org/janua | 🔲 Pending | - | push, pull_request |
+| madfam-org/solarpunk-foundry | 🔲 Pending | - | push, pull_request |
 
 **Webhook Endpoint:** `POST /v1/webhooks/github`
 **Events:** Push (triggers auto-deploy on main branch)
@@ -105,14 +105,14 @@ This document describes how Enclii deploys **itself** using its own platform, an
 
 ### What We Have (Active)
 
-**Enclii Repository:** https://github.com/madfam-io/enclii
+**Enclii Repository:** https://github.com/madfam-org/enclii
 - ✅ Control plane API (Switchyard) - **DEPLOYED** at api.enclii.dev
 - ✅ Web UI (Next.js dashboard) - **DEPLOYED** at app.enclii.dev
 - ✅ CLI (`enclii` command) - **OPERATIONAL**
 - ✅ Kubernetes reconcilers - **RUNNING**
 - ✅ GitHub webhook for auto-deploy - **CONFIGURED** (ID: 585841923)
 
-**Janua Repository:** https://github.com/madfam-io/janua
+**Janua Repository:** https://github.com/madfam-org/janua
 - ✅ OAuth 2.0 / OIDC provider - **DEPLOYED** at auth.madfam.io
 - ✅ RS256 JWT signing - **ACTIVE** (JWKS validated)
 - ✅ Multi-tenant organization support - **WORKING**
@@ -166,21 +166,21 @@ This document describes how Enclii deploys **itself** using its own platform, an
 │  │  ┌─────────────────────────────────────────────────┐    │  │
 │  │  │  Switchyard API (3 replicas)                    │    │  │
 │  │  │  └─> api.enclii.io                              │    │  │
-│  │  │  └─> Built from: github.com/madfam-io/enclii   │    │  │
+│  │  │  └─> Built from: github.com/madfam-org/enclii   │    │  │
 │  │  │  └─> Deployed via: enclii deploy                │    │  │
 │  │  └─────────────────────────────────────────────────┘    │  │
 │  │                                                           │  │
 │  │  ┌─────────────────────────────────────────────────┐    │  │
 │  │  │  Switchyard UI (2 replicas)                     │    │  │
 │  │  │  └─> app.enclii.io                              │    │  │
-│  │  │  └─> Built from: github.com/madfam-io/enclii   │    │  │
+│  │  │  └─> Built from: github.com/madfam-org/enclii   │    │  │
 │  │  │  └─> Deployed via: enclii deploy                │    │  │
 │  │  └─────────────────────────────────────────────────┘    │  │
 │  │                                                           │  │
 │  │  ┌─────────────────────────────────────────────────┐    │  │
 │  │  │  Janua (3 replicas)                            │    │  │
 │  │  │  └─> auth.enclii.io                             │    │  │
-│  │  │  └─> Built from: github.com/madfam-io/janua   │    │  │
+│  │  │  └─> Built from: github.com/madfam-org/janua   │    │  │
 │  │  │  └─> Deployed via: enclii deploy                │    │  │
 │  │  │  └─> Authenticates: Enclii itself!              │    │  │
 │  │  └─────────────────────────────────────────────────┘    │  │
@@ -298,7 +298,7 @@ Once bootstrapped, **all deployments** happen via Enclii itself:
 
 ## Repository Structure
 
-### Enclii Repository (`github.com/madfam-io/enclii`)
+### Enclii Repository (`github.com/madfam-org/enclii`)
 
 ```
 enclii/
@@ -326,7 +326,7 @@ enclii/
 └── DOGFOODING_GUIDE.md          # This file
 ```
 
-### Janua Repository (`github.com/madfam-io/janua`)
+### Janua Repository (`github.com/madfam-org/janua`)
 
 ```
 janua/
@@ -347,7 +347,7 @@ janua/
 - Hetzner account with 3x CPX31 nodes (Kubernetes cluster)
 - Cloudflare account with Tunnel configured
 - Ubicloud account with managed PostgreSQL
-- GitHub accounts with access to `madfam-io/enclii` and `madfam-io/janua`
+- GitHub accounts with access to `madfam-org/enclii` and `madfam-org/janua`
 
 ### Step 1: Bootstrap Infrastructure (Week 1)
 
@@ -368,7 +368,7 @@ Deploy Enclii manually **one time** using raw Kubernetes manifests:
 
 ```bash
 # Clone Enclii repository
-git clone https://github.com/madfam-io/enclii
+git clone https://github.com/madfam-org/enclii
 cd enclii
 
 # Configure secrets
@@ -404,7 +404,7 @@ Deploy Janua manually **one time**:
 
 ```bash
 # Clone Janua repository
-git clone https://github.com/madfam-io/janua
+git clone https://github.com/madfam-org/janua
 cd janua
 
 # Configure secrets
@@ -548,7 +548,7 @@ spec:
   build:
     source:
       git:
-        repository: https://github.com/madfam-io/enclii
+        repository: https://github.com/madfam-org/enclii
         branch: main
         autoDeploy: true  # ⭐ Auto-deploy on push
 ```

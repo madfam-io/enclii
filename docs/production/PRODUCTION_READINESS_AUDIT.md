@@ -520,7 +520,7 @@ spec:
     spec:
       containers:
       - name: janua
-        image: ghcr.io/madfam-io/janua:latest
+        image: ghcr.io/madfam-org/janua:latest
         ports:
         - containerPort: 8000
           name: http

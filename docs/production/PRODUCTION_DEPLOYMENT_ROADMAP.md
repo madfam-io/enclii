@@ -522,7 +522,7 @@ spec:
     spec:
       containers:
       - name: janua
-        image: ghcr.io/madfam-io/janua:latest
+        image: ghcr.io/madfam-org/janua:latest
         env:
         - name: DATABASE_URL
           value: "postgres://ubicloud-connection-string"

@@ -15,7 +15,7 @@ spec:
     context: .
     source:
       git:
-        repository: https://github.com/madfam-io/claudecodeui  # ← Fork with Janua integration
+        repository: https://github.com/madfam-org/claudecodeui  # ← Fork with Janua integration
         branch: main
         autoDeploy: true
 

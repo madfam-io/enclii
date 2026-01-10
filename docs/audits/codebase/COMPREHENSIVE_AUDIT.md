@@ -1,7 +1,7 @@
 # Enclii Codebase: Comprehensive Audit & Inventory
 
 **Date:** November 20, 2025  
-**Repository:** madfam-io/enclii  
+**Repository:** madfam-org/enclii  
 **Status:** Alpha (70% production-ready)  
 **Go Version:** 1.23.0 / 1.24.7  
 **Node:** 14.0.0+  
@@ -631,7 +631,7 @@ make health-check     # Check all environments
    - Exposed at app.enclii.io
 
 3. **`janua.yaml`** - Authentication
-   - Built from separate repo: github.com/madfam-io/janua
+   - Built from separate repo: github.com/madfam-org/janua
    - 3 replicas (HA), 3-10 autoscaling
    - Exposed at auth.enclii.io
 

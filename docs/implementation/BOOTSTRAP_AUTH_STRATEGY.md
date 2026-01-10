@@ -155,7 +155,7 @@ VALUES (
    spec:
      source:
        type: git
-       repository: https://github.com/madfam-io/janua
+       repository: https://github.com/madfam-org/janua
        branch: main
      build:
        type: dockerfile

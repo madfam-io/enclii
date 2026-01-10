@@ -86,7 +86,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("port", "4200")
 	viper.SetDefault("database-url", "postgres://janua:janua_dev@localhost:5432/enclii_dev?sslmode=disable")
 	viper.SetDefault("log-level", "info")
-	viper.SetDefault("registry", "ghcr.io/madfam-io")
+	viper.SetDefault("registry", "ghcr.io/madfam-org")
 	viper.SetDefault("registry-username", "")
 	viper.SetDefault("registry-password", "")
 	viper.SetDefault("auth-mode", "local") // Default to local bootstrap mode

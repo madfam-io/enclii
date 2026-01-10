@@ -5,7 +5,7 @@
 **Audited By:** Claude Code Analysis System
 **Project:** Enclii - Railway-style Internal Platform
 **Version:** Alpha (Private)
-**Repository:** madfam-io/enclii
+**Repository:** madfam-org/enclii
 **Branch:** claude/codebase-audit-012L4de8BAKHzKCwzwkaRZfj
 
 ---

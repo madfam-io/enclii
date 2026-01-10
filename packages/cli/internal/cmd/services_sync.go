@@ -269,7 +269,7 @@ func getGitRepoFromSpec(s *RawServiceSpec) string {
 		return s.Spec.Build.Source.Git.Repository
 	}
 	// Default for enclii monorepo
-	return "https://github.com/madfam-io/enclii"
+	return "https://github.com/madfam-org/enclii"
 }
 
 func rawSpecToService(s *RawServiceSpec) *types.Service {

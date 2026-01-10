@@ -138,7 +138,7 @@ enclii/
 ├── dogfooding/                # ⭐ Service specs for self-hosting
 │   ├── switchyard-api.yaml    # Control plane (from this repo)
 │   ├── switchyard-ui.yaml     # Web UI (from this repo)
-│   ├── janua.yaml             # Auth (from github.com/madfam-io/janua)
+│   ├── janua.yaml             # Auth (from github.com/madfam-org/janua)
 │   ├── landing-page.yaml      # Marketing site
 │   ├── docs-site.yaml         # Documentation
 │   └── status-page.yaml       # Status monitoring
@@ -236,7 +236,7 @@ Set the `NPM_MADFAM_TOKEN` environment variable with your registry token.
 
 ```bash
 # 1. Clone and bootstrap
-git clone https://github.com/madfam-io/enclii
+git clone https://github.com/madfam-org/enclii
 cd enclii
 make bootstrap  # Install dependencies
 
@@ -517,7 +517,7 @@ This aligns with the **MADFAM Manifesto Section IV**: protecting open infrastruc
 
 - **Documentation:** [docs.enclii.io](https://docs.enclii.io)
 - **Status Page:** [status.enclii.io](https://status.enclii.io)
-- **Janua (Auth):** [github.com/madfam-io/janua](https://github.com/madfam-io/janua)
+- **Janua (Auth):** [github.com/madfam-org/janua](https://github.com/madfam-org/janua)
 - **Production Roadmap:** [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 - **Dogfooding Guide:** [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md)
 

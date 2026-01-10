@@ -15,7 +15,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/primavera3d
+      repo: github.com/madfam-org/primavera3d
       branch: main
       path: apps/web
     builder: nixpacks

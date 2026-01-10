@@ -54,7 +54,7 @@ spec:
           value: "admin@madfam.io"
         # Container Registry Credentials (for pushing built images)
         - name: ENCLII_REGISTRY
-          value: "ghcr.io/madfam-io"
+          value: "ghcr.io/madfam-org"
         - name: ENCLII_REGISTRY_USERNAME
           valueFrom:
             secretKeyRef:

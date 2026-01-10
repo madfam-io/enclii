@@ -18,7 +18,7 @@ spec:
     - name: coforma-api
       build:
         source:
-          repo: github.com/madfam-io/coforma-studio
+          repo: github.com/madfam-org/coforma-studio
           branch: main
           path: apps/api
         builder: dockerfile
@@ -101,7 +101,7 @@ spec:
     - name: coforma-web
       build:
         source:
-          repo: github.com/madfam-io/coforma-studio
+          repo: github.com/madfam-org/coforma-studio
           branch: main
           path: apps/web
         builder: dockerfile
@@ -156,7 +156,7 @@ spec:
     - name: coforma-worker
       build:
         source:
-          repo: github.com/madfam-io/coforma-studio
+          repo: github.com/madfam-org/coforma-studio
           branch: main
           path: apps/api
         builder: dockerfile

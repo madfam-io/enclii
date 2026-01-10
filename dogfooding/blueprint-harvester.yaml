@@ -15,7 +15,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/blueprint-harvester
+      repo: github.com/madfam-org/blueprint-harvester
       branch: main
       path: services
     builder: dockerfile
@@ -92,7 +92,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/blueprint-harvester
+      repo: github.com/madfam-org/blueprint-harvester
       branch: main
       path: services
     builder: dockerfile
@@ -153,7 +153,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/blueprint-harvester
+      repo: github.com/madfam-org/blueprint-harvester
       branch: main
       path: apps/web
     builder: nixpacks

@@ -14,7 +14,7 @@ Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infr
 
 ### Port Allocation
 
-Per [PORT_ALLOCATION.md](https://github.com/madfam-io/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Enclii uses the 4200-4299 block.
+Per [PORT_ALLOCATION.md](https://github.com/madfam-org/solarpunk-foundry/blob/main/docs/PORT_ALLOCATION.md), Enclii uses the 4200-4299 block.
 
 | Service | Port | Container | Public Domain |
 |---------|------|-----------|---------------|
@@ -186,7 +186,7 @@ See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_R
 - ✅ **API Keys** for CI/CD integration
 
 **Janua Integration (Complete):**
-- **Repository:** [github.com/madfam-io/janua](https://github.com/madfam-io/janua)
+- **Repository:** [github.com/madfam-org/janua](https://github.com/madfam-org/janua)
 - **Production URL:** https://auth.madfam.io
 - **Protocol:** OAuth 2.0 / OIDC with RS256 JWT
 - **Features:** Multi-tenant orgs, GitHub OAuth, JWKS rotation
@@ -208,7 +208,7 @@ See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_R
 **Build Pipeline Status:**
 - ✅ GitHub webhook configured with HMAC verification
 - ✅ Real build pipeline (Buildpacks/Dockerfile detection)
-- ✅ Container registry push (ghcr.io/madfam-io)
+- ✅ Container registry push (ghcr.io/madfam-org)
 - ✅ Kubernetes reconciler for deployments
 
 See [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md) for complete implementation plan.

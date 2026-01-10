@@ -36,7 +36,7 @@
 
 **Goal**: Register ALL services from both repos in Enclii.
 
-#### Enclii Repo (`madfam-io/enclii`)
+#### Enclii Repo (`madfam-org/enclii`)
 Currently registered: `switchyard-api`, `switchyard-ui`
 
 **Still need to import**:
@@ -44,7 +44,7 @@ Currently registered: `switchyard-api`, `switchyard-ui`
 2. `landing-page` (apps/landing-page) - Marketing site
 3. `status-page` (apps/status-page) - Status monitoring
 
-#### Janua Repo (`madfam-io/janua`)
+#### Janua Repo (`madfam-org/janua`)
 Currently registered: `janua-api`, `janua-admin`, `janua-dashboard`
 
 **Complete** - All Janua services registered.
@@ -110,14 +110,14 @@ curl -X PATCH https://api.enclii.dev/v1/services/{id} \
 **Action Items**:
 ```bash
 # Option 1: Manual via GitHub UI
-# Go to: github.com/madfam-io/enclii/settings/hooks
+# Go to: github.com/madfam-org/enclii/settings/hooks
 # Add webhook with:
 #   Payload URL: https://api.enclii.dev/v1/webhooks/github
 #   Content type: application/json
 #   Secret: [generate and store in ENCLII_WEBHOOK_SECRET]
 
 # Option 2: Via GitHub CLI (if admin:repo_hook scope granted)
-gh api repos/madfam-io/enclii/hooks -X POST \
+gh api repos/madfam-org/enclii/hooks -X POST \
   -f name=web \
   -f config[url]=https://api.enclii.dev/v1/webhooks/github \
   -f config[content_type]=json \
@@ -147,7 +147,7 @@ ENCLII_REDIS_HOST=...
 ENCLII_AUTH_MODE=oidc
 ENCLII_OIDC_ISSUER=https://auth.madfam.io
 ENCLII_OIDC_CLIENT_ID=...
-ENCLII_REGISTRY=ghcr.io/madfam-io
+ENCLII_REGISTRY=ghcr.io/madfam-org
 ENCLII_GITHUB_TOKEN=...
 ```
 
@@ -285,7 +285,7 @@ curl -X PATCH https://api.enclii.dev/v1/services/{service_id} \
   -d '{"auto_deploy": true, "auto_deploy_branch": "main"}'
 
 # 4. Configure GitHub webhook manually via GitHub UI
-# github.com/madfam-io/enclii/settings/hooks → Add webhook
+# github.com/madfam-org/enclii/settings/hooks → Add webhook
 ```
 
 ---

@@ -17,7 +17,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/solarpunk-foundry
+      repo: github.com/madfam-org/solarpunk-foundry
       branch: main
       path: apps/docs
     builder: nixpacks
@@ -74,7 +74,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/solarpunk-foundry
+      repo: github.com/madfam-org/solarpunk-foundry
       branch: main
       path: packages/ui
     builder: dockerfile

@@ -186,7 +186,7 @@ sync_services() {
 
 # Configure GitHub webhook for a repository
 configure_github_webhook() {
-    local repo="$1"  # e.g., "madfam-io/janua"
+    local repo="$1"  # e.g., "madfam-org/janua"
     local webhook_url="${API_ENDPOINT}/v1/webhooks/github"
 
     if [[ -z "${GITHUB_TOKEN:-}" ]]; then
@@ -259,15 +259,15 @@ main() {
     echo ""
 
     # Create Janua project
-    ensure_project "Janua SSO" "janua" "https://github.com/madfam-io/janua"
+    ensure_project "Janua SSO" "janua" "https://github.com/madfam-org/janua"
     ensure_production_environment "janua"
 
     # Create Solarpunk Foundry project
-    ensure_project "Solarpunk Foundry" "solarpunk-foundry" "https://github.com/madfam-io/solarpunk-foundry"
+    ensure_project "Solarpunk Foundry" "solarpunk-foundry" "https://github.com/madfam-org/solarpunk-foundry"
     ensure_production_environment "solarpunk-foundry"
 
     # Ensure Enclii project exists
-    ensure_project "Enclii Platform" "enclii" "https://github.com/madfam-io/enclii"
+    ensure_project "Enclii Platform" "enclii" "https://github.com/madfam-org/enclii"
     ensure_production_environment "enclii"
 
     echo ""
@@ -283,9 +283,9 @@ main() {
     echo ""
 
     if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-        configure_github_webhook "madfam-io/janua" || true
-        configure_github_webhook "madfam-io/solarpunk-foundry" || true
-        configure_github_webhook "madfam-io/enclii" || true
+        configure_github_webhook "madfam-org/janua" || true
+        configure_github_webhook "madfam-org/solarpunk-foundry" || true
+        configure_github_webhook "madfam-org/enclii" || true
     else
         log_warning "Skipping webhook configuration - GITHUB_TOKEN not set"
         echo ""

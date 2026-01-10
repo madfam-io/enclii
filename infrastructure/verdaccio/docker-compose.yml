@@ -6,7 +6,7 @@ version: '3.8'
 services:
   verdaccio:
     image: verdaccio/verdaccio:5
-    container_name: npm-madfam-io
+    container_name: npm-madfam-org
     restart: unless-stopped
     environment:
       - VERDACCIO_PORT=4873

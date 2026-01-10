@@ -35,7 +35,7 @@ This document defines the architecture for deploying multi-service monorepo proj
 │  │ id: uuid                                                  │  │
 │  │ name: "Janua"                                             │  │
 │  │ slug: "janua"                                             │  │
-│  │ git_repo: "https://github.com/madfam-io/janua"           │  │
+│  │ git_repo: "https://github.com/madfam-org/janua"           │  │
 │  │ git_branch: "main"                                        │  │
 │  │ monorepo_mode: true                                       │  │
 │  └──────────────────────────────────────────────────────────┘  │
@@ -211,7 +211,7 @@ Request:
 Response:
 {
     "repository": {
-        "full_name": "madfam-io/janua",
+        "full_name": "madfam-org/janua",
         "default_branch": "main",
         "is_monorepo": true
     },
@@ -276,7 +276,7 @@ Request:
     "description": "Self-hosted OAuth/OIDC provider",
     "source": {
         "git": {
-            "repository": "https://github.com/madfam-io/janua",
+            "repository": "https://github.com/madfam-org/janua",
             "branch": "main"
         }
     },
@@ -336,7 +336,7 @@ Response:
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "name": "Janua",
     "slug": "janua",
-    "git_repo": "https://github.com/madfam-io/janua",
+    "git_repo": "https://github.com/madfam-org/janua",
     "monorepo_mode": true,
     "services": [
         {"id": "...", "name": "api", "path": "apps/api"},
@@ -450,15 +450,15 @@ Response:
 │                                                                  │
 │  🔍 Search repositories...                                       │
 │                                                                  │
-│  📦 madfam-io/janua              ⭐ Monorepo Detected            │
+│  📦 madfam-org/janua              ⭐ Monorepo Detected            │
 │     Self-hosted OAuth/OIDC       5 services found                │
 │     Updated 2 hours ago          [ Select → ]                    │
 │                                                                  │
-│  📦 madfam-io/enclii             ⭐ Monorepo Detected            │
+│  📦 madfam-org/enclii             ⭐ Monorepo Detected            │
 │     Railway-style PaaS           8 services found                │
 │     Updated 1 day ago            [ Select → ]                    │
 │                                                                  │
-│  📦 madfam-io/simple-app                                         │
+│  📦 madfam-org/simple-app                                         │
 │     Simple Node.js app           Single service                  │
 │     Updated 3 days ago           [ Select → ]                    │
 │                                                                  │
@@ -539,7 +539,7 @@ Response:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Janua                                              ⚙️ Settings  │
-│  github.com/madfam-io/janua                                      │
+│  github.com/madfam-org/janua                                      │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  Services                                    [ Deploy All ▼ ]    │

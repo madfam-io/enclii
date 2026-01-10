@@ -2050,7 +2050,7 @@ test('import monorepo project', async ({ page }) => {
 
   // Select repository
   await page.getByRole('combobox').click()
-  await page.getByRole('option', { name: 'madfam-io/dhanam' }).click()
+  await page.getByRole('option', { name: 'madfam-org/dhanam' }).click()
 
   // Analyze
   await page.getByRole('button', { name: 'Analyze' }).click()

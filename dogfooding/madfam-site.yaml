@@ -15,7 +15,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/biz-site
+      repo: github.com/madfam-org/biz-site
       branch: main
       path: apps/web
     builder: nixpacks

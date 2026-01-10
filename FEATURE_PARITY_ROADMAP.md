@@ -13,7 +13,7 @@ Enclii has a **working build pipeline** (as of Dec 11, 2025):
 - ✅ GitHub webhooks receive push events
 - ✅ Repositories clone successfully
 - ✅ Docker builds complete (12s for Go services)
-- ✅ Images push to GHCR (`ghcr.io/madfam-io/switchyard-api:v20251212-*`)
+- ✅ Images push to GHCR (`ghcr.io/madfam-org/switchyard-api:v20251212-*`)
 - ✅ Releases created in database
 
 **Current Blocker:** Auto-deploy fails with `"environment not found"` - need to configure production environment in the database for services.

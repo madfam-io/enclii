@@ -16,7 +16,7 @@ spec:
     context: .
     source:
       git:
-        repository: https://github.com/madfam-io/enclii
+        repository: https://github.com/madfam-org/enclii
         branch: main
         autoDeploy: true
 

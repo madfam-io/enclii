@@ -8,7 +8,7 @@
 # - SSO support (SAML, LDAP, social providers)
 # - Multi-tenant support
 #
-# Repository: https://github.com/madfam-io/janua
+# Repository: https://github.com/madfam-org/janua
 # Path: apps/api
 # Port: 4100 (per PORT_ALLOCATION.md in solarpunk-foundry)
 # License: AGPL v3
@@ -33,7 +33,7 @@ spec:
   # ==========================================================================
   source:
     git:
-      repository: https://github.com/madfam-io/janua
+      repository: https://github.com/madfam-org/janua
       branch: main
       # Monorepo path to API service
       path: apps/api

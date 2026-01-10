@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: landing-page
-          image: ghcr.io/madfam-io/enclii/landing-page:latest
+          image: ghcr.io/madfam-org/enclii/landing-page:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

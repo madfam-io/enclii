@@ -1,7 +1,7 @@
 # Janua Website Service Specification
 # Public website for Janua
 #
-# Repository: https://github.com/madfam-io/janua
+# Repository: https://github.com/madfam-org/janua
 # Path: apps/website
 # Port: 4104 (per PORT_ALLOCATION.md)
 
@@ -20,7 +20,7 @@ spec:
     context: .
     source:
       git:
-        repository: https://github.com/madfam-io/janua
+        repository: https://github.com/madfam-org/janua
         branch: main
         path: apps/website
         autoDeploy: true

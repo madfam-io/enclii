@@ -15,7 +15,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/avala
+      repo: github.com/madfam-org/avala
       branch: main
       path: .
     builder: dockerfile
@@ -100,7 +100,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/avala
+      repo: github.com/madfam-org/avala
       branch: main
       path: .
     builder: dockerfile

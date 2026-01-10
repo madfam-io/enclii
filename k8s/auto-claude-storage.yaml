@@ -99,7 +99,7 @@ spec:
             echo "📦 Cloning $repo..."
             if [ ! -d "$repo.git" ]; then
               git clone --mirror \
-                "https://x-access-token:${GITHUB_TOKEN}@github.com/madfam-io/$repo.git" \
+                "https://x-access-token:${GITHUB_TOKEN}@github.com/madfam-org/$repo.git" \
                 "$repo.git" || echo "⚠️  Failed to clone $repo (may not exist)"
             else
               echo "✅ $repo.git already exists, updating..."

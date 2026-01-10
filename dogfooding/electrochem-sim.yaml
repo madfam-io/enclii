@@ -15,7 +15,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/electrochem-sim
+      repo: github.com/madfam-org/electrochem-sim
       branch: main
       path: .
     builder: dockerfile
@@ -111,7 +111,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/electrochem-sim
+      repo: github.com/madfam-org/electrochem-sim
       branch: main
       path: .
     builder: dockerfile
@@ -171,7 +171,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/electrochem-sim
+      repo: github.com/madfam-org/electrochem-sim
       branch: main
       path: .
     builder: dockerfile

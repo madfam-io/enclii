@@ -22,7 +22,7 @@ spec:
   # Sidecar: Janua Auth Proxy
   sidecars:
     - name: auth-proxy
-      image: ghcr.io/madfam-io/janua-auth-proxy:latest
+      image: ghcr.io/madfam-org/janua-auth-proxy:latest
       port: 8081
       env:
         - name: UPSTREAM_SERVICE

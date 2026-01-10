@@ -15,7 +15,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/forj
+      repo: github.com/madfam-org/forj
       branch: main
       path: apps/web
     builder: nixpacks
@@ -73,7 +73,7 @@ metadata:
 spec:
   build:
     source:
-      repo: github.com/madfam-io/forj
+      repo: github.com/madfam-org/forj
       branch: main
       path: apps/api
     builder: nixpacks

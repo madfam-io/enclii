@@ -234,7 +234,7 @@ func (b *BuildpacksBuilder) DockerLogin(ctx context.Context) error {
 		return nil
 	}
 
-	// Extract registry hostname (e.g., ghcr.io from ghcr.io/madfam-io)
+	// Extract registry hostname (e.g., ghcr.io from ghcr.io/madfam-org)
 	registryHost := b.registry
 	if idx := len(b.registry); idx > 0 {
 		// Find first slash after protocol

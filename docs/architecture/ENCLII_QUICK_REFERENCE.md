@@ -179,7 +179,7 @@ Pages:
 ### Conductor CLI
 ```
 Language: Go 1.22+
-Package: github.com/madfam-io/enclii/packages/cli
+Package: github.com/madfam-org/enclii/packages/cli
 
 Commands:
 ✅ init - Scaffold service

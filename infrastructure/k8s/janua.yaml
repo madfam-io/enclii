@@ -1,7 +1,7 @@
 ---
 # Janua Identity Platform Deployment
 # Namespace: janua-prod
-# Image: ghcr.io/madfam-io/janua:latest
+# Image: ghcr.io/madfam-org/janua:latest
 #
 # This manifest deploys the Janua authentication and identity platform
 # to the Enclii Sovereign Cloud.
@@ -89,7 +89,7 @@ spec:
     spec:
       containers:
         - name: janua-api
-          image: ghcr.io/madfam-io/janua:latest
+          image: ghcr.io/madfam-org/janua:latest
           imagePullPolicy: Always
           ports:
             - name: http

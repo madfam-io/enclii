@@ -1,7 +1,7 @@
 # Janua Admin Service Specification
 # Internal administration dashboard for Janua
 #
-# Repository: https://github.com/madfam-io/janua
+# Repository: https://github.com/madfam-org/janua
 # Path: apps/admin
 # Port: 4102 (per PORT_ALLOCATION.md)
 
@@ -20,7 +20,7 @@ spec:
     context: .
     source:
       git:
-        repository: https://github.com/madfam-io/janua
+        repository: https://github.com/madfam-org/janua
         branch: main
         path: apps/admin
         autoDeploy: true
