@@ -336,6 +336,12 @@ func (r *RedisCache) GetOrSet(ctx context.Context, key string, ttl time.Duration
 // RevokeSession marks a session as revoked in Redis with the specified TTL.
 // The TTL should match the longest-lived token duration (typically refresh token duration).
 func (r *RedisCache) RevokeSession(ctx context.Context, sessionID string, ttl time.Duration) error {
+	// Guard against nil receiver (Go interface nil gotcha)
+	if r == nil || r.client == nil {
+		logrus.Warn("RevokeSession called with nil cache client, skipping")
+		return fmt.Errorf("cache not available")
+	}
+
 	key := fmt.Sprintf(SessionRevokedKey, sessionID)
 
 	// Set a marker in Redis with TTL matching token expiration
@@ -355,7 +361,15 @@ func (r *RedisCache) RevokeSession(ctx context.Context, sessionID string, ttl ti
 
 // IsSessionRevoked checks if a session has been revoked.
 // Returns true if the session is revoked, false otherwise.
+// Returns false (not revoked) if cache is unavailable - fail open for availability.
 func (r *RedisCache) IsSessionRevoked(ctx context.Context, sessionID string) (bool, error) {
+	// Guard against nil receiver (Go interface nil gotcha)
+	// Return false (not revoked) when cache unavailable - fail open for availability
+	if r == nil || r.client == nil {
+		logrus.Debug("IsSessionRevoked called with nil cache client, assuming not revoked")
+		return false, nil
+	}
+
 	key := fmt.Sprintf(SessionRevokedKey, sessionID)
 
 	// Check if the key exists in Redis
@@ -369,6 +383,9 @@ func (r *RedisCache) IsSessionRevoked(ctx context.Context, sessionID string) (bo
 
 // Close connection
 func (r *RedisCache) Close() error {
+	if r == nil || r.client == nil {
+		return nil
+	}
 	return r.client.Close()
 }
 
