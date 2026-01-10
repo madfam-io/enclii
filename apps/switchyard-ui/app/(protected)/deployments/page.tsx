@@ -176,11 +176,31 @@ export default function DeploymentsPage() {
         </CardHeader>
         <CardContent>
           {deployments.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="text-lg">No deployments yet</p>
-              <p className="text-sm mt-2">
-                Deploy a service to see your deployment history here
+            <div className="text-center py-12">
+              <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+              </div>
+              <p className="text-lg font-medium text-gray-900">No deployments found</p>
+              <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+                Once you deploy a service, your deployment history will appear here.
               </p>
+              <div className="mt-6 space-y-2 text-left max-w-md mx-auto bg-gray-50 rounded-lg p-4">
+                <p className="text-sm font-medium text-gray-700">Possible reasons:</p>
+                <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                  <li>No services have been registered yet</li>
+                  <li>Services exist but have no deployments</li>
+                  <li>Webhook hasn&apos;t triggered a build yet</li>
+                </ul>
+                <p className="text-sm text-muted-foreground mt-3">
+                  Check the{" "}
+                  <Link href="/services" className="text-blue-600 hover:underline">
+                    Services page
+                  </Link>{" "}
+                  to verify your services are registered.
+                </p>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">

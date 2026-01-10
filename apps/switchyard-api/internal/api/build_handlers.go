@@ -213,6 +213,26 @@ func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service,
 			logging.String("kube_namespace", kubeNamespace))
 	}
 
+	// Check if a deployment already exists for this release + environment
+	existingDeployments, err := h.repos.Deployments.ListByRelease(ctx, release.ID.String())
+	if err != nil {
+		h.logger.Warn(ctx, "Auto-deploy: could not check for existing deployments",
+			logging.String("release_id", release.ID.String()),
+			logging.Error("db_error", err))
+		// Continue anyway - the Create will fail if duplicate
+	} else {
+		for _, existing := range existingDeployments {
+			if existing.EnvironmentID == env.ID {
+				h.logger.Info(ctx, "Auto-deploy: deployment already exists for this release + environment, skipping",
+					logging.String("existing_deployment_id", existing.ID.String()),
+					logging.String("release_id", release.ID.String()),
+					logging.String("environment_id", env.ID.String()),
+					logging.String("status", string(existing.Status)))
+				return
+			}
+		}
+	}
+
 	// Create deployment record
 	deployment := &types.Deployment{
 		ID:            uuid.New(),
@@ -226,8 +246,17 @@ func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service,
 	}
 
 	if err := h.repos.Deployments.Create(deployment); err != nil {
+		// Check if this is a duplicate key error (UNIQUE constraint violation)
+		if strings.Contains(err.Error(), "duplicate") || strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "UNIQUE") {
+			h.logger.Info(ctx, "Auto-deploy: deployment already exists (duplicate key), skipping",
+				logging.String("release_id", release.ID.String()),
+				logging.String("environment_id", env.ID.String()))
+			return
+		}
 		h.logger.Error(ctx, "Auto-deploy failed: could not create deployment",
 			logging.String("service_id", service.ID.String()),
+			logging.String("release_id", release.ID.String()),
+			logging.String("environment_id", env.ID.String()),
 			logging.Error("db_error", err))
 		return
 	}

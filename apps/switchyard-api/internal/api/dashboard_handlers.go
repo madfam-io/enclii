@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
 
@@ -175,18 +176,28 @@ func (h *Handler) getRecentActivities(ctx context.Context) ([]RecentActivity, er
 	for _, project := range projects {
 		services, err := h.projectService.ListServices(ctx, project.Slug)
 		if err != nil {
+			h.logger.Warn(ctx, "Failed to list services for project, skipping",
+				logging.String("project", project.Slug),
+				logging.Error("error", err))
 			continue
 		}
 
 		for _, svc := range services {
 			releases, err := h.repos.Releases.ListByService(svc.ID)
 			if err != nil {
+				h.logger.Warn(ctx, "Failed to list releases for service, skipping",
+					logging.String("service_id", svc.ID.String()),
+					logging.String("service_name", svc.Name),
+					logging.Error("error", err))
 				continue
 			}
 
 			for _, release := range releases {
 				deployments, err := h.repos.Deployments.ListByRelease(ctx, release.ID.String())
 				if err != nil {
+					h.logger.Warn(ctx, "Failed to list deployments for release, skipping",
+						logging.String("release_id", release.ID.String()),
+						logging.Error("error", err))
 					continue
 				}
 
@@ -199,6 +210,12 @@ func (h *Handler) getRecentActivities(ctx context.Context) ([]RecentActivity, er
 						status = "failed"
 					case types.DeploymentStatusPending:
 						status = "pending"
+					default:
+						// Handle any unexpected status values gracefully
+						h.logger.Debug(ctx, "Unexpected deployment status, defaulting to pending",
+							logging.String("deployment_id", d.ID.String()),
+							logging.String("status", string(d.Status)))
+						status = string(d.Status) // Use the actual status value for transparency
 					}
 
 					activities = append(activities, RecentActivity{
