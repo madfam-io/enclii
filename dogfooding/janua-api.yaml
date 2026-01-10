@@ -37,6 +37,7 @@ spec:
       branch: main
       # Monorepo path to API service
       path: apps/api
+      autoDeploy: true
 
     # Build configuration
     build:

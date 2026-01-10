@@ -7,6 +7,14 @@ export interface Deployment {
   health: 'healthy' | 'unhealthy' | 'unknown';
   created_at: string;
   updated_at: string;
+  // Git and PR information
+  git_sha?: string;
+  git_branch?: string;
+  pr_number?: number;
+  pr_title?: string;
+  pr_url?: string;
+  commit_message?: string;
+  commit_author?: string;
 }
 
 export interface Release {

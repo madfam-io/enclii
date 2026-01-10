@@ -27,6 +27,7 @@ spec:
       repository: https://github.com/madfam-io/janua
       branch: main
       path: apps/landing
+      autoDeploy: true
 
     build:
       type: dockerfile

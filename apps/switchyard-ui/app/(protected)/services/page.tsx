@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProjectSearch, FilterState, SortState, ServiceStatus } from "@/components/search/project-search";
 import { apiGet } from "@/lib/api";
 
 interface ServiceOverview {
@@ -11,7 +12,7 @@ interface ServiceOverview {
   project_name: string;
   project_slug?: string;
   environment: string;
-  status: "healthy" | "unhealthy" | "unknown";
+  status: ServiceStatus;
   version: string;
   replicas: string;
 }
@@ -26,6 +27,17 @@ export default function ServicesPage() {
   const [services, setServices] = useState<ServiceOverview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Filter and sort state
+  const [filters, setFilters] = useState<FilterState>({
+    search: '',
+    statuses: [],
+    environments: [],
+  });
+  const [sort, setSort] = useState<SortState>({
+    field: 'name',
+    order: 'asc',
+  });
 
   const fetchServices = async () => {
     try {
@@ -47,6 +59,59 @@ export default function ServicesPage() {
     const interval = setInterval(fetchServices, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Get unique environments for filter options
+  const availableEnvironments = useMemo(() => {
+    const envSet = new Set(services.map((s) => s.environment));
+    return Array.from(envSet).sort();
+  }, [services]);
+
+  // Filter and sort services
+  const filteredServices = useMemo(() => {
+    let result = [...services];
+
+    // Apply search filter
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      result = result.filter(
+        (s) =>
+          s.name.toLowerCase().includes(searchLower) ||
+          s.project_name.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Apply status filter
+    if (filters.statuses.length > 0) {
+      result = result.filter((s) => filters.statuses.includes(s.status));
+    }
+
+    // Apply environment filter
+    if (filters.environments.length > 0) {
+      result = result.filter((s) => filters.environments.includes(s.environment));
+    }
+
+    // Apply sorting
+    result.sort((a, b) => {
+      let comparison = 0;
+      switch (sort.field) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+        case 'environment':
+          comparison = a.environment.localeCompare(b.environment);
+          break;
+        case 'project':
+          comparison = a.project_name.localeCompare(b.project_name);
+          break;
+      }
+      return sort.order === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [services, filters, sort]);
 
   if (loading) {
     return (
@@ -135,11 +200,24 @@ export default function ServicesPage() {
         </div>
       </div>
 
+      {/* Search and Filter */}
+      <ProjectSearch
+        filters={filters}
+        sort={sort}
+        onFilterChange={setFilters}
+        onSortChange={setSort}
+        availableEnvironments={availableEnvironments}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Services Overview</CardTitle>
           <CardDescription>
-            View all services across your projects ({services.length} total)
+            {filteredServices.length === services.length ? (
+              <>View all services across your projects ({services.length} total)</>
+            ) : (
+              <>Showing {filteredServices.length} of {services.length} services</>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -149,6 +227,19 @@ export default function ServicesPage() {
               <p className="text-sm mt-2">
                 Create a project and deploy services to see them here
               </p>
+            </div>
+          ) : filteredServices.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p className="text-lg">No services match your filters</p>
+              <p className="text-sm mt-2">
+                Try adjusting your search or filter criteria
+              </p>
+              <button
+                onClick={() => setFilters({ search: '', statuses: [], environments: [] })}
+                className="mt-4 inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Clear Filters
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -176,7 +267,7 @@ export default function ServicesPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {services.map((service) => (
+                  {filteredServices.map((service) => (
                     <tr key={service.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Link

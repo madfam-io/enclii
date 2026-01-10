@@ -557,21 +557,39 @@ func (c *Controller) updateDeploymentHealth(ctx context.Context, deployment *typ
 		expectedHealth = types.HealthStatusUnknown
 	}
 
-	// Only update if health status changed
-	if deployment.Health != expectedHealth {
-		if err := c.repositories.Deployments.UpdateStatus(deployment.ID, deployment.Status, expectedHealth); err != nil {
+	// Determine expected deployment status based on K8s state
+	// If K8s shows healthy pods but deployment is stuck at pending, transition to running
+	newStatus := deployment.Status
+	if expectedHealth == types.HealthStatusHealthy {
+		if deployment.Status == types.DeploymentStatusPending {
+			newStatus = types.DeploymentStatusRunning
+			logger.WithFields(logrus.Fields{
+				"deployment_id": deployment.ID,
+				"old_status":    deployment.Status,
+				"new_status":    newStatus,
+			}).Info("Transitioning deployment from pending to running based on K8s state")
+		}
+	}
+
+	// Only update if health or status changed
+	if deployment.Health != expectedHealth || deployment.Status != newStatus {
+		if err := c.repositories.Deployments.UpdateStatus(deployment.ID, newStatus, expectedHealth); err != nil {
 			logger.WithFields(logrus.Fields{
 				"deployment_id": deployment.ID,
 				"old_health":    deployment.Health,
 				"new_health":    expectedHealth,
+				"old_status":    deployment.Status,
+				"new_status":    newStatus,
 				"error":         err,
-			}).Warn("Failed to update deployment health status")
+			}).Warn("Failed to update deployment status")
 		} else {
 			logger.WithFields(logrus.Fields{
 				"deployment_id": deployment.ID,
 				"old_health":    deployment.Health,
 				"new_health":    expectedHealth,
-			}).Debug("Updated deployment health status")
+				"old_status":    deployment.Status,
+				"new_status":    newStatus,
+			}).Debug("Updated deployment status")
 		}
 	}
 }

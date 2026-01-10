@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { apiGet, apiPost } from '@/lib/api';
+import { GitBranch, GitCommit, ExternalLink, RefreshCw, RotateCcw } from 'lucide-react';
 import type { Deployment, DeploymentsListResponse, RollbackResponse } from './types';
 
 interface DeploymentsTabProps {
@@ -174,9 +175,7 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
             <CardDescription>Deployment history for {serviceName}</CardDescription>
           </div>
           <Button variant="outline" size="sm" onClick={fetchDeployments}>
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+            <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
         </CardHeader>
@@ -205,10 +204,10 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
               <TableHeader>
                 <TableRow>
                   <TableHead>Status</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead>Health</TableHead>
                   <TableHead>Replicas</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Updated</TableHead>
+                  <TableHead>Deployed</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -216,17 +215,61 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
                 {deployments.map((deployment, index) => (
                   <TableRow key={deployment.id}>
                     <TableCell>{getStatusBadge(deployment.status)}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        {/* PR Link */}
+                        {deployment.pr_number && deployment.pr_url && (
+                          <a
+                            href={deployment.pr_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            <span className="font-medium">PR #{deployment.pr_number}</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                        {deployment.pr_title && (
+                          <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={deployment.pr_title}>
+                            {deployment.pr_title}
+                          </span>
+                        )}
+                        {/* Git info */}
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {deployment.git_branch && (
+                            <span className="inline-flex items-center gap-1">
+                              <GitBranch className="h-3 w-3" />
+                              <span className="truncate max-w-[100px]" title={deployment.git_branch}>
+                                {deployment.git_branch}
+                              </span>
+                            </span>
+                          )}
+                          {deployment.git_sha && (
+                            <span className="inline-flex items-center gap-1 font-mono">
+                              <GitCommit className="h-3 w-3" />
+                              {deployment.git_sha.substring(0, 7)}
+                            </span>
+                          )}
+                        </div>
+                        {/* Fallback if no git info */}
+                        {!deployment.git_sha && !deployment.pr_number && (
+                          <span className="text-xs text-muted-foreground">Manual deploy</span>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{getHealthBadge(deployment.health)}</TableCell>
                     <TableCell>{deployment.replicas}</TableCell>
                     <TableCell>
-                      <span title={formatDate(deployment.created_at)}>
-                        {formatRelativeTime(deployment.created_at)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span title={formatDate(deployment.updated_at)}>
-                        {formatRelativeTime(deployment.updated_at)}
-                      </span>
+                      <div className="flex flex-col">
+                        <span title={formatDate(deployment.created_at)}>
+                          {formatRelativeTime(deployment.created_at)}
+                        </span>
+                        {deployment.commit_author && (
+                          <span className="text-xs text-muted-foreground">
+                            by {deployment.commit_author}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       {/* Only show rollback for non-first deployments that are running or failed */}
@@ -239,24 +282,21 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
                         >
                           {rollingBack === deployment.id ? (
                             <>
-                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                              </svg>
+                              <RefreshCw className="animate-spin -ml-1 mr-2 h-4 w-4" />
                               Rolling back...
                             </>
                           ) : (
                             <>
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                              </svg>
+                              <RotateCcw className="w-4 h-4 mr-1" />
                               Rollback
                             </>
                           )}
                         </Button>
                       )}
                       {index === 0 && deployment.status === 'running' && (
-                        <span className="text-xs text-muted-foreground">Current</span>
+                        <Badge variant="outline" className="text-green-600 border-green-600">
+                          Current
+                        </Badge>
                       )}
                     </TableCell>
                   </TableRow>

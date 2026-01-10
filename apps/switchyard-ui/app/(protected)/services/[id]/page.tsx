@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiGet } from "@/lib/api";
 import { NetworkingTab } from "@/components/networking";
 import { EnvVarsTab } from "@/components/env-vars";
-import { PreviewsTab } from "@/components/previews";
+import { PreviewsTab, RecentPreviews } from "@/components/previews";
 import { SettingsTab } from "@/components/settings";
 import { LogsTab } from "@/components/log-viewer";
 import { DeploymentsTab, BuildLogsViewer } from "@/components/deployments";
@@ -340,7 +340,7 @@ export default function ServiceDetailPage() {
               <CardContent>
                 <div className="space-y-3">
                   <button
-                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
                     onClick={() => router.push(`/deployments?service=${serviceId}`)}
                   >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -349,7 +349,7 @@ export default function ServiceDetailPage() {
                     View Deployments
                   </button>
                   <button
-                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700"
                     onClick={() => {
                       // Switch to logs tab
                       const logsTab = document.querySelector('[data-state="inactive"][value="logs"]') as HTMLElement;
@@ -362,7 +362,7 @@ export default function ServiceDetailPage() {
                     View Logs
                   </button>
                   <button
-                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
+                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-blue-300 dark:border-blue-600 rounded-md shadow-sm text-sm font-medium text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50"
                     onClick={fetchService}
                   >
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -373,6 +373,9 @@ export default function ServiceDetailPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Recent Previews Card */}
+            <RecentPreviews serviceId={serviceId} limit={3} />
           </div>
         </TabsContent>
 

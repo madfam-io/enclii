@@ -12,21 +12,41 @@ This document describes how Enclii deploys **itself** using its own platform, an
 
 ## Current Production Status
 
-| Service | URL | Status | Auto-Deploy |
-|---------|-----|--------|-------------|
-| Switchyard API | api.enclii.dev | ✅ Running | ✅ Enabled |
-| Switchyard UI | app.enclii.dev | ✅ Running | ✅ Enabled |
-| Janua SSO | auth.madfam.io | ✅ Running | Manual |
-| Docs Site | docs.enclii.dev | ✅ Running | Manual |
-| Landing Page | enclii.dev | 🔲 Pending | - |
-| Status Page | status.enclii.dev | 🔲 Pending | - |
+### Enclii Services (github.com/madfam-io/enclii)
+| Service | URL | Port | Status | Auto-Deploy |
+|---------|-----|------|--------|-------------|
+| Switchyard API | api.enclii.dev | 4200 | ✅ Running | ✅ Enabled |
+| Switchyard UI | app.enclii.dev | 4201 | ✅ Running | ✅ Enabled |
+| Docs Site | docs.enclii.dev | - | ✅ Running | ✅ Enabled |
+| Landing Page | enclii.dev | - | 🔲 Pending | ✅ Enabled |
+| Status Page | status.enclii.dev | - | 🔲 Pending | ✅ Enabled |
+
+### Janua Services (github.com/madfam-io/janua)
+| Service | URL | Port | Status | Auto-Deploy |
+|---------|-----|------|--------|-------------|
+| Janua API | api.janua.madfam.io | 4100 | ✅ Running | ✅ Enabled |
+| Janua Dashboard | auth.madfam.io | 4101 | ✅ Running | ✅ Enabled |
+| Janua Admin | admin.janua.madfam.io | 4102 | 🔲 Pending | ✅ Enabled |
+| Janua Docs | docs.janua.madfam.io | 4103 | 🔲 Pending | ✅ Enabled |
+| Janua Website | janua.madfam.io | 4104 | 🔲 Pending | ✅ Enabled |
+| Janua Landing | landing.janua.madfam.io | - | 🔲 Pending | ✅ Enabled |
+
+### Solarpunk Foundry Services (github.com/madfam-io/solarpunk-foundry)
+| Service | URL | Port | Status | Auto-Deploy |
+|---------|-----|------|--------|-------------|
+| Solarpunk Docs | docs.madfam.io | 3000 | 🔲 Pending | ✅ Enabled |
+| npm Registry | npm.madfam.io | 4873 | ✅ Running | Manual (image-based) |
 
 ### GitHub Webhook Status
-- **Endpoint:** `POST /v1/webhooks/github`
-- **Repository:** `madfam-io/enclii`
-- **Webhook ID:** 585841923
-- **Last Delivery:** Successful
-- **Events:** Push (triggers auto-deploy on main branch)
+
+| Repository | Webhook Configured | Webhook ID | Events |
+|------------|-------------------|------------|--------|
+| madfam-io/enclii | ✅ Active | 585841923 | push, pull_request |
+| madfam-io/janua | 🔲 Pending | - | push, pull_request |
+| madfam-io/solarpunk-foundry | 🔲 Pending | - | push, pull_request |
+
+**Webhook Endpoint:** `POST /v1/webhooks/github`
+**Events:** Push (triggers auto-deploy on main branch)
 
 ---
 
