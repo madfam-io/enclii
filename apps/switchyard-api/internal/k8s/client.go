@@ -496,6 +496,15 @@ func (c *Client) streamPodLogs(ctx context.Context, opts LogStreamOptions, podNa
 	}
 }
 
+// ListDeployments returns all deployments in a namespace
+func (c *Client) ListDeployments(ctx context.Context, namespace string) ([]appsv1.Deployment, error) {
+	list, err := c.Clientset.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list deployments in namespace %s: %w", namespace, err)
+	}
+	return list.Items, nil
+}
+
 // RollingRestart triggers a rolling restart of a deployment by updating the restart annotation
 func (c *Client) RollingRestart(ctx context.Context, namespace, name string) error {
 	// Get the deployment

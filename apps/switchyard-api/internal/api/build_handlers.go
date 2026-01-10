@@ -184,6 +184,15 @@ func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service,
 		logging.String("release_id", release.ID.String()),
 		logging.String("target_env", service.AutoDeployEnv))
 
+	// Get project to build consistent namespace name
+	project, err := h.repos.Projects.GetByID(ctx, service.ProjectID)
+	if err != nil {
+		h.logger.Error(ctx, "Auto-deploy failed: could not get project",
+			logging.String("project_id", service.ProjectID.String()),
+			logging.Error("db_error", err))
+		return
+	}
+
 	// Look up the target environment
 	env, err := h.repos.Environments.GetByProjectAndName(service.ProjectID, service.AutoDeployEnv)
 	if err != nil {
@@ -192,8 +201,10 @@ func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service,
 			logging.String("environment", service.AutoDeployEnv),
 			logging.String("project_id", service.ProjectID.String()))
 
-		// Generate kubernetes namespace from environment name
-		kubeNamespace := "enclii-" + strings.ToLower(strings.ReplaceAll(service.AutoDeployEnv, "_", "-"))
+		// Generate kubernetes namespace with consistent pattern: enclii-{project_slug}-{env_name}
+		// This matches the pattern used in logs_handlers.go and environment_handlers.go
+		envNameNormalized := strings.ToLower(strings.ReplaceAll(service.AutoDeployEnv, "_", "-"))
+		kubeNamespace := fmt.Sprintf("enclii-%s-%s", project.Slug, envNameNormalized)
 
 		env = &types.Environment{
 			ProjectID:     service.ProjectID,

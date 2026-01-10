@@ -244,10 +244,14 @@ func (h *Handler) GetServiceStatus(c *gin.Context) {
 
 		// Get Kubernetes status if deployment is running
 		if latestDeployment.Status == types.DeploymentStatusRunning {
-			namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
-			if pods, err := h.k8sClient.ListPods(ctx, namespace, fmt.Sprintf("enclii.dev/service=%s", service.Name)); err == nil {
-				status["pods"] = pods.Items
-				status["running_pods"] = len(pods.Items)
+			// Get the environment to determine the correct namespace
+			env, err := h.repos.Environments.GetByID(ctx, latestDeployment.EnvironmentID)
+			if err == nil && env.KubeNamespace != "" {
+				namespace := env.KubeNamespace
+				if pods, err := h.k8sClient.ListPods(ctx, namespace, fmt.Sprintf("enclii.dev/service=%s", service.Name)); err == nil {
+					status["pods"] = pods.Items
+					status["running_pods"] = len(pods.Items)
+				}
 			}
 		}
 	}
@@ -302,7 +306,21 @@ func (h *Handler) GetLogs(c *gin.Context) {
 		linesInt = 100
 	}
 
-	namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
+	// Get the environment to determine the correct namespace
+	env, err := h.repos.Environments.GetByID(ctx, deployment.EnvironmentID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get environment", logging.Error("db_error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get environment"})
+		return
+	}
+
+	namespace := env.KubeNamespace
+	if namespace == "" {
+		h.logger.Warn(ctx, "Environment has no kube_namespace set",
+			logging.String("environment_id", deployment.EnvironmentID.String()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Environment has no kubernetes namespace configured"})
+		return
+	}
 	labelSelector := fmt.Sprintf("enclii.dev/service=%s", service.Name)
 
 	// Get logs from Kubernetes
@@ -409,7 +427,20 @@ func (h *Handler) RollbackDeployment(c *gin.Context) {
 
 	// Trigger rollback in Kubernetes
 	if h.serviceReconciler != nil {
-		namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
+		// Get the environment to determine the correct namespace
+		env, err := h.repos.Environments.GetByID(ctx, deployment.EnvironmentID)
+		if err != nil {
+			h.logger.Error(ctx, "Failed to get environment for rollback", logging.Error("db_error", err))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get environment"})
+			return
+		}
+		namespace := env.KubeNamespace
+		if namespace == "" {
+			h.logger.Error(ctx, "Environment has no kube_namespace set for rollback",
+				logging.String("environment_id", deployment.EnvironmentID.String()))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Environment has no kubernetes namespace configured"})
+			return
+		}
 		if err := h.serviceReconciler.Rollback(ctx, namespace, service.Name); err != nil {
 			h.logger.Error(ctx, "Failed to rollback in Kubernetes", logging.Error("k8s_error", err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to rollback deployment"})

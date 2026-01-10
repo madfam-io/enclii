@@ -53,11 +53,20 @@ func (b *GraphBuilder) BuildTopology(ctx context.Context, environment string) (*
 		var updatedAt time.Time
 
 		if err == nil && deployment != nil {
-			// Get Kubernetes status
-			namespace := fmt.Sprintf("enclii-%s", service.ProjectID.String())
-			k8sStatus, err := b.k8sClient.GetDeploymentStatusInfo(ctx, namespace, service.Name)
+			// Get the environment to determine the correct namespace
+			env, envErr := b.repos.Environments.GetByID(ctx, deployment.EnvironmentID)
+			namespace := ""
+			if envErr == nil && env.KubeNamespace != "" {
+				namespace = env.KubeNamespace
+			}
 
-			if err == nil {
+			// Get Kubernetes status if we have a valid namespace
+			var k8sStatus *k8s.DeploymentStatusInfo
+			if namespace != "" {
+				k8sStatus, err = b.k8sClient.GetDeploymentStatusInfo(ctx, namespace, service.Name)
+			}
+
+			if err == nil && k8sStatus != nil {
 				replicas = int(k8sStatus.Replicas)
 				availableReplicas = int(k8sStatus.AvailableReplicas)
 

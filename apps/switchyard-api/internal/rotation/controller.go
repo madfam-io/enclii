@@ -196,8 +196,17 @@ func (c *Controller) performRotation(ctx context.Context, event *lockbox.SecretC
 	c.logger.Infof("Rotating secret %s for service %s in environment %s",
 		event.SecretName, service.Name, event.Environment)
 
+	// Get the environment to determine the correct namespace
+	env, err := c.repos.Environments.GetByProjectAndName(service.ProjectID, event.Environment)
+	if err != nil {
+		return fmt.Errorf("failed to get environment %s: %w", event.Environment, err)
+	}
+	namespace := env.KubeNamespace
+	if namespace == "" {
+		return fmt.Errorf("environment %s has no kubernetes namespace configured", event.Environment)
+	}
+
 	// Step 1: Update Kubernetes secret
-	namespace := fmt.Sprintf("enclii-%s", service.ProjectID)
 	secretName := fmt.Sprintf("%s-secrets", service.Name)
 
 	c.logger.Infof("Updating Kubernetes secret %s/%s", namespace, secretName)

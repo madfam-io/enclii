@@ -3,6 +3,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -41,9 +42,11 @@ func (h *Handler) CreateEnvironment(c *gin.Context) {
 	}
 
 	// Generate kube_namespace if not provided
+	// Use consistent pattern: enclii-{project_slug}-{env_name}
 	kubeNamespace := req.KubeNamespace
 	if kubeNamespace == "" {
-		kubeNamespace = fmt.Sprintf("%s-%s", projectSlug, req.Name)
+		envNameNormalized := strings.ToLower(strings.ReplaceAll(req.Name, "_", "-"))
+		kubeNamespace = fmt.Sprintf("enclii-%s-%s", projectSlug, envNameNormalized)
 	}
 
 	env := &types.Environment{

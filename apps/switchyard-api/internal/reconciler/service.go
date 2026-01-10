@@ -60,11 +60,17 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req *ReconcileRequest
 	logger.Info("Starting service reconciliation")
 
 	// Determine the Kubernetes namespace from the environment
-	// Use the environment's kube_namespace if set, otherwise fall back to project-based naming
+	// The environment MUST have kube_namespace set - this is a data integrity requirement
 	namespace := req.Environment.KubeNamespace
 	if namespace == "" {
-		namespace = fmt.Sprintf("enclii-%s", req.Service.ProjectID)
-		logger.WithField("namespace", namespace).Warn("Environment has no kube_namespace set, using project-based fallback")
+		// This is a data integrity issue - all environments should have kube_namespace set
+		// during creation (via CreateEnvironment or auto-deploy)
+		logger.Error("Environment has no kube_namespace set - this is a data integrity issue")
+		return &ReconcileResult{
+			Success: false,
+			Message: "Environment has no kubernetes namespace configured",
+			Error:   fmt.Errorf("missing kube_namespace for environment %s (ID: %s)", req.Environment.Name, req.Environment.ID),
+		}
 	}
 	logger.WithField("namespace", namespace).Info("Using Kubernetes namespace for deployment")
 

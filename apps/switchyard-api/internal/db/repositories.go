@@ -203,6 +203,36 @@ func (r *ServiceRepository) GetByID(id uuid.UUID) (*types.Service, error) {
 	return service, nil
 }
 
+// GetByName retrieves a service by its name (used for K8s→DB reconciliation)
+func (r *ServiceRepository) GetByName(name string) (*types.Service, error) {
+	service := &types.Service{}
+	var buildConfigJSON []byte
+	var appPath sql.NullString
+
+	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config,
+		auto_deploy, auto_deploy_branch, auto_deploy_env, created_at, updated_at
+		FROM services WHERE name = $1`
+
+	err := r.db.QueryRow(query, name).Scan(
+		&service.ID, &service.ProjectID, &service.Name, &service.GitRepo,
+		&appPath, &buildConfigJSON, &service.AutoDeploy, &service.AutoDeployBranch,
+		&service.AutoDeployEnv, &service.CreatedAt, &service.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if appPath.Valid {
+		service.AppPath = appPath.String
+	}
+
+	if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal build config: %w", err)
+	}
+
+	return service, nil
+}
+
 func (r *ServiceRepository) ListAll(ctx context.Context) ([]*types.Service, error) {
 	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config,
 		auto_deploy, auto_deploy_branch, auto_deploy_env, created_at, updated_at
@@ -504,6 +534,45 @@ func (r *EnvironmentRepository) ListByProject(projectID uuid.UUID) ([]*types.Env
 	}
 
 	return environments, nil
+}
+
+// ListAll retrieves all environments across all projects
+// Used by the reconciler to build dynamic namespace list for K8s sync
+func (r *EnvironmentRepository) ListAll() ([]*types.Environment, error) {
+	query := `SELECT id, project_id, name, kube_namespace, created_at, updated_at FROM environments ORDER BY created_at DESC`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var environments []*types.Environment
+	for rows.Next() {
+		env := &types.Environment{}
+		if err := rows.Scan(&env.ID, &env.ProjectID, &env.Name, &env.KubeNamespace, &env.CreatedAt, &env.UpdatedAt); err != nil {
+			return nil, err
+		}
+		environments = append(environments, env)
+	}
+
+	return environments, nil
+}
+
+// GetByKubeNamespace retrieves an environment by its Kubernetes namespace (used for K8s→DB reconciliation)
+func (r *EnvironmentRepository) GetByKubeNamespace(namespace string) (*types.Environment, error) {
+	env := &types.Environment{}
+	query := `SELECT id, project_id, name, kube_namespace, created_at, updated_at FROM environments WHERE kube_namespace = $1`
+
+	err := r.db.QueryRow(query, namespace).Scan(
+		&env.ID, &env.ProjectID, &env.Name, &env.KubeNamespace,
+		&env.CreatedAt, &env.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return env, nil
 }
 
 // Release Repository
