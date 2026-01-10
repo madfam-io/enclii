@@ -7,6 +7,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/clients"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/config"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
@@ -51,6 +52,9 @@ type Handler struct {
 
 	// Build concurrency control - semaphore to limit concurrent builds (prevents OOM)
 	buildSemaphore chan struct{}
+
+	// Roundhouse client for async builds (optional - only used in "roundhouse" build mode)
+	roundhouseClient *clients.RoundhouseClient
 }
 
 // NewHandler creates a new API handler with all dependencies
@@ -74,6 +78,8 @@ func NewHandler(
 	projectService *services.ProjectService,
 	deploymentService *services.DeploymentService,
 	deploymentGroupService *services.DeploymentGroupService,
+	// Optional clients
+	roundhouseClient *clients.RoundhouseClient,
 ) *Handler {
 	// Create build semaphore with capacity 1 to serialize builds
 	// This prevents OOM when multiple webhook builds are triggered simultaneously
@@ -107,6 +113,9 @@ func NewHandler(
 
 		// Build concurrency control
 		buildSemaphore: buildSem,
+
+		// Roundhouse client (may be nil if in-process mode)
+		roundhouseClient: roundhouseClient,
 	}
 }
 
@@ -139,6 +148,10 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	// GitHub webhook (no auth required - uses HMAC signature verification)
 	// Endpoint for GitHub to send push events for auto-deployments
 	router.POST("/v1/webhooks/github", h.GitHubWebhook)
+
+	// Build callbacks (internal - from Roundhouse worker)
+	// Uses API key authentication instead of user auth
+	router.POST("/v1/callbacks/build-complete", h.BuildCompleteCallback)
 
 	// Rate limiters for auth endpoints
 	authRateLimiter := middleware.NewAuthRateLimiter()             // 10 req/min per IP

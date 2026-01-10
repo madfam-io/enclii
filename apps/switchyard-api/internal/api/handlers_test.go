@@ -32,6 +32,7 @@ func setupTestHandler() *Handler {
 		nil, // project service
 		nil, // deployment service
 		nil, // deployment group service
+		nil, // roundhouse client
 	)
 
 	return handler

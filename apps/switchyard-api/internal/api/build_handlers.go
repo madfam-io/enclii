@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/madfam/enclii/apps/switchyard-api/internal/clients"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
 )
@@ -59,10 +60,74 @@ func (h *Handler) BuildService(c *gin.Context) {
 		return
 	}
 
-	// Trigger async build process
-	go h.triggerBuild(service, release, req.GitSHA)
+	// Trigger async build process (mode-aware)
+	h.triggerBuildAsync(service, release, req.GitSHA)
 
 	c.JSON(http.StatusCreated, release)
+}
+
+// triggerBuildAsync routes builds to either in-process execution or Roundhouse queue
+// based on the ENCLII_BUILD_MODE configuration
+func (h *Handler) triggerBuildAsync(service *types.Service, release *types.Release, gitSHA string) {
+	ctx := context.Background()
+
+	if h.config.BuildMode == "roundhouse" && h.roundhouseClient != nil {
+		// Enqueue to Roundhouse for fault-tolerant, scalable builds
+		h.enqueueToRoundhouse(ctx, service, release, gitSHA)
+	} else {
+		// Fall back to in-process builds (legacy behavior)
+		go h.triggerBuild(service, release, gitSHA)
+	}
+}
+
+// enqueueToRoundhouse sends a build job to the Roundhouse worker queue
+func (h *Handler) enqueueToRoundhouse(ctx context.Context, service *types.Service, release *types.Release, gitSHA string) {
+	h.logger.Info(ctx, "Enqueueing build to Roundhouse",
+		logging.String("service_id", service.ID.String()),
+		logging.String("service_name", service.Name),
+		logging.String("release_id", release.ID.String()),
+		logging.String("git_sha", gitSHA))
+
+	// Get project for context
+	project, err := h.repos.Projects.GetByID(ctx, service.ProjectID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get project for build enqueue",
+			logging.String("project_id", service.ProjectID.String()),
+			logging.Error("db_error", err))
+		// Fall back to in-process build
+		go h.triggerBuild(service, release, gitSHA)
+		return
+	}
+
+	// Build callback URL
+	callbackURL := fmt.Sprintf("%s/v1/callbacks/build-complete", h.config.SelfURL)
+
+	req := &clients.EnqueueRequest{
+		ReleaseID:   release.ID,
+		ServiceID:   service.ID,
+		ProjectID:   project.ID,
+		GitRepo:     service.GitRepo,
+		GitSHA:      gitSHA,
+		GitBranch:   "main", // TODO: Extract from webhook payload
+		BuildConfig: clients.BuildServiceConfigToRoundhouse(service.BuildConfig),
+		CallbackURL: callbackURL,
+		Priority:    1, // Normal priority
+	}
+
+	resp, err := h.roundhouseClient.Enqueue(ctx, req)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to enqueue build to Roundhouse, falling back to in-process",
+			logging.String("release_id", release.ID.String()),
+			logging.Error("roundhouse_error", err))
+		// Fall back to in-process build
+		go h.triggerBuild(service, release, gitSHA)
+		return
+	}
+
+	h.logger.Info(ctx, "Build enqueued to Roundhouse successfully",
+		logging.String("job_id", resp.JobID.String()),
+		logging.Int("queue_position", resp.Position),
+		logging.String("release_id", release.ID.String()))
 }
 
 // triggerBuild is a helper method that executes the build process asynchronously

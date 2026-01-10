@@ -51,6 +51,12 @@ type Config struct {
 	BuildWorkDir  string // Directory for cloning repositories during builds
 	BuildCacheDir string // Directory for buildpack layer cache
 
+	// Build Mode (in-process vs roundhouse worker)
+	BuildMode        string // "in-process" (default) or "roundhouse"
+	RoundhouseURL    string // URL of roundhouse worker (e.g., http://roundhouse:8080)
+	RoundhouseAPIKey string // API key for authenticating with roundhouse
+	SelfURL          string // This service's URL for callbacks (e.g., http://switchyard-api:4200)
+
 	// Provenance / PR Approval
 	GitHubToken         string // GitHub API token for PR verification
 	GitHubWebhookSecret string // Secret for verifying GitHub webhook signatures
@@ -107,7 +113,11 @@ func Load() (*Config, error) {
 	viper.SetDefault("build-timeout", 1800) // 30 minutes
 	viper.SetDefault("build-work-dir", "/tmp/enclii-builds")
 	viper.SetDefault("build-cache-dir", "/var/cache/enclii-buildpacks")
-	viper.SetDefault("github-webhook-secret", "") // Webhook disabled until secret configured
+	viper.SetDefault("build-mode", "in-process")                              // "in-process" or "roundhouse"
+	viper.SetDefault("roundhouse-url", "http://roundhouse:8080")              // Roundhouse worker URL
+	viper.SetDefault("roundhouse-api-key", "")                                // API key for roundhouse
+	viper.SetDefault("self-url", "http://switchyard-api:4200")                // This service's URL for callbacks
+	viper.SetDefault("github-webhook-secret", "")                             // Webhook disabled until secret configured
 	viper.SetDefault("compliance-webhooks-enabled", false)
 	viper.SetDefault("secret-rotation-enabled", false)
 	viper.SetDefault("vault-poll-interval", 60) // Poll every 60 seconds
@@ -148,6 +158,10 @@ func Load() (*Config, error) {
 		BuildTimeout:              viper.GetInt("build-timeout"),
 		BuildWorkDir:              viper.GetString("build-work-dir"),
 		BuildCacheDir:             viper.GetString("build-cache-dir"),
+		BuildMode:                 viper.GetString("build-mode"),
+		RoundhouseURL:             viper.GetString("roundhouse-url"),
+		RoundhouseAPIKey:          viper.GetString("roundhouse-api-key"),
+		SelfURL:                   viper.GetString("self-url"),
 		GitHubToken:               viper.GetString("github-token"),
 		GitHubWebhookSecret:       viper.GetString("github-webhook-secret"),
 		ComplianceWebhooksEnabled: viper.GetBool("compliance-webhooks-enabled"),

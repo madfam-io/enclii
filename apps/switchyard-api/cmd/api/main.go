@@ -17,6 +17,7 @@ import (
 	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam/enclii/apps/switchyard-api/internal/clients"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/config"
 	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
@@ -231,6 +232,18 @@ func main() {
 	)
 	logrus.Info("✓ DeploymentGroupService initialized")
 
+	// Initialize Roundhouse client (for async builds)
+	var roundhouseClient *clients.RoundhouseClient
+	if cfg.BuildMode == "roundhouse" {
+		roundhouseClient = clients.NewRoundhouseClient(cfg.RoundhouseURL, cfg.RoundhouseAPIKey)
+		logrus.WithFields(logrus.Fields{
+			"build_mode":     "roundhouse",
+			"roundhouse_url": cfg.RoundhouseURL,
+		}).Info("✓ Build mode: roundhouse (async builds via worker)")
+	} else {
+		logrus.WithField("build_mode", "in-process").Info("✓ Build mode: in-process (sync builds in API)")
+	}
+
 	// Setup HTTP server
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -266,6 +279,8 @@ func main() {
 		projectService,
 		deploymentService,
 		deploymentGroupService,
+		// Optional clients
+		roundhouseClient,
 	)
 	api.SetupRoutes(router, apiHandler)
 
