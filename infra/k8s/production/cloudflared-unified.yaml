@@ -1,0 +1,276 @@
+---
+# Unified Cloudflare Tunnel Configuration
+# Routes all external traffic through Cloudflare Tunnel to ClusterIP services
+# This eliminates the need for hostPort bindings and prevents port conflicts
+#
+# Prerequisites:
+# 1. Create a Cloudflare Tunnel in the dashboard or via CLI:
+#    cloudflared tunnel create enclii-production
+# 2. Add DNS routes for each hostname to point to the tunnel
+# 3. Get the tunnel token and set it in the secret below
+#
+# Benefits:
+# - Zero exposed ports on nodes
+# - Zero-trust security model
+# - DDoS protection at Cloudflare edge
+# - Automatic TLS termination
+# - Zero-downtime rolling updates (no hostPort conflicts)
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudflare-tunnel
+  labels:
+    name: cloudflare-tunnel
+    app.kubernetes.io/name: cloudflared
+    app.kubernetes.io/component: ingress
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflared-token
+  namespace: cloudflare-tunnel
+type: Opaque
+stringData:
+  # Get this token from: cloudflared tunnel token <tunnel-name>
+  # Or from Cloudflare Zero Trust dashboard → Networks → Tunnels → Configure → Token
+  token: "${CLOUDFLARED_TUNNEL_TOKEN}"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: cloudflare-tunnel
+data:
+  config.yaml: |
+    # Cloudflare Tunnel Configuration
+    # Using token-based authentication (simpler than credentials file)
+
+    # Metrics for monitoring
+    metrics: 0.0.0.0:2000
+
+    # Logging
+    loglevel: info
+
+    # Ingress rules - route traffic to internal ClusterIP services
+    # Order matters - first match wins
+    ingress:
+      # ============================================
+      # Enclii Services (namespace: enclii)
+      # ============================================
+
+      # Switchyard API (Control Plane)
+      - hostname: api.enclii.dev
+        service: http://switchyard-api.enclii.svc.cluster.local:80
+        originRequest:
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          httpHostHeader: api.enclii.dev
+
+      # Switchyard UI (Dashboard)
+      - hostname: app.enclii.dev
+        service: http://switchyard-ui.enclii.svc.cluster.local:80
+        originRequest:
+          connectTimeout: 10s
+          httpHostHeader: app.enclii.dev
+
+      # Landing Page (apex domain)
+      - hostname: enclii.dev
+        service: http://landing-page.enclii.svc.cluster.local:4204
+        originRequest:
+          httpHostHeader: enclii.dev
+
+      # Landing Page (www subdomain)
+      - hostname: www.enclii.dev
+        service: http://landing-page.enclii.svc.cluster.local:4204
+        originRequest:
+          httpHostHeader: www.enclii.dev
+
+      # Documentation Site
+      - hostname: docs.enclii.dev
+        service: http://docs-site.enclii.svc.cluster.local:80
+        originRequest:
+          httpHostHeader: docs.enclii.dev
+
+      # ============================================
+      # Janua Identity Services (namespace: janua)
+      # ============================================
+
+      # Janua API (Authentication)
+      - hostname: auth.madfam.io
+        service: http://janua-api.janua.svc.cluster.local:4100
+        originRequest:
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          httpHostHeader: auth.madfam.io
+
+      # Janua Dashboard
+      - hostname: dashboard.madfam.io
+        service: http://janua-dashboard.janua.svc.cluster.local:4101
+        originRequest:
+          httpHostHeader: dashboard.madfam.io
+
+      # Janua Admin
+      - hostname: admin.madfam.io
+        service: http://janua-admin.janua.svc.cluster.local:4102
+        originRequest:
+          httpHostHeader: admin.madfam.io
+
+      # Janua Documentation
+      - hostname: docs.madfam.io
+        service: http://janua-docs.janua.svc.cluster.local:4103
+        originRequest:
+          httpHostHeader: docs.madfam.io
+
+      # Janua Website
+      - hostname: madfam.io
+        service: http://janua-website.janua.svc.cluster.local:4104
+        originRequest:
+          httpHostHeader: madfam.io
+
+      - hostname: www.madfam.io
+        service: http://janua-website.janua.svc.cluster.local:4104
+        originRequest:
+          httpHostHeader: www.madfam.io
+
+      # ============================================
+      # Catch-all (required by cloudflared)
+      # ============================================
+      - service: http_status:404
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: cloudflare-tunnel
+  labels:
+    app: cloudflared
+    app.kubernetes.io/name: cloudflared
+    app.kubernetes.io/component: ingress
+spec:
+  replicas: 2  # HA: run multiple replicas for redundancy
+  selector:
+    matchLabels:
+      app: cloudflared
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "2000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2024.12.0
+          args:
+            - tunnel
+            - --config
+            - /etc/cloudflared/config.yaml
+            - --no-autoupdate
+            - run
+            - --token
+            - $(TUNNEL_TOKEN)
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-token
+                  key: token
+          ports:
+            - containerPort: 2000
+              name: metrics
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 2
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared/config.yaml
+              subPath: config.yaml
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-config
+      # Spread across nodes for HA (when multiple nodes available)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: cloudflared
+                topologyKey: kubernetes.io/hostname
+      # Quick recovery from node issues
+      tolerations:
+        - key: "node.kubernetes.io/not-ready"
+          operator: "Exists"
+          effect: "NoExecute"
+          tolerationSeconds: 30
+
+---
+# PodDisruptionBudget for HA during cluster maintenance
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cloudflared-pdb
+  namespace: cloudflare-tunnel
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: cloudflared
+
+---
+# Service for metrics scraping
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudflared-metrics
+  namespace: cloudflare-tunnel
+  labels:
+    app: cloudflared
+spec:
+  ports:
+    - port: 2000
+      targetPort: 2000
+      name: metrics
+  selector:
+    app: cloudflared
