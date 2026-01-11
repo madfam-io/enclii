@@ -3,6 +3,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -221,6 +222,14 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 	// Default configuration
 	replicas := int32(1)
 
+	// Determine the port to use (from ENCLII_PORT env var or default to 8080)
+	containerPort := int32(8080)
+	if portStr, ok := req.EnvVars["ENCLII_PORT"]; ok {
+		if port, err := strconv.ParseInt(portStr, 10, 32); err == nil {
+			containerPort = int32(port)
+		}
+	}
+
 	// Build environment variables
 	var envVars []corev1.EnvVar
 
@@ -230,7 +239,7 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 		{Name: "ENCLII_PROJECT_ID", Value: req.Service.ProjectID.String()},
 		{Name: "ENCLII_RELEASE_VERSION", Value: req.Release.Version},
 		{Name: "ENCLII_DEPLOYMENT_ID", Value: req.Deployment.ID.String()},
-		{Name: "PORT", Value: "8080"}, // Default port
+		{Name: "PORT", Value: strconv.Itoa(int(containerPort))}, // Use configured port
 	}...)
 
 	// Add user-defined environment variables (from database)
@@ -282,7 +291,7 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "http",
-									ContainerPort: 8080,
+									ContainerPort: containerPort,
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
@@ -301,7 +310,7 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path: "/health",
-										Port: intstr.FromInt(8080),
+										Port: intstr.FromInt32(containerPort),
 									},
 								},
 								InitialDelaySeconds: 30,
@@ -313,7 +322,7 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path: "/health/ready",
-										Port: intstr.FromInt(8080),
+										Port: intstr.FromInt32(containerPort),
 									},
 								},
 								InitialDelaySeconds: 5,
@@ -348,7 +357,7 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 				{
 					Name:       "http",
 					Port:       80,
-					TargetPort: intstr.FromInt(8080),
+					TargetPort: intstr.FromInt32(containerPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
