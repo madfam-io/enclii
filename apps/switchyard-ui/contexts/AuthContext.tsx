@@ -511,14 +511,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // ==========================================================================
 
   const logout = async (): Promise<void> => {
+    let logoutUrl: string | null = null;
+
     try {
       // Call backend logout endpoint to revoke session
       if (tokens?.accessToken) {
-        await apiRequest("/v1/auth/logout", {
+        const response = await apiRequest("/v1/auth/logout", {
           method: "POST",
-        }).catch(() => {
-          // Ignore errors - we're logging out anyway
-        });
+        }).catch(() => null);
+
+        // Capture IdP logout URL if provided (for SSO logout)
+        if (response?.ok) {
+          try {
+            const data = await response.json();
+            if (data?.logout_url) {
+              logoutUrl = data.logout_url;
+            }
+          } catch {
+            // JSON parsing failed, ignore
+          }
+        }
       }
     } finally {
       // Clear local state regardless of API call result
@@ -529,6 +541,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (refreshTimer) {
         clearTimeout(refreshTimer);
         setRefreshTimer(null);
+      }
+
+      // If we have an IdP logout URL, redirect to terminate SSO session
+      if (logoutUrl) {
+        const returnUrl = encodeURIComponent(`${window.location.origin}/login`);
+        window.location.href = `${logoutUrl}?return_url=${returnUrl}`;
       }
     }
   };

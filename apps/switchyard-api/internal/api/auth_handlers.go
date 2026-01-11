@@ -134,9 +134,16 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"message": "Logged out successfully",
-	})
+	}
+
+	// If OIDC mode, include IdP logout URL for browser redirect to terminate SSO session
+	if h.config.AuthMode == "oidc" && h.config.OIDCIssuer != "" {
+		response["logout_url"] = h.config.OIDCIssuer + "/api/v1/auth/logout"
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // RefreshToken handles token refresh
