@@ -228,3 +228,272 @@ See [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md) for complete implem
 - **Customer Confidence:** "If they trust it, we can too"
 - **Product Quality:** We find bugs before customers do
 - **Sales Credibility:** Authentic production usage metrics
+
+---
+
+## Common Workflows
+
+### Adding a New API Endpoint
+
+1. **Define handler** in `apps/switchyard-api/internal/api/`
+2. **Add route** in `apps/switchyard-api/internal/api/router.go`
+3. **Update OpenAPI spec** in `docs/api/openapi.yaml`
+4. **Add tests** in `apps/switchyard-api/internal/api/*_test.go`
+5. **Run validation**: `make lint && make test`
+
+### Adding a New CLI Command
+
+1. **Create command file** in `packages/cli/internal/cmd/`
+2. **Register in root** in `packages/cli/internal/cmd/root.go`
+3. **Add documentation** in `docs/cli/commands/`
+4. **Test locally**: `go run ./cmd/enclii <command>`
+
+### Deploying a Service Change
+
+```bash
+# Local testing
+make run-switchyard  # Test API changes
+make run-ui          # Test UI changes
+
+# Deploy to staging
+enclii deploy --env staging
+
+# Verify
+enclii logs <service> -f --env staging
+enclii ps --env staging
+
+# Deploy to production (after staging validation)
+enclii deploy --env production --strategy canary --canary-percent 10
+```
+
+### Database Migration
+
+```bash
+# Create migration
+go run apps/switchyard-api/cmd/migrate/main.go create <name>
+
+# Apply locally
+go run apps/switchyard-api/cmd/migrate/main.go up
+
+# Apply to production (via kubectl)
+kubectl exec -n enclii deploy/switchyard-api -- /app/migrate up
+```
+
+---
+
+## Debugging Guide
+
+### API Issues
+
+```bash
+# Check API health
+curl https://api.enclii.dev/health
+
+# View API logs
+enclii logs switchyard-api -f --level error
+
+# Check database connectivity
+kubectl exec -n enclii deploy/switchyard-api -- /app/healthcheck db
+
+# Inspect pod status
+kubectl get pods -n enclii -l app=switchyard-api
+kubectl describe pod -n enclii <pod-name>
+```
+
+### Build Failures
+
+```bash
+# View build logs
+enclii builds logs --latest
+
+# Check Roundhouse worker status
+kubectl logs -n enclii -l app=roundhouse -f
+
+# Inspect build job
+kubectl get jobs -n enclii-builds
+kubectl logs -n enclii-builds job/<job-name>
+```
+
+### Deployment Issues
+
+```bash
+# Check deployment status
+enclii ps --wide
+
+# View reconciler logs
+kubectl logs -n enclii -l app=reconciler -f
+
+# Inspect Kubernetes deployment
+kubectl get deploy -n <namespace>
+kubectl describe deploy -n <namespace> <service>
+kubectl rollout status deploy/<service> -n <namespace>
+```
+
+### Auth/SSO Issues
+
+```bash
+# Test JWKS endpoint
+curl https://auth.madfam.io/.well-known/jwks.json | jq
+
+# Verify token (CLI)
+enclii auth verify
+
+# Check Janua logs
+kubectl logs -n janua -l app=janua-api -f
+```
+
+---
+
+## Key File Locations
+
+### API (Go)
+
+| Purpose | Location |
+|---------|----------|
+| Entry point | `apps/switchyard-api/cmd/api/main.go` |
+| HTTP handlers | `apps/switchyard-api/internal/api/*.go` |
+| Router setup | `apps/switchyard-api/internal/api/router.go` |
+| Middleware | `apps/switchyard-api/internal/api/middleware/` |
+| Models | `apps/switchyard-api/internal/models/` |
+| Services | `apps/switchyard-api/internal/service/` |
+| Migrations | `apps/switchyard-api/migrations/` |
+
+### CLI (Go)
+
+| Purpose | Location |
+|---------|----------|
+| Entry point | `packages/cli/cmd/enclii/main.go` |
+| Commands | `packages/cli/internal/cmd/` |
+| API client | `packages/cli/internal/api/` |
+| Auth flow | `packages/cli/internal/auth/` |
+| Config | `packages/cli/internal/config/` |
+
+### UI (Next.js)
+
+| Purpose | Location |
+|---------|----------|
+| App router | `apps/switchyard-ui/app/` |
+| Components | `apps/switchyard-ui/components/` |
+| API calls | `apps/switchyard-ui/lib/api/` |
+| Hooks | `apps/switchyard-ui/hooks/` |
+| Types | `apps/switchyard-ui/types/` |
+
+### Infrastructure
+
+| Purpose | Location |
+|---------|----------|
+| Terraform | `infra/terraform/` |
+| K8s manifests | `infra/k8s/production/` |
+| Cloudflare tunnel | `infra/k8s/production/cloudflared-unified.yaml` |
+| Deploy scripts | `scripts/` |
+
+### Documentation
+
+| Purpose | Location |
+|---------|----------|
+| API spec | `docs/api/openapi.yaml` |
+| CLI reference | `docs/cli/` |
+| Quickstart | `docs/quickstart/` |
+| Integrations | `docs/integrations/` |
+| Architecture | `docs/architecture/` |
+
+---
+
+## Environment-Specific Commands
+
+### Local Development
+
+```bash
+# Start full stack
+make run-all
+
+# Start individual services
+make run-switchyard   # API on :8080
+make run-ui           # UI on :3000
+
+# Database
+docker-compose up -d postgres redis
+make migrate-up
+```
+
+### Staging Environment
+
+```bash
+# Deploy
+enclii deploy --env staging
+
+# Logs
+enclii logs <service> --env staging -f
+
+# Port forward for debugging
+kubectl port-forward -n staging svc/switchyard-api 8080:8080
+```
+
+### Production Environment
+
+```bash
+# Deploy with canary
+enclii deploy --env production --strategy canary --canary-percent 10
+
+# Monitor
+enclii ps --env production --watch
+
+# Rollback if needed
+enclii rollback <service> --env production
+
+# Direct kubectl access
+export KUBECONFIG=~/.kube/enclii-production
+kubectl get pods -n enclii
+```
+
+---
+
+## Testing Workflows
+
+### Unit Tests
+
+```bash
+# All tests
+make test
+
+# Specific package
+go test ./apps/switchyard-api/internal/api/...
+
+# With coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+### Integration Tests
+
+```bash
+# Requires running services
+make integration-test
+
+# Specific test
+go test -tags=integration -run TestDeploymentFlow ./...
+```
+
+### E2E Tests
+
+```bash
+# Full E2E suite
+make e2e
+
+# UI E2E (Playwright)
+cd apps/switchyard-ui
+pnpm test:e2e
+```
+
+---
+
+## Troubleshooting Quick Reference
+
+| Symptom | Check | Fix |
+|---------|-------|-----|
+| API 500 errors | `enclii logs switchyard-api` | Check DB connection, env vars |
+| Build stuck | `kubectl get jobs -n enclii-builds` | Restart Roundhouse worker |
+| Auth fails | `curl .../jwks.json` | Check Janua status, OIDC config |
+| Deploy timeout | `kubectl describe deploy` | Check resource limits, probes |
+| Preview not created | Webhook logs | Verify GitHub integration |
+| SSL errors | Cert-manager logs | Check issuer, DNS |

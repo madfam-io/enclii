@@ -4,534 +4,2900 @@ info:
   description: |
     Railway-style Platform-as-a-Service API for deploying and managing containerized applications.
 
+    ## Overview
+
+    Enclii Switchyard is the control plane API that manages projects, services, deployments,
+    domains, teams, and infrastructure. It provides a comprehensive REST API with 107+ endpoints
+    covering the complete application lifecycle.
+
     ## Authentication
-    All endpoints (except `/health` and `/auth/login`) require JWT authentication.
+
+    Most endpoints require JWT authentication. There are two authentication modes:
+
+    - **OIDC Mode** (Production): Uses Janua SSO with RS256 JWT validation
+    - **Local Mode** (Development): Uses self-signed JWT with password-based auth
+
     Include the token in the `Authorization` header as `Bearer <token>`.
 
     ## Rate Limiting
+
+    - Auth endpoints: 10 requests/minute (5 for register/login)
     - Standard endpoints: 100 requests/minute
-    - Auth endpoints: 10 requests/minute
     - Build endpoints: 20 requests/minute
-  version: 0.1.0
+
+    ## Environments
+
+    Services can be deployed to multiple environments:
+    - `dev` - Development (default)
+    - `staging` - Pre-production testing
+    - `prod` - Production
+
+    ## WebSocket Endpoints
+
+    Real-time log streaming is available via WebSocket:
+    - `ws://api.enclii.dev/v1/services/{id}/logs/stream` - Service logs
+    - `ws://api.enclii.dev/v1/deployments/{id}/logs/stream` - Deployment logs
+    - `ws://api.enclii.dev/v1/services/{id}/builds/{build_id}/logs/stream` - Build logs
+
+  version: 1.0.0
   contact:
     name: MADFAM Engineering
     email: engineering@madfam.io
-    url: https://enclii.io
+    url: https://enclii.dev
   license:
     name: AGPL-3.0
     url: https://www.gnu.org/licenses/agpl-3.0.html
 
 servers:
-  - url: https://api.enclii.io/v1
+  - url: https://api.enclii.dev/v1
     description: Production API
   - url: https://api.staging.enclii.io/v1
     description: Staging API
-  - url: http://localhost:8001/v1
-    description: Local development (port 8001 per PORT_REGISTRY)
+  - url: http://localhost:4200/v1
+    description: Local development
 
 tags:
-  - name: Authentication
-    description: User authentication and session management
-  - name: Projects
+  - name: health
+    description: Health check and status endpoints
+  - name: auth
+    description: Authentication and session management
+  - name: projects
     description: Project management operations
-  - name: Services
-    description: Service deployment and configuration
-  - name: Deployments
+  - name: environments
+    description: Environment management within projects
+  - name: services
+    description: Service CRUD and configuration
+  - name: builds
+    description: Build pipeline and releases
+  - name: deployments
     description: Deployment operations and rollbacks
-  - name: Domains
-    description: Custom domain management
-  - name: Health
-    description: Health check endpoints
-  - name: Builds
-    description: Build pipeline operations (Roundhouse)
-  - name: Usage
-    description: Usage tracking and billing (Waybill)
+  - name: logs
+    description: Log retrieval and streaming
+  - name: domains
+    description: Custom domain and TLS management
+  - name: env-vars
+    description: Environment variable management
+  - name: previews
+    description: PR-based preview environments
+  - name: deployment-groups
+    description: Coordinated multi-service deployments
+  - name: dependencies
+    description: Service dependency management
+  - name: topology
+    description: Service topology and impact analysis
+  - name: teams
+    description: Team and member management
+  - name: invitations
+    description: Team invitations
+  - name: usage
+    description: Usage tracking and billing
+  - name: activity
+    description: Activity and audit logs
+  - name: observability
+    description: Metrics, health, and alerts
+  - name: integrations
+    description: External integrations (GitHub)
+  - name: tokens
+    description: API token management for CLI/CI
 
 paths:
+  # ============================================
+  # HEALTH ENDPOINTS
+  # ============================================
   /health:
     get:
-      summary: Health check
+      summary: API health check
       description: Returns the health status of the API
-      tags: [Health]
+      tags: [health]
+      operationId: getHealth
       security: []
       responses:
-        "200":
+        '200':
           description: Service is healthy
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/HealthResponse"
-        "503":
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+                version: 1.0.0
+                uptime: 3600
+        '503':
           description: Service is unhealthy
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/HealthResponse"
 
   /health/ready:
     get:
       summary: Readiness probe
       description: Returns whether the service is ready to accept traffic
-      tags: [Health]
+      tags: [health]
+      operationId: getReadiness
       security: []
       responses:
-        "200":
+        '200':
           description: Service is ready
-        "503":
+        '503':
           description: Service is not ready
 
   /health/live:
     get:
       summary: Liveness probe
       description: Returns whether the service is alive
-      tags: [Health]
+      tags: [health]
+      operationId: getLiveness
       security: []
       responses:
-        "200":
+        '200':
           description: Service is alive
-        "503":
+        '503':
           description: Service is not alive
+
+  /build/status:
+    get:
+      summary: Build pipeline status
+      description: Returns build pipeline status and available build tools
+      tags: [health]
+      operationId: getBuildStatus
+      security: []
+      responses:
+        '200':
+          description: Build status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: operational
+                  tools:
+                    type: array
+                    items:
+                      type: string
+                    example: [nixpacks, docker, buildpack]
 
   /dashboard/stats:
     get:
       summary: Dashboard statistics
-      description: Returns aggregated statistics for the dashboard including healthy services count, deployments today, active projects, and recent activity. This endpoint is public (no authentication required) for local development.
-      tags: [Health]
+      description: |
+        Returns aggregated statistics for the dashboard including healthy services count,
+        deployments today, active projects, and recent activity. This endpoint is public
+        (no authentication required) for local development dashboards.
+      tags: [health]
+      operationId: getDashboardStats
       security: []
       responses:
-        "200":
-          description: Dashboard statistics retrieved successfully
+        '200':
+          description: Dashboard statistics
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DashboardResponse"
-        "500":
-          description: Failed to retrieve dashboard statistics
+                $ref: '#/components/schemas/DashboardStats'
 
-  /auth/register:
-    post:
-      summary: Register new user
-      description: Create a new user account
-      tags: [Authentication]
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RegisterRequest"
-      responses:
-        "201":
-          description: User created successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AuthResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "409":
-          description: User already exists
-
+  # ============================================
+  # AUTHENTICATION ENDPOINTS
+  # ============================================
   /auth/login:
     post:
-      summary: User login
-      description: Authenticate user and return JWT tokens
-      tags: [Authentication]
+      summary: Login (local auth mode)
+      description: Authenticate with email and password. Only available when ENCLII_AUTH_MODE=local.
+      tags: [auth]
+      operationId: login
       security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LoginRequest"
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: developer@example.com
+              password: securepassword123
       responses:
-        "200":
+        '200':
           description: Login successful
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+    get:
+      summary: OIDC Login redirect (OIDC mode)
+      description: Redirects to OIDC provider (Janua) for authentication. Only available when ENCLII_AUTH_MODE=oidc.
+      tags: [auth]
+      operationId: oidcLogin
+      security: []
+      responses:
+        '302':
+          description: Redirect to OIDC provider
+
+  /auth/register:
+    post:
+      summary: Register new user (local auth mode)
+      description: Create a new user account. Only available when ENCLII_AUTH_MODE=local.
+      tags: [auth]
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Validation error
+        '409':
+          description: Email already exists
+
+  /auth/callback:
+    get:
+      summary: OIDC callback
+      description: OAuth callback endpoint that receives authorization code from OIDC provider.
+      tags: [auth]
+      operationId: oidcCallback
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Authorization code from OIDC provider
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          description: CSRF state token
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Invalid callback parameters
+
+  /auth/silent-check:
+    get:
+      summary: Silent SSO check
+      description: Check for existing SSO session (used in iframe for silent authentication).
+      tags: [auth]
+      operationId: silentCheck
+      security: []
+      responses:
+        '200':
+          description: Session check result
+
+  /auth/callback/silent:
+    get:
+      summary: Silent callback
+      description: Silent auth callback that posts result to parent window.
+      tags: [auth]
+      operationId: silentCallback
+      security: []
+      responses:
+        '200':
+          description: Silent auth result
 
   /auth/refresh:
     post:
-      summary: Refresh tokens
-      description: Get new access token using refresh token
-      tags: [Authentication]
-      security:
-        - bearerAuth: []
+      summary: Refresh access token
+      description: Exchange a refresh token for a new access token.
+      tags: [auth]
+      operationId: refreshToken
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [refresh_token]
-              properties:
-                refresh_token:
-                  type: string
+              $ref: '#/components/schemas/RefreshRequest'
       responses:
-        "200":
-          description: Tokens refreshed
+        '200':
+          description: Token refreshed
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                $ref: '#/components/schemas/RefreshResponse'
+        '401':
+          description: Invalid or expired refresh token
 
   /auth/logout:
     post:
-      summary: User logout
-      description: Invalidate current session
-      tags: [Authentication]
-      security:
-        - bearerAuth: []
+      summary: Logout
+      description: Invalidate current session and optionally return OIDC logout URL.
+      tags: [auth]
+      operationId: logout
       responses:
-        "204":
-          description: Logged out successfully
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
-  /auth/me:
-    get:
-      summary: Get current user
-      description: Returns the authenticated user's profile
-      tags: [Authentication]
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: User profile
+        '200':
+          description: Logout successful
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logged out successfully
+                  logout_url:
+                    type: string
+                    description: OIDC logout URL (if using OIDC mode)
 
+  /auth/jwks:
+    get:
+      summary: JWKS endpoint
+      description: JSON Web Key Set for token verification (local auth mode).
+      tags: [auth]
+      operationId: getJwks
+      security: []
+      responses:
+        '200':
+          description: JWKS
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ============================================
+  # PROJECTS
+  # ============================================
   /projects:
     get:
       summary: List projects
-      description: Get all projects for the authenticated user
-      tags: [Projects]
-      security:
-        - bearerAuth: []
+      description: Get all projects accessible to the authenticated user.
+      tags: [projects]
+      operationId: listProjects
       parameters:
-        - $ref: "#/components/parameters/PageParam"
-        - $ref: "#/components/parameters/LimitParam"
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
       responses:
-        "200":
-          description: List of projects
+        '200':
+          description: Project list
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectList"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
+                type: object
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Project'
     post:
       summary: Create project
-      description: Create a new project
-      tags: [Projects]
-      security:
-        - bearerAuth: []
+      description: Create a new project. Requires admin role.
+      tags: [projects]
+      operationId: createProject
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateProjectRequest"
+              $ref: '#/components/schemas/CreateProjectRequest'
       responses:
-        "201":
+        '201':
           description: Project created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Project"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                $ref: '#/components/schemas/Project'
+        '409':
+          description: Project slug already exists
 
-  /projects/{projectId}:
+  /projects/{slug}:
     get:
       summary: Get project
-      description: Get project details by ID
-      tags: [Projects]
-      security:
-        - bearerAuth: []
+      description: Get project details by slug.
+      tags: [projects]
+      operationId: getProject
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+          example: my-project
       responses:
-        "200":
+        '200':
           description: Project details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Project"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: '#/components/schemas/Project'
+        '404':
+          description: Project not found
 
-    put:
-      summary: Update project
-      description: Update project settings
-      tags: [Projects]
-      security:
-        - bearerAuth: []
+  # ============================================
+  # ENVIRONMENTS
+  # ============================================
+  /projects/{slug}/environments:
+    get:
+      summary: List environments
+      description: Get all environments for a project.
+      tags: [environments]
+      operationId: listEnvironments
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  environments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Environment'
+    post:
+      summary: Create environment
+      description: Create a new environment for a project.
+      tags: [environments]
+      operationId: createEnvironment
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateProjectRequest"
+              $ref: '#/components/schemas/CreateEnvironmentRequest'
       responses:
-        "200":
-          description: Project updated
+        '201':
+          description: Environment created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Project"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
+                $ref: '#/components/schemas/Environment'
 
-    delete:
-      summary: Delete project
-      description: Delete a project and all its resources
-      tags: [Projects]
-      security:
-        - bearerAuth: []
+  /projects/{slug}/environments/{env_name}:
+    get:
+      summary: Get environment
+      description: Get environment details by name.
+      tags: [environments]
+      operationId: getEnvironment
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: env_name
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        "204":
-          description: Project deleted
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
+        '200':
+          description: Environment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Environment'
 
-  /projects/{projectId}/services:
+  /environments:
+    get:
+      summary: List all environments
+      description: Get all environments across all projects.
+      tags: [environments]
+      operationId: getAllEnvironments
+      responses:
+        '200':
+          description: Environment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  environments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Environment'
+
+  # ============================================
+  # SERVICES
+  # ============================================
+  /projects/{slug}/services:
     get:
       summary: List services
-      description: Get all services in a project
-      tags: [Services]
-      security:
-        - bearerAuth: []
+      description: Get all services in a project.
+      tags: [services]
+      operationId: listServices
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        "200":
-          description: List of services
+        '200':
+          description: Service list
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ServiceList"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
+                type: object
+                properties:
+                  services:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Service'
     post:
       summary: Create service
-      description: Create a new service in a project
-      tags: [Services]
-      security:
-        - bearerAuth: []
+      description: Create a new service in a project.
+      tags: [services]
+      operationId: createService
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateServiceRequest"
+              $ref: '#/components/schemas/CreateServiceRequest'
       responses:
-        "201":
+        '201':
           description: Service created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Service"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                $ref: '#/components/schemas/Service'
 
-  /projects/{projectId}/services/{serviceId}:
+  /projects/{slug}/services/bulk:
+    post:
+      summary: Bulk create services
+      description: |
+        Create multiple services at once. Useful for monorepos where multiple
+        services share the same git repository.
+      tags: [services]
+      operationId: bulkCreateServices
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkCreateServicesRequest'
+      responses:
+        '201':
+          description: Services created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkCreateServicesResponse'
+
+  /services/{id}:
     get:
       summary: Get service
-      description: Get service details
-      tags: [Services]
-      security:
-        - bearerAuth: []
+      description: Get service details by ID.
+      tags: [services]
+      operationId: getService
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
-        - $ref: "#/components/parameters/ServiceId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
-        "200":
+        '200':
           description: Service details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Service"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-    delete:
-      summary: Delete service
-      description: Delete a service
-      tags: [Services]
-      security:
-        - bearerAuth: []
+                $ref: '#/components/schemas/Service'
+        '404':
+          description: Service not found
+    patch:
+      summary: Update service
+      description: Update service configuration.
+      tags: [services]
+      operationId: updateService
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
-        - $ref: "#/components/parameters/ServiceId"
-      responses:
-        "204":
-          description: Service deleted
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "404":
-          $ref: "#/components/responses/NotFound"
-
-  /projects/{projectId}/services/{serviceId}/deploy:
-    post:
-      summary: Deploy service
-      description: Trigger a new deployment for a service
-      tags: [Deployments]
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: "#/components/parameters/ProjectId"
-        - $ref: "#/components/parameters/ServiceId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DeployRequest"
+              $ref: '#/components/schemas/UpdateServiceRequest'
       responses:
-        "202":
+        '200':
+          description: Service updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    $ref: '#/components/schemas/Service'
+                  message:
+                    type: string
+    delete:
+      summary: Delete service
+      description: Delete a service and all its resources. Requires admin role.
+      tags: [services]
+      operationId: deleteService
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Service deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /services/{id}/settings:
+    get:
+      summary: Get service settings
+      description: Get detailed service settings and configuration.
+      tags: [services]
+      operationId: getServiceSettings
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Service settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceSettings'
+
+  /services/{id}/status:
+    get:
+      summary: Get service status
+      description: Get current service status including pod count and health.
+      tags: [services]
+      operationId: getServiceStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Service status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatus'
+
+  /services/{id}/networking:
+    get:
+      summary: Get service networking
+      description: Get networking configuration including routes, domains, and TLS status.
+      tags: [services]
+      operationId: getServiceNetworking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Networking configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkingConfig'
+
+  # ============================================
+  # BUILDS & RELEASES
+  # ============================================
+  /services/{id}/build:
+    post:
+      summary: Trigger build
+      description: Start a new build for the service.
+      tags: [builds]
+      operationId: buildService
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildRequest'
+      responses:
+        '202':
+          description: Build started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+
+  /services/{id}/releases:
+    get:
+      summary: List releases
+      description: Get all releases for a service.
+      tags: [builds]
+      operationId: listReleases
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Release list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  releases:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Release'
+
+  /services/{id}/builds/{build_id}/logs:
+    get:
+      summary: Get build logs
+      description: Get logs for a specific build.
+      tags: [logs]
+      operationId: getBuildLogs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: build_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Build logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: string
+
+  # ============================================
+  # DEPLOYMENTS
+  # ============================================
+  /services/{id}/deploy:
+    post:
+      summary: Deploy service
+      description: Deploy a release to an environment.
+      tags: [deployments]
+      operationId: deployService
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeployRequest'
+      responses:
+        '202':
           description: Deployment started
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Deployment"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                $ref: '#/components/schemas/Deployment'
 
-  /projects/{projectId}/services/{serviceId}/deployments:
+  /services/{id}/deployments:
     get:
-      summary: List deployments
-      description: Get deployment history for a service
-      tags: [Deployments]
-      security:
-        - bearerAuth: []
+      summary: List service deployments
+      description: Get all deployments for a service.
+      tags: [deployments]
+      operationId: listServiceDeployments
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
-        - $ref: "#/components/parameters/ServiceId"
-        - $ref: "#/components/parameters/PageParam"
-        - $ref: "#/components/parameters/LimitParam"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
-        "200":
-          description: List of deployments
+        '200':
+          description: Deployment list
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DeploymentList"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                type: object
+                properties:
+                  deployments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Deployment'
 
-  /projects/{projectId}/services/{serviceId}/rollback:
-    post:
-      summary: Rollback service
-      description: Rollback to a previous deployment
-      tags: [Deployments]
-      security:
-        - bearerAuth: []
+  /services/{id}/deployments/latest:
+    get:
+      summary: Get latest deployment
+      description: Get the most recent deployment for a service.
+      tags: [deployments]
+      operationId: getLatestDeployment
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
-        - $ref: "#/components/parameters/ServiceId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Latest deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+
+  /deployments/{id}:
+    get:
+      summary: Get deployment
+      description: Get deployment details by ID.
+      tags: [deployments]
+      operationId: getDeployment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Deployment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+
+  /deployments/{id}/rollback:
+    post:
+      summary: Rollback deployment
+      description: Rollback to a previous release.
+      tags: [deployments]
+      operationId: rollbackDeployment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target_release_id:
+                  type: string
+                  format: uuid
+                  description: Specific release to rollback to (optional, defaults to previous)
+      responses:
+        '200':
+          description: Rollback initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+
+  /deployments/{id}/logs:
+    get:
+      summary: Get deployment logs
+      description: Get logs for a deployment.
+      tags: [logs]
+      operationId: getDeploymentLogs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: lines
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: tail
+          in: query
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Log content
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: string
+
+  # ============================================
+  # LOGS
+  # ============================================
+  /services/{id}/logs/history:
+    get:
+      summary: Get log history
+      description: Get historical logs for a service.
+      tags: [logs]
+      operationId: getLogsHistory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogEntry'
+
+  /services/{id}/logs/search:
+    post:
+      summary: Search logs
+      description: Search logs with query and time range.
+      tags: [logs]
+      operationId: searchLogs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [deployment_id]
               properties:
-                deployment_id:
+                query:
                   type: string
-                  format: uuid
+                limit:
+                  type: integer
+                  default: 100
+                time_range:
+                  type: string
+                  enum: ['1h', '6h', '24h', '7d']
       responses:
-        "202":
-          description: Rollback started
+        '200':
+          description: Matching log entries
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Deployment"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogEntry'
 
-  /projects/{projectId}/domains:
+  # ============================================
+  # CUSTOM DOMAINS
+  # ============================================
+  /services/{id}/domains:
     get:
-      summary: List domains
-      description: Get all custom domains for a project
-      tags: [Domains]
-      security:
-        - bearerAuth: []
+      summary: List custom domains
+      description: Get all custom domains for a service.
+      tags: [domains]
+      operationId: listCustomDomains
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       responses:
-        "200":
-          description: List of domains
+        '200':
+          description: Domain list
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DomainList"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-
+                type: object
+                properties:
+                  domains:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CustomDomain'
     post:
-      summary: Add domain
-      description: Add a custom domain to a project
-      tags: [Domains]
-      security:
-        - bearerAuth: []
+      summary: Add custom domain
+      description: Add a custom domain to a service.
+      tags: [domains]
+      operationId: addCustomDomain
       parameters:
-        - $ref: "#/components/parameters/ProjectId"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateDomainRequest"
+              type: object
+              required:
+                - domain
+              properties:
+                domain:
+                  type: string
+                  example: app.example.com
       responses:
-        "201":
+        '201':
           description: Domain added
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Domain"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
+                $ref: '#/components/schemas/CustomDomain'
+
+  /services/{id}/domains/{domain_id}:
+    get:
+      summary: Get custom domain
+      description: Get custom domain details.
+      tags: [domains]
+      operationId: getCustomDomain
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: domain_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Domain details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomDomain'
+    patch:
+      summary: Update custom domain
+      description: Update domain settings.
+      tags: [domains]
+      operationId: updateCustomDomain
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: domain_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tls_enabled:
+                  type: boolean
+                zero_trust_enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Domain updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomDomain'
+    delete:
+      summary: Delete custom domain
+      description: Remove a custom domain from a service.
+      tags: [domains]
+      operationId: deleteCustomDomain
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: domain_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Domain deleted
+
+  /services/{id}/domains/{domain_id}/verify:
+    post:
+      summary: Verify domain
+      description: Verify DNS configuration for a custom domain.
+      tags: [domains]
+      operationId: verifyCustomDomain
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: domain_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified:
+                    type: boolean
+                  message:
+                    type: string
+
+  /domains:
+    get:
+      summary: List all domains
+      description: Get all custom domains across all services.
+      tags: [domains]
+      operationId: getAllDomains
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+        - name: verified
+          in: query
+          schema:
+            type: boolean
+        - name: tls_enabled
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Domain list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainsListResponse'
+
+  /domains/stats:
+    get:
+      summary: Get domain statistics
+      description: Get aggregate domain statistics.
+      tags: [domains]
+      operationId: getDomainStats
+      responses:
+        '200':
+          description: Domain statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  verified:
+                    type: integer
+                  pending:
+                    type: integer
+                  tls_enabled:
+                    type: integer
+
+  /domains/sync:
+    post:
+      summary: Sync domains from Cloudflare
+      description: Sync all domains from Cloudflare. Requires admin role.
+      tags: [domains]
+      operationId: syncDomainsFromCloudflare
+      responses:
+        '200':
+          description: Sync complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  synced:
+                    type: integer
+                  message:
+                    type: string
+
+  /tunnel/status:
+    get:
+      summary: Get tunnel status
+      description: Get Cloudflare tunnel status.
+      tags: [domains]
+      operationId: getTunnelStatus
+      responses:
+        '200':
+          description: Tunnel status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [active, degraded, offline]
+                  connections:
+                    type: integer
+
+  # ============================================
+  # ENVIRONMENT VARIABLES
+  # ============================================
+  /services/{id}/env-vars:
+    get:
+      summary: List environment variables
+      description: Get all environment variables for a service.
+      tags: [env-vars]
+      operationId: listEnvVars
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Environment variable list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  env_vars:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EnvVar'
+    post:
+      summary: Create environment variable
+      description: Add a new environment variable.
+      tags: [env-vars]
+      operationId: createEnvVar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEnvVarRequest'
+      responses:
+        '201':
+          description: Variable created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvVar'
+
+  /services/{id}/env-vars/bulk:
+    post:
+      summary: Bulk upsert environment variables
+      description: Create or update multiple environment variables at once.
+      tags: [env-vars]
+      operationId: bulkUpsertEnvVars
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                env_vars:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/CreateEnvVarRequest'
+      responses:
+        '200':
+          description: Variables upserted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+                  updated:
+                    type: integer
+
+  /services/{id}/env-vars/{var_id}:
+    get:
+      summary: Get environment variable
+      description: Get environment variable by ID.
+      tags: [env-vars]
+      operationId: getEnvVar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: var_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Variable details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvVar'
+    put:
+      summary: Update environment variable
+      description: Update an existing environment variable.
+      tags: [env-vars]
+      operationId: updateEnvVar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: var_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                value:
+                  type: string
+      responses:
+        '200':
+          description: Variable updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvVar'
+    delete:
+      summary: Delete environment variable
+      description: Delete an environment variable.
+      tags: [env-vars]
+      operationId: deleteEnvVar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: var_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Variable deleted
+
+  /services/{id}/env-vars/{var_id}/reveal:
+    post:
+      summary: Reveal secret value
+      description: Reveal the decrypted value of a secret environment variable.
+      tags: [env-vars]
+      operationId: revealEnvVar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: var_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Secret revealed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  value:
+                    type: string
+
+  /services/{id}/env-vars/sync-from-pod:
+    post:
+      summary: Sync env vars from pod
+      description: Sync environment variables from running pod. Requires admin role.
+      tags: [env-vars]
+      operationId: syncEnvVarsFromPod
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Variables synced
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  synced_count:
+                    type: integer
+
+  # ============================================
+  # PREVIEW ENVIRONMENTS
+  # ============================================
+  /services/{id}/previews:
+    get:
+      summary: List preview environments
+      description: Get all preview environments for a service.
+      tags: [previews]
+      operationId: listServicePreviews
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Preview list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  previews:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PreviewEnvironment'
+                  count:
+                    type: integer
+
+  /projects/{slug}/previews:
+    get:
+      summary: List project previews
+      description: Get all preview environments for a project.
+      tags: [previews]
+      operationId: listProjectPreviews
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Preview list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  previews:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PreviewEnvironment'
+                  count:
+                    type: integer
+
+  /previews:
+    post:
+      summary: Create preview environment
+      description: Create a new preview environment for a PR.
+      tags: [previews]
+      operationId: createPreview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePreviewRequest'
+      responses:
+        '201':
+          description: Preview created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewEnvironment'
+
+  /previews/{id}:
+    get:
+      summary: Get preview environment
+      description: Get preview environment by ID.
+      tags: [previews]
+      operationId: getPreview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Preview details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preview:
+                    $ref: '#/components/schemas/PreviewEnvironment'
+    delete:
+      summary: Delete preview environment
+      description: Delete a preview environment. Requires admin role.
+      tags: [previews]
+      operationId: deletePreview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Preview deleted
+
+  /previews/{id}/close:
+    post:
+      summary: Close preview environment
+      description: Close a preview environment (mark as closed, stop resources).
+      tags: [previews]
+      operationId: closePreview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Preview closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewEnvironment'
+
+  /previews/{id}/wake:
+    post:
+      summary: Wake preview environment
+      description: Wake up a sleeping preview environment.
+      tags: [previews]
+      operationId: wakePreview
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Preview woken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewEnvironment'
+
+  /previews/{id}/access:
+    post:
+      summary: Record preview access
+      description: Record that the preview was accessed (for activity tracking).
+      tags: [previews]
+      operationId: recordPreviewAccess
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Access recorded
+
+  /previews/{id}/comments:
+    get:
+      summary: List preview comments
+      description: Get comments on a preview environment.
+      tags: [previews]
+      operationId: listPreviewComments
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Comment list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  comments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PreviewComment'
+    post:
+      summary: Create preview comment
+      description: Add a comment to a preview environment.
+      tags: [previews]
+      operationId: createPreviewComment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePreviewCommentRequest'
+      responses:
+        '201':
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewComment'
+
+  # ============================================
+  # DEPENDENCIES & TOPOLOGY
+  # ============================================
+  /services/{id}/dependencies:
+    get:
+      summary: List service dependencies
+      description: Get services that this service depends on.
+      tags: [dependencies]
+      operationId: listServiceDependencies
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Dependencies
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dependencies:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Service'
+    post:
+      summary: Add service dependency
+      description: Add a dependency to a service.
+      tags: [dependencies]
+      operationId: addServiceDependency
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - depends_on_id
+              properties:
+                depends_on_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Dependency added
+
+  /services/{id}/dependencies/{depends_on_id}:
+    delete:
+      summary: Remove service dependency
+      description: Remove a dependency from a service.
+      tags: [dependencies]
+      operationId: removeServiceDependency
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: depends_on_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Dependency removed
+
+  /services/{id}/dependents:
+    get:
+      summary: List service dependents
+      description: Get services that depend on this service.
+      tags: [dependencies]
+      operationId: listServiceDependents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Dependents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dependents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Service'
+
+  /topology:
+    get:
+      summary: Get service topology
+      description: Get the complete service dependency graph (DAG).
+      tags: [topology]
+      operationId: getTopology
+      responses:
+        '200':
+          description: Topology graph
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Topology'
+
+  /topology/services/{id}/impact:
+    get:
+      summary: Get service impact
+      description: Get downstream services that would be affected by changes to this service.
+      tags: [topology]
+      operationId: getServiceImpact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Impact analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  affected_services:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Service'
+
+  /topology/path:
+    get:
+      summary: Find dependency path
+      description: Find the path between two services in the dependency graph.
+      tags: [topology]
+      operationId: findDependencyPath
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Dependency path
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Service'
+
+  # ============================================
+  # DEPLOYMENT GROUPS
+  # ============================================
+  /projects/{slug}/environments/{env_name}/deployment-groups:
+    post:
+      summary: Create deployment group
+      description: Create a coordinated multi-service deployment group.
+      tags: [deployment-groups]
+      operationId: createDeploymentGroup
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: env_name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeploymentGroupRequest'
+      responses:
+        '201':
+          description: Deployment group created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentGroupResponse'
+
+  /projects/{slug}/deployment-groups:
+    get:
+      summary: List deployment groups
+      description: Get all deployment groups for a project.
+      tags: [deployment-groups]
+      operationId: listDeploymentGroups
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Deployment group list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DeploymentGroup'
+                  count:
+                    type: integer
+
+  /projects/{slug}/deployment-groups/{group_id}:
+    get:
+      summary: Get deployment group
+      description: Get deployment group details.
+      tags: [deployment-groups]
+      operationId: getDeploymentGroup
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Deployment group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeploymentGroup'
+
+  /projects/{slug}/deployment-groups/{group_id}/execute:
+    post:
+      summary: Execute deployment group
+      description: Execute all deployments in a group.
+      tags: [deployment-groups]
+      operationId: executeDeploymentGroup
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Execution started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  deployments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Deployment'
+
+  /projects/{slug}/deployment-groups/{group_id}/rollback:
+    post:
+      summary: Rollback deployment group
+      description: Rollback all deployments in a group.
+      tags: [deployment-groups]
+      operationId: rollbackDeploymentGroup
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Rollback initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  # ============================================
+  # TEAMS
+  # ============================================
+  /teams:
+    get:
+      summary: List teams
+      description: Get all teams the user is a member of.
+      tags: [teams]
+      operationId: listTeams
+      responses:
+        '200':
+          description: Team list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  teams:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Team'
+    post:
+      summary: Create team
+      description: Create a new team.
+      tags: [teams]
+      operationId: createTeam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamRequest'
+      responses:
+        '201':
+          description: Team created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+
+  /teams/{slug}:
+    get:
+      summary: Get team
+      description: Get team by slug.
+      tags: [teams]
+      operationId: getTeam
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Team details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+    patch:
+      summary: Update team
+      description: Update team settings. Requires team admin role.
+      tags: [teams]
+      operationId: updateTeam
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamRequest'
+      responses:
+        '200':
+          description: Team updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+    delete:
+      summary: Delete team
+      description: Delete a team. Requires team admin role.
+      tags: [teams]
+      operationId: deleteTeam
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Team deleted
+
+  /teams/{slug}/members:
+    get:
+      summary: List team members
+      description: Get all members of a team.
+      tags: [teams]
+      operationId: listTeamMembers
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Member list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  members:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamMember'
+
+  /teams/{slug}/members/{member_id}:
+    patch:
+      summary: Update member role
+      description: Update a team member's role. Requires team admin role.
+      tags: [teams]
+      operationId: updateMemberRole
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - role
+              properties:
+                role:
+                  type: string
+                  enum: [owner, admin, member, viewer]
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+    delete:
+      summary: Remove team member
+      description: Remove a member from the team. Requires team admin role.
+      tags: [teams]
+      operationId: removeTeamMember
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Member removed
+
+  /teams/{slug}/invitations:
+    get:
+      summary: List team invitations
+      description: Get pending invitations for a team. Requires team admin role.
+      tags: [invitations]
+      operationId: listTeamInvitations
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invitation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invitations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TeamInvitation'
+    post:
+      summary: Invite team member
+      description: Send an invitation to join the team. Requires team admin role.
+      tags: [invitations]
+      operationId: inviteTeamMember
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberRequest'
+      responses:
+        '201':
+          description: Invitation sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamInvitation'
+
+  /teams/{slug}/invitations/{invitation_id}:
+    delete:
+      summary: Cancel team invitation
+      description: Cancel a pending invitation. Requires team admin role.
+      tags: [invitations]
+      operationId: cancelTeamInvitation
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: invitation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Invitation cancelled
+
+  /invitations:
+    get:
+      summary: List my invitations
+      description: Get pending invitations for the current user.
+      tags: [invitations]
+      operationId: listMyInvitations
+      responses:
+        '200':
+          description: Invitation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invitations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/InvitationDetails'
+
+  /invitations/{token}:
+    get:
+      summary: Get invitation by token
+      description: Get invitation details by token.
+      tags: [invitations]
+      operationId: getInvitationByToken
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invitation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationDetails'
+
+  /invitations/{token}/accept:
+    post:
+      summary: Accept invitation
+      description: Accept a team invitation.
+      tags: [invitations]
+      operationId: acceptInvitation
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invitation accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  team:
+                    $ref: '#/components/schemas/Team'
+
+  /invitations/{token}/decline:
+    post:
+      summary: Decline invitation
+      description: Decline a team invitation.
+      tags: [invitations]
+      operationId: declineInvitation
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invitation declined
+
+  # ============================================
+  # USAGE & BILLING
+  # ============================================
+  /usage:
+    get:
+      summary: Get usage summary
+      description: Get resource usage summary.
+      tags: [usage]
+      operationId: getUsageSummary
+      responses:
+        '200':
+          description: Usage summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSummary'
+
+  /usage/costs:
+    get:
+      summary: Get cost breakdown
+      description: Get cost breakdown by service and resource.
+      tags: [usage]
+      operationId: getCostBreakdown
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month, year]
+            default: month
+      responses:
+        '200':
+          description: Cost breakdown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostBreakdown'
+
+  # ============================================
+  # ACTIVITY & AUDIT
+  # ============================================
+  /activity:
+    get:
+      summary: Get activity log
+      description: Get activity and audit log.
+      tags: [activity]
+      operationId: getActivity
+      parameters:
+        - name: action
+          in: query
+          schema:
+            type: string
+          description: Filter by action type
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+          description: Filter by resource type
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: actor_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Activity list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityListResponse'
+
+  /activity/actions:
+    get:
+      summary: Get available actions
+      description: Get list of available action types for filtering.
+      tags: [activity]
+      operationId: getActivityActions
+      responses:
+        '200':
+          description: Action types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  actions:
+                    type: array
+                    items:
+                      type: string
+
+  /activity/resource-types:
+    get:
+      summary: Get available resource types
+      description: Get list of available resource types for filtering.
+      tags: [activity]
+      operationId: getActivityResourceTypes
+      responses:
+        '200':
+          description: Resource types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resource_types:
+                    type: array
+                    items:
+                      type: string
+
+  # ============================================
+  # OBSERVABILITY
+  # ============================================
+  /observability/metrics:
+    get:
+      summary: Get metrics snapshot
+      description: Get current system metrics snapshot.
+      tags: [observability]
+      operationId: getMetricsSnapshot
+      responses:
+        '200':
+          description: Metrics snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsSnapshot'
+
+  /observability/metrics/history:
+    get:
+      summary: Get metrics history
+      description: Get time-series metrics data.
+      tags: [observability]
+      operationId: getMetricsHistory
+      parameters:
+        - name: range
+          in: query
+          schema:
+            type: string
+            enum: ['1h', '6h', '24h', '7d']
+            default: '24h'
+      responses:
+        '200':
+          description: Metrics history
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /observability/health:
+    get:
+      summary: Get service health
+      description: Get health status for all services.
+      tags: [observability]
+      operationId: getServicesHealth
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceHealthResponse'
+
+  /observability/errors:
+    get:
+      summary: Get recent errors
+      description: Get recent error logs with stack traces.
+      tags: [observability]
+      operationId: getRecentErrors
+      responses:
+        '200':
+          description: Recent errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecentErrorsResponse'
+
+  /observability/alerts:
+    get:
+      summary: Get active alerts
+      description: Get currently active alerts by severity.
+      tags: [observability]
+      operationId: getActiveAlerts
+      responses:
+        '200':
+          description: Active alerts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertsResponse'
+
+  # ============================================
+  # INTEGRATIONS
+  # ============================================
+  /integrations/github/status:
+    get:
+      summary: Get GitHub integration status
+      description: Get GitHub integration connection status.
+      tags: [integrations]
+      operationId: getGitHubStatus
+      responses:
+        '200':
+          description: Integration status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationStatusResponse'
+
+  /integrations/github/repos:
+    get:
+      summary: List GitHub repositories
+      description: Get accessible GitHub repositories.
+      tags: [integrations]
+      operationId: listGitHubRepos
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Repository list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitHubReposResponse'
+
+  /integrations/github/link:
+    post:
+      summary: Link GitHub account
+      description: Start GitHub OAuth flow to link account.
+      tags: [integrations]
+      operationId: linkGitHub
+      responses:
+        '200':
+          description: Auth URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  auth_url:
+                    type: string
+
+  /integrations/github/repos/{owner}/{repo}/branches:
+    get:
+      summary: Get repository branches
+      description: Get branches for a GitHub repository.
+      tags: [integrations]
+      operationId: getRepositoryBranches
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Branch list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  branches:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        protected:
+                          type: boolean
+
+  /integrations/github/repos/{owner}/{repo}/analyze:
+    post:
+      summary: Analyze repository
+      description: Analyze repository structure to detect services and build configuration.
+      tags: [integrations]
+      operationId: analyzeRepository
+      parameters:
+        - name: owner
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: repo
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Repository analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryAnalysis'
+
+  # ============================================
+  # API TOKENS
+  # ============================================
+  /user/tokens:
+    get:
+      summary: List API tokens
+      description: Get all API tokens for the current user.
+      tags: [tokens]
+      operationId: listApiTokens
+      responses:
+        '200':
+          description: Token list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tokens:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiToken'
+    post:
+      summary: Create API token
+      description: Create a new API token for CLI/CI access.
+      tags: [tokens]
+      operationId: createApiToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                expires_at:
+                  type: string
+                  format: date-time
+      responses:
+        '201':
+          description: Token created (plain text token only shown once)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: Plain text token - save immediately
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+
+  /user/tokens/{token_id}:
+    get:
+      summary: Get API token
+      description: Get API token metadata.
+      tags: [tokens]
+      operationId: getApiToken
+      parameters:
+        - name: token_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Token details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiToken'
+    delete:
+      summary: Revoke API token
+      description: Revoke an API token.
+      tags: [tokens]
+      operationId: revokeApiToken
+      parameters:
+        - name: token_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Token revoked
+
+  # ============================================
+  # WEBHOOKS
+  # ============================================
+  /webhooks/github:
+    post:
+      summary: GitHub webhook
+      description: |
+        Receive GitHub webhook events. Authenticated via HMAC SHA256 signature.
+        Triggers automatic builds on push events.
+      tags: [integrations]
+      operationId: githubWebhook
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Webhook processed
+
+  /callbacks/build-complete:
+    post:
+      summary: Build complete callback
+      description: Callback from Roundhouse worker when build completes.
+      tags: [builds]
+      operationId: buildCompleteCallback
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                build_id:
+                  type: string
+                status:
+                  type: string
+                  enum: [success, failed]
+                image_uri:
+                  type: string
+                error:
+                  type: string
+      responses:
+        '200':
+          description: Callback processed
 
 components:
   securitySchemes:
@@ -539,178 +2905,74 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT access token
+      description: JWT token obtained from login or OIDC callback
 
   parameters:
-    ProjectId:
-      name: projectId
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-
-    ServiceId:
-      name: serviceId
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
-
-    PageParam:
-      name: page
-      in: query
-      schema:
-        type: integer
-        minimum: 1
-        default: 1
-
-    LimitParam:
+    limit:
       name: limit
       in: query
+      description: Maximum number of results to return
       schema:
         type: integer
-        minimum: 1
+        default: 50
         maximum: 100
-        default: 20
-
-  responses:
-    BadRequest:
-      description: Bad request
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-
-    Unauthorized:
-      description: Unauthorized
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-
-    NotFound:
-      description: Resource not found
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
+    offset:
+      name: offset
+      in: query
+      description: Number of results to skip
+      schema:
+        type: integer
+        default: 0
 
   schemas:
-    Error:
+    # ===== Health =====
+    HealthResponse:
       type: object
-      required: [error, message]
       properties:
-        error:
+        status:
           type: string
-        message:
+          example: ok
+        version:
           type: string
-        details:
-          type: object
-          additionalProperties: true
-
-    DashboardResponse:
-      type: object
-      required: [stats, activities, services]
-      properties:
-        stats:
-          $ref: "#/components/schemas/DashboardStats"
-        activities:
-          type: array
-          items:
-            $ref: "#/components/schemas/RecentActivity"
-        services:
-          type: array
-          items:
-            $ref: "#/components/schemas/ServiceOverview"
+          example: 1.0.0
+        uptime:
+          type: integer
+          description: Uptime in seconds
 
     DashboardStats:
       type: object
-      required:
-        [healthy_services, deployments_today, active_projects, avg_deploy_time]
       properties:
         healthy_services:
           type: integer
-          description: Number of healthy services
         deployments_today:
           type: integer
-          description: Number of deployments today
         active_projects:
           type: integer
-          description: Number of active projects
-        avg_deploy_time:
-          type: string
-          description: Average deployment time (e.g., "2.3m")
+        recent_activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
 
-    RecentActivity:
+    # ===== Auth =====
+    LoginRequest:
       type: object
-      required: [id, type, message, timestamp, status]
+      required:
+        - email
+        - password
       properties:
-        id:
+        email:
           type: string
-        type:
+          format: email
+        password:
           type: string
-          enum: [deployment, environment, build]
-        message:
-          type: string
-        timestamp:
-          type: string
-          format: date-time
-        status:
-          type: string
-          enum: [success, running, failed, pending]
-        metadata:
-          type: object
-          additionalProperties: true
-
-    ServiceOverview:
-      type: object
-      required: [id, name, project_name, environment, status, version, replicas]
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        project_name:
-          type: string
-        environment:
-          type: string
-        status:
-          type: string
-          enum: [healthy, unhealthy, unknown]
-        version:
-          type: string
-        replicas:
-          type: string
-
-    HealthResponse:
-      type: object
-      required: [status]
-      properties:
-        status:
-          type: string
-          enum: [healthy, unhealthy]
-        version:
-          type: string
-        uptime:
-          type: integer
-        checks:
-          type: object
-          properties:
-            database:
-              type: string
-              enum: [ok, error]
-            redis:
-              type: string
-              enum: [ok, error]
-            kubernetes:
-              type: string
-              enum: [ok, error]
+          minLength: 8
 
     RegisterRequest:
       type: object
-      required: [email, password, name]
+      required:
+        - email
+        - password
+        - name
       properties:
         email:
           type: string
@@ -720,34 +2982,50 @@ components:
           minLength: 8
         name:
           type: string
-          minLength: 2
 
-    LoginRequest:
+    LoginResponse:
       type: object
-      required: [email, password]
       properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-
-    AuthResponse:
-      type: object
-      required: [access_token, refresh_token, user]
-      properties:
+        user:
+          $ref: '#/components/schemas/User'
         access_token:
           type: string
         refresh_token:
           type: string
-        expires_in:
-          type: integer
-        user:
-          $ref: "#/components/schemas/User"
+        expires_at:
+          type: string
+          format: date-time
+        token_type:
+          type: string
+          default: Bearer
+        idp_token:
+          type: string
+          description: IDP OAuth token (OIDC mode only)
+        idp_token_expires_at:
+          type: string
+          format: date-time
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+
+    RefreshResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        token_type:
+          type: string
 
     User:
       type: object
-      required: [id, email, name]
       properties:
         id:
           type: string
@@ -760,100 +3038,103 @@ components:
         role:
           type: string
           enum: [admin, developer, viewer]
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
 
+    # ===== Projects =====
     Project:
       type: object
-      required: [id, name, owner_id]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
-        description:
+        slug:
           type: string
-        owner_id:
-          type: string
-          format: uuid
-        environment:
-          type: string
-          enum: [development, staging, production]
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-
-    ProjectList:
-      type: object
-      required: [items, total, page, limit]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Project"
-        total:
-          type: integer
-        page:
-          type: integer
-        limit:
-          type: integer
 
     CreateProjectRequest:
       type: object
-      required: [name]
+      required:
+        - name
+        - slug
       properties:
         name:
           type: string
-          minLength: 3
-          maxLength: 64
-        description:
+          minLength: 1
+          maxLength: 100
+        slug:
           type: string
-          maxLength: 256
+          pattern: '^[a-z0-9-]+$'
+          minLength: 2
+          maxLength: 50
 
-    UpdateProjectRequest:
+    # ===== Environments =====
+    Environment:
       type: object
-      properties:
-        name:
-          type: string
-          minLength: 3
-          maxLength: 64
-        description:
-          type: string
-          maxLength: 256
-
-    Service:
-      type: object
-      required: [id, name, project_id, status]
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+        type:
+          type: string
+          enum: [dev, staging, prod]
         project_id:
           type: string
           format: uuid
-        status:
+        created_at:
           type: string
-          enum: [pending, building, deploying, running, failed, stopped]
+          format: date-time
+
+    CreateEnvironmentRequest:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [dev, staging, prod]
+
+    # ===== Services =====
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        name:
+          type: string
         git_repo:
           type: string
+          description: GitHub HTTPS URL
         git_branch:
           type: string
-        replicas:
-          type: integer
-        port:
-          type: integer
-        resources:
-          $ref: "#/components/schemas/Resources"
+        app_path:
+          type: string
+          description: Path in monorepo
+        auto_deploy:
+          type: boolean
+        auto_deploy_branch:
+          type: string
+        auto_deploy_env:
+          type: string
+        build_config:
+          $ref: '#/components/schemas/BuildConfig'
+        status:
+          type: string
+          enum: [running, stopped, building]
         created_at:
           type: string
           format: date-time
@@ -861,65 +3142,211 @@ components:
           type: string
           format: date-time
 
-    ServiceList:
+    BuildConfig:
       type: object
-      required: [items]
       properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Service"
+        type:
+          type: string
+          enum: [auto, dockerfile, buildpack]
+        dockerfile:
+          type: string
+        buildpack:
+          type: string
 
     CreateServiceRequest:
       type: object
-      required: [name]
+      required:
+        - name
+        - git_repo
       properties:
         name:
           type: string
-          minLength: 3
-          maxLength: 64
+        git_repo:
+          type: string
+        app_path:
+          type: string
+        auto_deploy:
+          type: boolean
+          default: true
+        auto_deploy_branch:
+          type: string
+          default: main
+        build_config:
+          $ref: '#/components/schemas/BuildConfig'
+
+    UpdateServiceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        git_repo:
+          type: string
+        app_path:
+          type: string
+        auto_deploy:
+          type: boolean
+        auto_deploy_branch:
+          type: string
+        auto_deploy_env:
+          type: string
+        build_config:
+          $ref: '#/components/schemas/BuildConfig'
+
+    BulkCreateServicesRequest:
+      type: object
+      required:
+        - git_repo
+        - services
+      properties:
         git_repo:
           type: string
         git_branch:
           type: string
           default: main
-        dockerfile:
-          type: string
-          default: Dockerfile
-        port:
+        services:
+          type: array
+          items:
+            type: object
+            required:
+              - name
+              - app_path
+            properties:
+              name:
+                type: string
+              app_path:
+                type: string
+              port:
+                type: integer
+              build_command:
+                type: string
+              start_command:
+                type: string
+              auto_deploy:
+                type: boolean
+                default: true
+              auto_deploy_branch:
+                type: string
+              auto_deploy_env:
+                type: string
+
+    BulkCreateServicesResponse:
+      type: object
+      properties:
+        created:
           type: integer
-          default: 3000
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+
+    ServiceStatus:
+      type: object
+      properties:
+        service_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [running, stopped, building, failed]
+        health:
+          type: string
+          enum: [healthy, unhealthy, unknown]
         replicas:
           type: integer
-          default: 1
-          minimum: 1
-          maximum: 10
-        resources:
-          $ref: "#/components/schemas/Resources"
-        env_vars:
-          type: object
-          additionalProperties:
-            type: string
+        ready_replicas:
+          type: integer
+        pod_count:
+          type: integer
 
-    Resources:
+    ServiceSettings:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        health_check:
+          $ref: '#/components/schemas/HealthCheckConfig'
+        resources:
+          $ref: '#/components/schemas/ResourceConfig'
+
+    HealthCheckConfig:
+      type: object
+      properties:
+        path:
+          type: string
+          default: /health
+        port:
+          type: integer
+        liveness_path:
+          type: string
+        readiness_path:
+          type: string
+        initial_delay_seconds:
+          type: integer
+          default: 10
+        period_seconds:
+          type: integer
+          default: 10
+        timeout_seconds:
+          type: integer
+          default: 5
+        failure_threshold:
+          type: integer
+          default: 3
+        disabled:
+          type: boolean
+          default: false
+
+    ResourceConfig:
       type: object
       properties:
         cpu_request:
           type: string
-          default: "100m"
+          example: '100m'
         cpu_limit:
           type: string
-          default: "500m"
+          example: '500m'
         memory_request:
           type: string
-          default: "128Mi"
+          example: '128Mi'
         memory_limit:
           type: string
-          default: "512Mi"
+          example: '512Mi'
 
-    Deployment:
+    NetworkingConfig:
       type: object
-      required: [id, service_id, status]
+      properties:
+        routes:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              port:
+                type: integer
+        domains:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomDomain'
+        tls_status:
+          type: string
+
+    # ===== Builds & Releases =====
+    BuildRequest:
+      type: object
+      required:
+        - git_sha
+      properties:
+        git_sha:
+          type: string
+        git_branch:
+          type: string
+
+    Release:
+      type: object
       properties:
         id:
           type: string
@@ -927,93 +3354,740 @@ components:
         service_id:
           type: string
           format: uuid
-        status:
-          type: string
-          enum: [pending, building, deploying, succeeded, failed, rolled_back]
-        git_sha:
+        version:
           type: string
         image_uri:
           type: string
-        started_at:
-          type: string
-          format: date-time
-        finished_at:
-          type: string
-          format: date-time
-        logs_url:
-          type: string
-          format: uri
-
-    DeploymentList:
-      type: object
-      required: [items, total]
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Deployment"
-        total:
-          type: integer
-        page:
-          type: integer
-        limit:
-          type: integer
-
-    DeployRequest:
-      type: object
-      properties:
         git_sha:
           type: string
-          description: Specific commit to deploy (defaults to latest)
-        force:
-          type: boolean
-          default: false
-          description: Force deployment even if no changes detected
+        status:
+          type: string
+          enum: [building, ready, failed]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
 
-    Domain:
+    # ===== Deployments =====
+    DeployRequest:
       type: object
-      required: [id, domain, project_id, status]
+      required:
+        - release_id
+      properties:
+        release_id:
+          type: string
+          format: uuid
+        strategy:
+          type: string
+          enum: [blue-green, canary, rolling]
+          default: rolling
+
+    Deployment:
+      type: object
       properties:
         id:
+          type: string
+          format: uuid
+        release_id:
+          type: string
+          format: uuid
+        environment_id:
+          type: string
+          format: uuid
+        service_id:
+          type: string
+          format: uuid
+        strategy:
+          type: string
+          enum: [blue-green, canary, rolling]
+        status:
+          type: string
+          enum: [pending, in_progress, success, failed, rolled_back]
+        replicas:
+          type: integer
+        ready_replicas:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    # ===== Logs =====
+    LogEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        pod:
+          type: string
+        container:
+          type: string
+        message:
+          type: string
+        level:
+          type: string
+
+    # ===== Domains =====
+    CustomDomain:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        service_id:
+          type: string
+          format: uuid
+        environment_id:
           type: string
           format: uuid
         domain:
           type: string
-        project_id:
+        is_platform_domain:
+          type: boolean
+        verified:
+          type: boolean
+        verification_txt:
           type: string
-          format: uuid
-        service_id:
+        dns_cname:
           type: string
-          format: uuid
-        status:
+        tls_enabled:
+          type: boolean
+        tls_provider:
           type: string
-          enum: [pending, verifying, active, failed]
-        ssl_status:
+          enum: [letsencrypt, cloudflare]
+        zero_trust_enabled:
+          type: boolean
+        verified_at:
           type: string
-          enum: [pending, provisioning, active, failed]
+          format: date-time
         created_at:
           type: string
           format: date-time
 
-    DomainList:
+    DomainsListResponse:
       type: object
-      required: [items]
       properties:
-        items:
+        domains:
           type: array
           items:
-            $ref: "#/components/schemas/Domain"
+            $ref: '#/components/schemas/CustomDomain'
+        count:
+          type: integer
 
-    CreateDomainRequest:
+    # ===== Environment Variables =====
+    EnvVar:
       type: object
-      required: [domain]
       properties:
-        domain:
+        id:
           type: string
-          pattern: ^[a-zA-Z0-9][a-zA-Z0-9-_.]+[a-zA-Z0-9]$
+          format: uuid
         service_id:
           type: string
           format: uuid
+        name:
+          type: string
+        value:
+          type: string
+          description: Masked if is_secret is true
+        is_secret:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateEnvVarRequest:
+      type: object
+      required:
+        - name
+        - value
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+        is_secret:
+          type: boolean
+          default: false
+
+    # ===== Preview Environments =====
+    PreviewEnvironment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        service_id:
+          type: string
+          format: uuid
+        pr_number:
+          type: integer
+        pr_title:
+          type: string
+        pr_url:
+          type: string
+        pr_author:
+          type: string
+        pr_branch:
+          type: string
+        pr_base_branch:
+          type: string
+        commit_sha:
+          type: string
+        status:
+          type: string
+          enum: [pending, building, deploying, active, sleeping, failed, closed]
+        url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: string
+          format: date-time
+
+    CreatePreviewRequest:
+      type: object
+      required:
+        - service_id
+        - pr_number
+        - pr_branch
+        - commit_sha
+      properties:
+        service_id:
+          type: string
+          format: uuid
+        pr_number:
+          type: integer
+        pr_title:
+          type: string
+        pr_url:
+          type: string
+        pr_author:
+          type: string
+        pr_branch:
+          type: string
+        pr_base_branch:
+          type: string
+        commit_sha:
+          type: string
+
+    PreviewComment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        preview_id:
+          type: string
+          format: uuid
+        author_id:
+          type: string
+          format: uuid
+        author_name:
+          type: string
+        content:
+          type: string
+        resolved:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    CreatePreviewCommentRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+
+    # ===== Topology =====
+    Topology:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              type:
+                type: string
+        edges:
+          type: array
+          items:
+            type: object
+            properties:
+              from:
+                type: string
+                format: uuid
+              to:
+                type: string
+                format: uuid
+
+    # ===== Deployment Groups =====
+    CreateDeploymentGroupRequest:
+      type: object
+      properties:
+        service_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Service IDs to include (all services if empty)
+        strategy:
+          type: string
+          enum: [parallel, sequential, dependency_ordered]
+          default: dependency_ordered
+        git_sha:
+          type: string
+        pr_url:
+          type: string
+
+    DeploymentGroup:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        project_id:
+          type: string
+          format: uuid
+        environment_id:
+          type: string
+          format: uuid
+        strategy:
+          type: string
+        status:
+          type: string
+        deployments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Deployment'
+        created_at:
+          type: string
+          format: date-time
+
+    DeploymentGroupResponse:
+      type: object
+      properties:
+        group:
+          $ref: '#/components/schemas/DeploymentGroup'
+        deployment_order:
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+              format: uuid
+        layers_count:
+          type: integer
+
+    # ===== Teams =====
+    Team:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        avatar_url:
+          type: string
+        billing_email:
+          type: string
+        member_count:
+          type: integer
+        user_role:
+          type: string
+          enum: [owner, admin, member, viewer]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateTeamRequest:
+      type: object
+      required:
+        - name
+        - slug
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        slug:
+          type: string
+          minLength: 2
+          maxLength: 50
+          pattern: '^[a-z0-9-]+$'
+        description:
+          type: string
+        billing_email:
+          type: string
+          format: email
+
+    UpdateTeamRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        billing_email:
+          type: string
+          format: email
+        avatar_url:
+          type: string
+
+    TeamMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+          enum: [owner, admin, member, viewer]
+        joined_at:
+          type: string
+          format: date-time
+
+    TeamInvitation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        role:
+          type: string
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    InviteMemberRequest:
+      type: object
+      required:
+        - email
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, member, viewer]
+
+    InvitationDetails:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        team:
+          $ref: '#/components/schemas/Team'
+        email:
+          type: string
+        role:
+          type: string
+        inviter_name:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    # ===== Usage =====
+    UsageSummary:
+      type: object
+      properties:
+        compute_hours:
+          type: number
+        storage_gb:
+          type: number
+        bandwidth_gb:
+          type: number
+        build_minutes:
+          type: number
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+
+    CostBreakdown:
+      type: object
+      properties:
+        total:
+          type: number
+        by_service:
+          type: object
+          additionalProperties:
+            type: number
+        by_resource:
+          type: object
+          additionalProperties:
+            type: number
+        period:
+          type: string
+
+    # ===== Activity =====
+    Activity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+        actor_name:
+          type: string
+        details:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    ActivityListResponse:
+      type: object
+      properties:
+        activities:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        count:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    # ===== Observability =====
+    MetricsSnapshot:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        cpu_usage:
+          type: number
+        memory_usage:
+          type: number
+        network_in:
+          type: number
+        network_out:
+          type: number
+        requests_per_second:
+          type: number
+        error_rate:
+          type: number
+
+    ServiceHealthResponse:
+      type: object
+      properties:
+        services:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              health:
+                type: string
+                enum: [healthy, unhealthy, unknown]
+              last_check:
+                type: string
+                format: date-time
+
+    RecentErrorsResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              service:
+                type: string
+              message:
+                type: string
+              stack_trace:
+                type: string
+              count:
+                type: integer
+
+    AlertsResponse:
+      type: object
+      properties:
+        critical:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alert'
+        warning:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alert'
+        info:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alert'
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+          enum: [critical, warning, info]
+        message:
+          type: string
+        service:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+
+    # ===== Integrations =====
+    IntegrationStatusResponse:
+      type: object
+      properties:
+        connected:
+          type: boolean
+        username:
+          type: string
+        avatar_url:
+          type: string
+        connected_at:
+          type: string
+          format: date-time
+
+    GitHubReposResponse:
+      type: object
+      properties:
+        repos:
+          type: array
+          items:
+            type: object
+            properties:
+              owner:
+                type: string
+              name:
+                type: string
+              full_name:
+                type: string
+              private:
+                type: boolean
+              default_branch:
+                type: string
+        count:
+          type: integer
+
+    RepositoryAnalysis:
+      type: object
+      properties:
+        detected_services:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              path:
+                type: string
+              type:
+                type: string
+              port:
+                type: integer
+        build_config:
+          $ref: '#/components/schemas/BuildConfig'
+        is_monorepo:
+          type: boolean
+
+    # ===== API Tokens =====
+    ApiToken:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+          description: First 8 characters of token for identification
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+
+    # ===== Errors =====
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        details:
+          type: string
+          description: Additional details about the error
+        hint:
+          type: string
+          description: Troubleshooting hint
 
 security:
   - bearerAuth: []
