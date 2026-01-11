@@ -232,12 +232,12 @@ func (h *Handler) CreatePreview(c *gin.Context) {
 		logging.Int("pr_number", req.PRNumber),
 		logging.String("preview_url", previewURL))
 
-	// TODO: Trigger build for the preview environment
-	// This would be done by calling the builder service
+	// Trigger build for the preview environment (async)
+	go h.triggerPreviewBuild(service, preview, req.CommitSHA)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"preview": preview,
-		"message": "Preview environment created",
+		"message": "Preview environment created, build starting",
 		"action":  "created",
 	})
 }
@@ -271,7 +271,7 @@ func (h *Handler) ClosePreview(c *gin.Context) {
 		return
 	}
 
-	// Close the preview
+	// Close the preview in the database
 	if err := h.repos.PreviewEnvironments.Close(ctx, previewUUID); err != nil {
 		h.logger.Error(ctx, "Failed to close preview",
 			logging.String("preview_id", previewID),
@@ -280,7 +280,25 @@ func (h *Handler) ClosePreview(c *gin.Context) {
 		return
 	}
 
-	// TODO: Cleanup Kubernetes resources for this preview
+	// Scale down the Kubernetes deployment to 0 replicas (preserve for potential re-open)
+	previewNamespace := "enclii-preview-" + preview.PreviewSubdomain
+	if h.k8sClient != nil {
+		// Get service name for deployment
+		service, err := h.repos.Services.GetByID(preview.ServiceID)
+		if err == nil && service != nil {
+			deploymentName := service.Name
+			if err := h.k8sClient.ScaleDeployment(ctx, previewNamespace, deploymentName, 0); err != nil {
+				h.logger.Warn(ctx, "Failed to scale down preview deployment (may not exist)",
+					logging.String("preview_id", previewID),
+					logging.Error("error", err))
+				// Don't fail the request - preview is still marked as closed
+			} else {
+				h.logger.Info(ctx, "Preview deployment scaled to 0",
+					logging.String("preview_id", previewID),
+					logging.String("namespace", previewNamespace))
+			}
+		}
+	}
 
 	h.logger.Info(ctx, "Preview environment closed",
 		logging.String("preview_id", previewID),
@@ -328,7 +346,7 @@ func (h *Handler) WakePreview(c *gin.Context) {
 		return
 	}
 
-	// Wake the preview
+	// Wake the preview in the database
 	if err := h.repos.PreviewEnvironments.Wake(ctx, previewUUID); err != nil {
 		h.logger.Error(ctx, "Failed to wake preview",
 			logging.String("preview_id", previewID),
@@ -337,7 +355,27 @@ func (h *Handler) WakePreview(c *gin.Context) {
 		return
 	}
 
-	// TODO: Scale up Kubernetes deployment
+	// Scale up the Kubernetes deployment to 1 replica
+	previewNamespace := "enclii-preview-" + preview.PreviewSubdomain
+	if h.k8sClient != nil {
+		// Get service name for deployment
+		service, err := h.repos.Services.GetByID(preview.ServiceID)
+		if err == nil && service != nil {
+			deploymentName := service.Name
+			if err := h.k8sClient.ScaleDeployment(ctx, previewNamespace, deploymentName, 1); err != nil {
+				h.logger.Error(ctx, "Failed to scale up preview deployment",
+					logging.String("preview_id", previewID),
+					logging.Error("error", err))
+				// Revert database status
+				h.repos.PreviewEnvironments.UpdateStatus(ctx, previewUUID, types.PreviewStatusSleeping, "Failed to scale up deployment")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to scale up preview deployment"})
+				return
+			}
+			h.logger.Info(ctx, "Preview deployment scaled to 1",
+				logging.String("preview_id", previewID),
+				logging.String("namespace", previewNamespace))
+		}
+	}
 
 	h.logger.Info(ctx, "Preview environment woken up",
 		logging.String("preview_id", previewID),
@@ -365,20 +403,49 @@ func (h *Handler) DeletePreview(c *gin.Context) {
 		return
 	}
 
-	// Delete the preview
-	if err := h.repos.PreviewEnvironments.Delete(ctx, previewUUID); err != nil {
+	// Get preview first to get namespace info before deletion
+	preview, err := h.repos.PreviewEnvironments.GetByID(ctx, previewUUID)
+	if err != nil {
 		if err == sql.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "preview environment not found"})
 			return
 		}
-		h.logger.Error(ctx, "Failed to delete preview",
+		h.logger.Error(ctx, "Failed to get preview for deletion",
+			logging.String("preview_id", previewID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get preview"})
+		return
+	}
+
+	// Delete the Kubernetes resources first
+	previewNamespace := "enclii-preview-" + preview.PreviewSubdomain
+	if h.k8sClient != nil {
+		// Get service name for deployment
+		service, err := h.repos.Services.GetByID(preview.ServiceID)
+		if err == nil && service != nil {
+			deploymentName := service.Name
+			if err := h.k8sClient.DeleteDeploymentAndService(ctx, previewNamespace, deploymentName); err != nil {
+				h.logger.Warn(ctx, "Failed to delete preview K8s resources (may not exist)",
+					logging.String("preview_id", previewID),
+					logging.String("namespace", previewNamespace),
+					logging.Error("error", err))
+				// Continue with database deletion even if K8s cleanup fails
+			} else {
+				h.logger.Info(ctx, "Preview K8s resources deleted",
+					logging.String("preview_id", previewID),
+					logging.String("namespace", previewNamespace))
+			}
+		}
+	}
+
+	// Delete the preview from the database
+	if err := h.repos.PreviewEnvironments.Delete(ctx, previewUUID); err != nil {
+		h.logger.Error(ctx, "Failed to delete preview from database",
 			logging.String("preview_id", previewID),
 			logging.Error("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete preview"})
 		return
 	}
-
-	// TODO: Cleanup Kubernetes resources
 
 	h.logger.Info(ctx, "Preview environment deleted",
 		logging.String("preview_id", previewID))

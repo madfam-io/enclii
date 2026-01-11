@@ -155,6 +155,27 @@ func (o *OIDCManager) GetRedirectURL() string {
 	return o.oauth2Config.RedirectURL
 }
 
+// loadUserProjectIDs loads the project IDs that a user has access to
+func (o *OIDCManager) loadUserProjectIDs(ctx context.Context, userID uuid.UUID) []string {
+	access, err := o.repos.ProjectAccess.ListByUser(ctx, userID)
+	if err != nil {
+		logrus.WithError(err).WithField("user_id", userID).Warn("Failed to load user project access")
+		return []string{}
+	}
+
+	// Extract unique project IDs
+	projectIDSet := make(map[string]bool)
+	for _, a := range access {
+		projectIDSet[a.ProjectID.String()] = true
+	}
+
+	projectIDs := make([]string, 0, len(projectIDSet))
+	for id := range projectIDSet {
+		projectIDs = append(projectIDs, id)
+	}
+	return projectIDs
+}
+
 // HandleCallback processes the OAuth callback and creates/updates user
 func (o *OIDCManager) HandleCallback(ctx context.Context, code string) (*TokenPair, error) {
 	// Exchange authorization code for token
@@ -243,7 +264,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 			Email:      user.Email,
 			Name:       user.Name,
 			Role:       user.Role,
-			ProjectIDs: []string{}, // TODO: Load from project_access
+			ProjectIDs: o.loadUserProjectIDs(ctx, user.ID),
 			Active:     user.Active,
 		}, nil
 	}
@@ -270,7 +291,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 			Email:      user.Email,
 			Name:       user.Name,
 			Role:       user.Role,
-			ProjectIDs: []string{},
+			ProjectIDs: o.loadUserProjectIDs(ctx, user.ID),
 			Active:     user.Active,
 		}, nil
 	}
@@ -303,7 +324,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 		Email:      newUser.Email,
 		Name:       newUser.Name,
 		Role:       newUser.Role,
-		ProjectIDs: []string{},
+		ProjectIDs: o.loadUserProjectIDs(ctx, newUser.ID),
 		Active:     newUser.Active,
 	}, nil
 }
@@ -504,7 +525,7 @@ func (o *OIDCManager) getOrCreateUserFromExternalTokenWithStatus(ctx context.Con
 			Email:      user.Email,
 			Name:       user.Name,
 			Role:       user.Role,
-			ProjectIDs: []string{},
+			ProjectIDs: o.loadUserProjectIDs(ctx, user.ID),
 			Active:     user.Active,
 		}, false, nil
 	}
@@ -533,7 +554,7 @@ func (o *OIDCManager) getOrCreateUserFromExternalTokenWithStatus(ctx context.Con
 			Email:      user.Email,
 			Name:       user.Name,
 			Role:       user.Role,
-			ProjectIDs: []string{},
+			ProjectIDs: o.loadUserProjectIDs(ctx, user.ID),
 			Active:     user.Active,
 		}, false, nil
 	}
@@ -567,7 +588,7 @@ func (o *OIDCManager) getOrCreateUserFromExternalTokenWithStatus(ctx context.Con
 		Email:      newUser.Email,
 		Name:       newUser.Name,
 		Role:       newUser.Role,
-		ProjectIDs: []string{},
+		ProjectIDs: o.loadUserProjectIDs(ctx, newUser.ID),
 		Active:     newUser.Active,
 	}, true, nil
 }

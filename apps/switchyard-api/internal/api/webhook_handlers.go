@@ -213,7 +213,7 @@ func (h *Handler) handleGitHubPush(c *gin.Context, ctx context.Context, body []b
 		}
 
 		// Trigger async build (routes to Roundhouse or in-process based on config)
-		h.triggerBuildAsync(service, release, gitSHA)
+		h.triggerBuildAsync(service, release, gitSHA, branch)
 
 		h.logger.Info(ctx, "Build triggered for service",
 			logging.String("service_id", service.ID.String()),
