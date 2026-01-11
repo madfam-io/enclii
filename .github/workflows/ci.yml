@@ -279,6 +279,10 @@ jobs:
           file: apps/switchyard-ui/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}/switchyard-ui:${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://api.enclii.dev
+            NEXT_PUBLIC_AUTH_MODE=oidc
+            NEXT_PUBLIC_JANUA_URL=https://auth.madfam.io
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
