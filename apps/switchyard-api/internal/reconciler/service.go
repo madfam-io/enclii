@@ -330,10 +330,10 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 								PeriodSeconds:       5,
 								FailureThreshold:    2,
 							},
-							VolumeMounts: buildVolumeMounts(req.Service.Volumes),
+							VolumeMounts: buildVolumeMountsWithKubeconfig(req.Service.Volumes, req.EnvVars),
 						},
 					},
-					Volumes:                       buildVolumes(req.Service.Volumes, req.Service.Name),
+					Volumes:                       buildVolumesWithKubeconfig(req.Service.Volumes, req.Service.Name, req.EnvVars),
 					RestartPolicy:                 corev1.RestartPolicyAlways,
 					TerminationGracePeriodSeconds: &[]int64{30}[0],
 				},
@@ -652,6 +652,30 @@ func buildVolumeMounts(volumes []types.Volume) []corev1.VolumeMount {
 	return volumeMounts
 }
 
+// buildVolumeMountsWithKubeconfig creates volume mounts including kubeconfig if needed
+func buildVolumeMountsWithKubeconfig(volumes []types.Volume, envVars map[string]string) []corev1.VolumeMount {
+	var volumeMounts []corev1.VolumeMount
+
+	// Add PVC volume mounts
+	for _, vol := range volumes {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      vol.Name,
+			MountPath: vol.MountPath,
+		})
+	}
+
+	// Add kubeconfig volume mount if ENCLII_KUBE_CONFIG is set
+	if kubeconfigPath, ok := envVars["ENCLII_KUBE_CONFIG"]; ok && kubeconfigPath != "" {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "kubeconfig-cm",
+			MountPath: "/etc/kubeconfig",
+			ReadOnly:  true,
+		})
+	}
+
+	return volumeMounts
+}
+
 // buildVolumes creates volume references for the pod spec
 func buildVolumes(volumes []types.Volume, serviceName string) []corev1.Volume {
 	if len(volumes) == 0 {
@@ -670,6 +694,40 @@ func buildVolumes(volumes []types.Volume, serviceName string) []corev1.Volume {
 			},
 		})
 	}
+	return podVolumes
+}
+
+// buildVolumesWithKubeconfig creates volumes including kubeconfig ConfigMap if needed
+func buildVolumesWithKubeconfig(volumes []types.Volume, serviceName string, envVars map[string]string) []corev1.Volume {
+	var podVolumes []corev1.Volume
+
+	// Add PVC volumes
+	for _, vol := range volumes {
+		pvcName := fmt.Sprintf("%s-%s", serviceName, vol.Name)
+		podVolumes = append(podVolumes, corev1.Volume{
+			Name: vol.Name,
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: pvcName,
+				},
+			},
+		})
+	}
+
+	// Add kubeconfig ConfigMap volume if ENCLII_KUBE_CONFIG is set
+	if _, ok := envVars["ENCLII_KUBE_CONFIG"]; ok {
+		podVolumes = append(podVolumes, corev1.Volume{
+			Name: "kubeconfig-cm",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: "switchyard-kubeconfig",
+					},
+				},
+			},
+		})
+	}
+
 	return podVolumes
 }
 
