@@ -25,9 +25,9 @@ import (
 // OAuth configuration for Janua
 const (
 	// Janua OAuth endpoints
-	defaultIssuer       = "https://auth.madfam.io"
-	authorizePath       = "/api/v1/oauth/authorize"
-	tokenPath           = "/api/v1/oauth/token"
+	defaultIssuer = "https://auth.madfam.io"
+	authorizePath = "/api/v1/oauth/authorize"
+	tokenPath     = "/api/v1/oauth/token"
 
 	// CLI OAuth client (public client with PKCE)
 	// Registered in Janua SSO - public client for PKCE flow
