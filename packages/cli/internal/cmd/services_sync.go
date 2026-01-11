@@ -11,9 +11,9 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/madfam/enclii/packages/cli/internal/client"
-	"github.com/madfam/enclii/packages/cli/internal/config"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/packages/cli/internal/client"
+	"github.com/madfam-org/enclii/packages/cli/internal/config"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 // RawServiceSpec is used to parse the full YAML structure including source.git fields

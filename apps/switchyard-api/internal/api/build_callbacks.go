@@ -7,8 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 // BuildCallbackRequest represents the callback payload from Roundhouse after a build completes

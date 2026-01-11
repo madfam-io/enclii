@@ -3,24 +3,24 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/audit"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/clients"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/config"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/middleware"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/topology"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/audit"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/auth"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/builder"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/clients"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/compliance"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/config"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/k8s"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/middleware"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/provenance"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/topology"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/validation"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 // Handler contains all dependencies for HTTP handlers
@@ -345,6 +345,12 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/observability/health", h.GetServiceHealth)
 			protected.GET("/observability/errors", h.GetRecentErrors)
 			protected.GET("/observability/alerts", h.GetActiveAlerts)
+
+			// API Tokens (for CLI/CI/CD access)
+			protected.POST("/user/tokens", h.CreateAPIToken)
+			protected.GET("/user/tokens", h.ListAPITokens)
+			protected.GET("/user/tokens/:token_id", h.GetAPIToken)
+			protected.DELETE("/user/tokens/:token_id", h.RevokeAPIToken)
 		}
 	}
 }

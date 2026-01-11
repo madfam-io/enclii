@@ -12,8 +12,8 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -336,6 +336,75 @@ func (o *OIDCManager) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// Check if this is an API token (starts with "enclii_")
+		if strings.HasPrefix(tokenString, "enclii_") {
+			if !o.jwtManager.HasAPITokenValidator() {
+				logrus.WithFields(logrus.Fields{
+					"path":   c.Request.URL.Path,
+					"method": c.Request.Method,
+					"ip":     c.ClientIP(),
+				}).Warn("API token authentication not configured")
+
+				c.JSON(401, gin.H{"error": "API token authentication not available"})
+				c.Abort()
+				return
+			}
+
+			// Validate the API token via jwtManager
+			apiToken, err := o.jwtManager.apiTokenValidator.ValidateTokenForAuth(c.Request.Context(), tokenString)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"path":   c.Request.URL.Path,
+					"method": c.Request.Method,
+					"ip":     c.ClientIP(),
+					"error":  err.Error(),
+				}).Warn("Invalid API token")
+
+				c.JSON(401, gin.H{"error": "Invalid or expired API token"})
+				c.Abort()
+				return
+			}
+
+			// Set user context from API token
+			c.Set("user_id", apiToken.UserID)
+			c.Set("auth_type", "api_token")
+			c.Set("api_token_id", apiToken.ID)
+			c.Set("api_token_name", apiToken.Name)
+
+			// API tokens get developer role by default (scoped by token scopes if needed)
+			userRole := "developer"
+			if len(apiToken.Scopes) > 0 {
+				for _, scope := range apiToken.Scopes {
+					if scope == "admin" {
+						userRole = "admin"
+						break
+					}
+				}
+			}
+			c.Set("user_role", userRole)
+
+			// Update last used timestamp (async)
+			go func() {
+				if err := o.jwtManager.apiTokenValidator.UpdateLastUsed(context.Background(), apiToken.ID, c.ClientIP()); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"token_id": apiToken.ID,
+						"error":    err.Error(),
+					}).Warn("Failed to update API token last used")
+				}
+			}()
+
+			logrus.WithFields(logrus.Fields{
+				"path":       c.Request.URL.Path,
+				"method":     c.Request.Method,
+				"user_id":    apiToken.UserID,
+				"token_id":   apiToken.ID,
+				"token_name": apiToken.Name,
+			}).Debug("API token authentication successful")
+
+			c.Next()
+			return
+		}
+
 		// Try local token validation first
 		localClaims, localErr := o.jwtManager.ValidateToken(tokenString)
 		if localErr == nil {
@@ -506,6 +575,12 @@ func (o *OIDCManager) getOrCreateUserFromExternalTokenWithStatus(ctx context.Con
 // RequireRole returns a middleware that requires specific roles
 func (o *OIDCManager) RequireRole(roles ...string) gin.HandlerFunc {
 	return o.jwtManager.RequireRole(roles...)
+}
+
+// SetAPITokenValidator sets the API token validator for API token authentication
+// This enables authentication via API tokens (enclii_xxx format) in addition to OIDC
+func (o *OIDCManager) SetAPITokenValidator(validator APITokenValidator) {
+	o.jwtManager.SetAPITokenValidator(validator)
 }
 
 // GenerateState generates a cryptographically random state parameter for CSRF protection

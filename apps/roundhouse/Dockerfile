@@ -30,8 +30,8 @@ EXPOSE 8081
 
 ENTRYPOINT ["/usr/local/bin/roundhouse-api"]
 
-# Worker runtime stage
-FROM docker:24-dind AS worker
+# Worker runtime stage - use Docker 27 for API version 1.44+ compatibility
+FROM docker:27-dind AS worker
 
 # Install additional tools for building
 RUN apk add --no-cache \

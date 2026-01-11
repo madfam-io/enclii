@@ -1,4 +1,4 @@
-module github.com/madfam-io/enclii/tests/integration
+module github.com/madfam-org/enclii/tests/integration
 
 go 1.21
 

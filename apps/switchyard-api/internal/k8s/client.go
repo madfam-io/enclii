@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 type Client struct {

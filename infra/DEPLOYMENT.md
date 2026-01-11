@@ -161,6 +161,83 @@ All containers run with:
 - `allowPrivilegeEscalation: false`
 - `capabilities.drop: [ALL]`
 
+## Production Ingress: Cloudflare Tunnel
+
+Production traffic routes through Cloudflare Tunnel for zero-trust security and zero-downtime deployments.
+
+### Architecture
+
+```
+Internet → Cloudflare Edge → Cloudflare Tunnel → ClusterIP Services
+           (TLS, DDoS)      (cloudflared pods)   (internal networking)
+```
+
+### Benefits
+
+- **Zero-downtime deployments**: RollingUpdate strategy (no hostPort conflicts)
+- **Zero exposed ports**: All traffic routes through tunnel
+- **Zero-trust security**: DDoS protection at Cloudflare edge
+- **Automatic TLS**: Certificates managed by Cloudflare
+- **High availability**: 2 cloudflared replicas with PodDisruptionBudget
+
+### Configuration
+
+**Tunnel manifest**: `infra/k8s/production/cloudflared-unified.yaml`
+
+```bash
+# Deploy cloudflared
+kubectl apply -f infra/k8s/production/cloudflared-unified.yaml
+
+# Verify tunnel status
+kubectl get pods -n cloudflare-tunnel
+kubectl logs -n cloudflare-tunnel -l app=cloudflared
+
+# Check service connectivity
+curl https://api.enclii.dev/health
+```
+
+### Service Routing
+
+| Public Domain | Internal Service | Container Port |
+|---------------|------------------|----------------|
+| api.enclii.dev | switchyard-api.enclii.svc.cluster.local:80 | 4200 |
+| app.enclii.dev | switchyard-ui.enclii.svc.cluster.local:80 | 4201 |
+| enclii.dev | landing-page.enclii.svc.cluster.local:4204 | 4204 |
+| docs.enclii.dev | docs-site.enclii.svc.cluster.local:80 | 4203 |
+
+### NetworkPolicy Requirements
+
+Each namespace must allow traffic from cloudflared:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cloudflared-ingress
+  namespace: enclii
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: cloudflare-tunnel
+```
+
+### Migration Script
+
+Use the migration script for transitioning from hostPort:
+
+```bash
+./scripts/migrate-to-cloudflare-tunnel.sh setup     # Create tunnel
+./scripts/migrate-to-cloudflare-tunnel.sh deploy    # Deploy cloudflared
+./scripts/migrate-to-cloudflare-tunnel.sh remove-hostport  # Remove hostPort
+./scripts/migrate-to-cloudflare-tunnel.sh verify    # Verify connectivity
+./scripts/migrate-to-cloudflare-tunnel.sh rollback  # Rollback if needed
+```
+
 ## Health Checks & Monitoring
 
 ### Health Endpoints

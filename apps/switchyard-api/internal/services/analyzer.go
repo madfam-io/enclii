@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
 )
 
 // RepositoryAnalyzer scans GitHub repositories for deployable services

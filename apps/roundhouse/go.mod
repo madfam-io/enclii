@@ -1,4 +1,4 @@
-module github.com/madfam/enclii/apps/roundhouse
+module github.com/madfam-org/enclii/apps/roundhouse
 
 go 1.24.0
 

@@ -4,9 +4,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/madfam/enclii/apps/roundhouse/internal/api"
-	"github.com/madfam/enclii/apps/roundhouse/internal/config"
-	"github.com/madfam/enclii/apps/roundhouse/internal/queue"
+	"github.com/madfam-org/enclii/apps/roundhouse/internal/api"
+	"github.com/madfam-org/enclii/apps/roundhouse/internal/config"
+	"github.com/madfam-org/enclii/apps/roundhouse/internal/queue"
 	"go.uber.org/zap"
 )
 

@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/madfam/enclii/packages/cli/internal/config"
+	"github.com/madfam-org/enclii/packages/cli/internal/config"
 )
 
 // Local development environment configuration

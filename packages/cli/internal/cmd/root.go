@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/madfam/enclii/packages/cli/internal/config"
+	"github.com/madfam-org/enclii/packages/cli/internal/config"
 )
 
 func NewRootCommand(cfg *config.Config) *cobra.Command {

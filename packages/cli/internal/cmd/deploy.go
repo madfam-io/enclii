@@ -10,10 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/madfam/enclii/packages/cli/internal/client"
-	"github.com/madfam/enclii/packages/cli/internal/config"
-	"github.com/madfam/enclii/packages/cli/internal/spec"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/packages/cli/internal/client"
+	"github.com/madfam-org/enclii/packages/cli/internal/config"
+	"github.com/madfam-org/enclii/packages/cli/internal/spec"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 func NewDeployCommand(cfg *config.Config) *cobra.Command {

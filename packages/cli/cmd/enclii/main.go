@@ -5,8 +5,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/madfam/enclii/packages/cli/internal/cmd"
-	"github.com/madfam/enclii/packages/cli/internal/config"
+	"github.com/madfam-org/enclii/packages/cli/internal/cmd"
+	"github.com/madfam-org/enclii/packages/cli/internal/config"
 )
 
 func main() {

@@ -12,8 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/k8s"
 )
 
 // HealthStatus represents the health status of a component

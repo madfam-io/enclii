@@ -8,9 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/lockbox"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/k8s"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/lockbox"
 )
 
 // Controller orchestrates zero-downtime secret rotation

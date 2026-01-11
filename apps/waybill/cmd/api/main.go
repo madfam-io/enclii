@@ -6,10 +6,10 @@ import (
 	"os"
 
 	_ "github.com/lib/pq"
-	"github.com/madfam/enclii/apps/waybill/internal/api"
-	"github.com/madfam/enclii/apps/waybill/internal/billing"
-	"github.com/madfam/enclii/apps/waybill/internal/config"
-	"github.com/madfam/enclii/apps/waybill/internal/events"
+	"github.com/madfam-org/enclii/apps/waybill/internal/api"
+	"github.com/madfam-org/enclii/apps/waybill/internal/billing"
+	"github.com/madfam-org/enclii/apps/waybill/internal/config"
+	"github.com/madfam-org/enclii/apps/waybill/internal/events"
 	"go.uber.org/zap"
 )
 

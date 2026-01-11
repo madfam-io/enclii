@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 func TestAPIClient_CreateProject(t *testing.T) {

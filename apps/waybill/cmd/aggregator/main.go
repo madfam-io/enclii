@@ -10,9 +10,9 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/madfam/enclii/apps/waybill/internal/aggregation"
-	"github.com/madfam/enclii/apps/waybill/internal/config"
-	"github.com/madfam/enclii/apps/waybill/internal/events"
+	"github.com/madfam-org/enclii/apps/waybill/internal/aggregation"
+	"github.com/madfam-org/enclii/apps/waybill/internal/config"
+	"github.com/madfam-org/enclii/apps/waybill/internal/events"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 )

@@ -1,4 +1,4 @@
-module github.com/madfam/enclii/packages/sdk-go
+module github.com/madfam-org/enclii/packages/sdk-go
 
 go 1.22
 

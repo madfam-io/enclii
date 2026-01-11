@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 // EnvVarRepository handles environment variable CRUD operations with encryption

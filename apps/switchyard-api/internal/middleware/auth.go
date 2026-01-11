@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/rsa"
 	"net/http"
 	"os"
@@ -8,25 +9,37 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
+
+// APITokenValidator interface for validating API tokens
+// This avoids circular dependency with the db package
+type APITokenValidator interface {
+	ValidateToken(ctx context.Context, rawToken string) (*types.APIToken, error)
+	UpdateLastUsed(ctx context.Context, id uuid.UUID, ip string) error
+}
 
 // AuthMiddleware provides authentication middleware
 type AuthMiddleware struct {
-	publicKey     *rsa.PublicKey
-	publicPaths   map[string]bool
-	requiredRoles map[string][]string // path -> required roles
-	adminEmails   map[string]bool     // email -> is admin (for OIDC fallback)
+	publicKey      *rsa.PublicKey
+	tokenValidator APITokenValidator
+	publicPaths    map[string]bool
+	requiredRoles  map[string][]string // path -> required roles
+	adminEmails    map[string]bool     // email -> is admin (for OIDC fallback)
 }
 
 // NewAuthMiddleware creates a new authentication middleware
 // publicKey is used to validate RS256 JWT tokens
 func NewAuthMiddleware(publicKey *rsa.PublicKey) *AuthMiddleware {
 	am := &AuthMiddleware{
-		publicKey:     publicKey,
-		publicPaths:   make(map[string]bool),
-		requiredRoles: make(map[string][]string),
-		adminEmails:   make(map[string]bool),
+		publicKey:      publicKey,
+		tokenValidator: nil, // Set via SetTokenValidator if API token auth is needed
+		publicPaths:    make(map[string]bool),
+		requiredRoles:  make(map[string][]string),
+		adminEmails:    make(map[string]bool),
 	}
 	// Load admin emails from environment variable (comma-separated)
 	// Example: ENCLII_ADMIN_EMAILS=admin@madfam.io,superuser@example.com
@@ -40,6 +53,12 @@ func NewAuthMiddleware(publicKey *rsa.PublicKey) *AuthMiddleware {
 		}
 	}
 	return am
+}
+
+// SetTokenValidator sets the API token validator for API token authentication
+// This enables authentication via API tokens (enclii_xxx format) in addition to JWT
+func (a *AuthMiddleware) SetTokenValidator(validator APITokenValidator) {
+	a.tokenValidator = validator
 }
 
 // AddPublicPath adds a path that doesn't require authentication
@@ -102,6 +121,74 @@ func (a *AuthMiddleware) Middleware() gin.HandlerFunc {
 		}
 
 		tokenString := parts[1]
+
+		// Check if this is an API token (starts with "enclii_")
+		if strings.HasPrefix(tokenString, "enclii_") {
+			if a.tokenValidator == nil {
+				logrus.WithFields(logrus.Fields{
+					"path":   path,
+					"method": c.Request.Method,
+					"ip":     c.ClientIP(),
+				}).Warn("API token authentication not configured")
+
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "API token authentication not available",
+				})
+				c.Abort()
+				return
+			}
+
+			// Validate the API token
+			apiToken, err := a.tokenValidator.ValidateToken(c.Request.Context(), tokenString)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"path":   path,
+					"method": c.Request.Method,
+					"ip":     c.ClientIP(),
+					"error":  err.Error(),
+				}).Warn("Invalid API token")
+
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": "Invalid or expired API token",
+				})
+				c.Abort()
+				return
+			}
+
+			// Set user context from API token
+			c.Set("user_id", apiToken.UserID)
+			c.Set("auth_type", "api_token")
+			c.Set("api_token_id", apiToken.ID)
+
+			// API tokens get developer role by default (scoped by token scopes if needed)
+			rolesStr := []string{"developer"}
+			if len(apiToken.Scopes) > 0 {
+				// If token has specific scopes, use those as roles
+				rolesStr = apiToken.Scopes
+			}
+			c.Set("user_roles", rolesStr)
+
+			// Update last used timestamp (async, don't block the request)
+			go func() {
+				if err := a.tokenValidator.UpdateLastUsed(context.Background(), apiToken.ID, c.ClientIP()); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"token_id": apiToken.ID,
+						"error":    err.Error(),
+					}).Warn("Failed to update API token last used")
+				}
+			}()
+
+			logrus.WithFields(logrus.Fields{
+				"path":       path,
+				"method":     c.Request.Method,
+				"user_id":    apiToken.UserID,
+				"token_id":   apiToken.ID,
+				"token_name": apiToken.Name,
+			}).Debug("API token authentication successful")
+
+			c.Next()
+			return
+		}
 
 		// Parse and validate JWT token
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/config"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/config"
 )
 
 func setupTestHandler() *Handler {

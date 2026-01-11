@@ -11,9 +11,9 @@ import (
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/k8s"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 // Controller manages the reconciliation loop for all deployments
