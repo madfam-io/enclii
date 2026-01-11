@@ -61,6 +61,31 @@ spec:
         # Janua API URL for GitHub token retrieval
         - name: ENCLII_JANUA_API_URL
           value: "https://api.janua.dev"
+        # Cloudflare Integration (for domain status sync)
+        - name: ENCLII_CLOUDFLARE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: enclii-cloudflare-credentials
+              key: api-token
+              optional: true
+        - name: ENCLII_CLOUDFLARE_ACCOUNT_ID
+          valueFrom:
+            secretKeyRef:
+              name: enclii-cloudflare-credentials
+              key: account-id
+              optional: true
+        - name: ENCLII_CLOUDFLARE_ZONE_ID
+          valueFrom:
+            secretKeyRef:
+              name: enclii-cloudflare-credentials
+              key: zone-id
+              optional: true
+        - name: ENCLII_CLOUDFLARE_TUNNEL_ID
+          valueFrom:
+            secretKeyRef:
+              name: enclii-cloudflare-credentials
+              key: tunnel-id
+              optional: true
         readinessProbe:
           httpGet:
             path: /health/ready

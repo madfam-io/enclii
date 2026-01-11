@@ -203,6 +203,20 @@ func (c *APIClient) ListServices(ctx context.Context, projectSlug string) ([]*ty
 	return response.Services, nil
 }
 
+// Environments
+func (c *APIClient) CreateEnvironment(ctx context.Context, projectSlug, envName string) (*types.Environment, error) {
+	payload := map[string]string{
+		"name": envName,
+	}
+
+	var env types.Environment
+	if err := c.post(ctx, fmt.Sprintf("/v1/projects/%s/environments", projectSlug), payload, &env); err != nil {
+		return nil, fmt.Errorf("failed to create environment: %w", err)
+	}
+
+	return &env, nil
+}
+
 // Build & Deploy
 func (c *APIClient) BuildService(ctx context.Context, serviceID, gitSHA string) (*types.Release, error) {
 	payload := map[string]string{
@@ -357,9 +371,10 @@ func (c *APIClient) Health(ctx context.Context) (*HealthResponse, error) {
 
 // Request/Response types
 type DeployRequest struct {
-	ReleaseID   string            `json:"release_id"`
-	Environment map[string]string `json:"environment,omitempty"`
-	Replicas    int               `json:"replicas,omitempty"`
+	ReleaseID       string            `json:"release_id"`
+	EnvironmentName string            `json:"environment_name"` // e.g., "dev", "staging", "production"
+	Environment     map[string]string `json:"environment,omitempty"`
+	Replicas        int               `json:"replicas,omitempty"`
 }
 
 type RollbackRequest struct {

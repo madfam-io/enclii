@@ -77,6 +77,12 @@ type Config struct {
 	RedisHost     string
 	RedisPort     int
 	RedisPassword string
+
+	// Cloudflare Integration (for domain status sync)
+	CloudflareAPIToken  string
+	CloudflareAccountID string
+	CloudflareZoneID    string
+	CloudflareTunnelID  string
 }
 
 func Load() (*Config, error) {
@@ -124,6 +130,10 @@ func Load() (*Config, error) {
 	viper.SetDefault("redis-host", "localhost")
 	viper.SetDefault("redis-port", 6379)
 	viper.SetDefault("redis-password", "")
+	viper.SetDefault("cloudflare-api-token", "")
+	viper.SetDefault("cloudflare-account-id", "")
+	viper.SetDefault("cloudflare-zone-id", "")
+	viper.SetDefault("cloudflare-tunnel-id", "")
 
 	// Parse log level
 	logLevelStr := viper.GetString("log-level")
@@ -175,6 +185,10 @@ func Load() (*Config, error) {
 		RedisHost:                 viper.GetString("redis-host"),
 		RedisPort:                 viper.GetInt("redis-port"),
 		RedisPassword:             viper.GetString("redis-password"),
+		CloudflareAPIToken:        viper.GetString("cloudflare-api-token"),
+		CloudflareAccountID:       viper.GetString("cloudflare-account-id"),
+		CloudflareZoneID:          viper.GetString("cloudflare-zone-id"),
+		CloudflareTunnelID:        viper.GetString("cloudflare-tunnel-id"),
 	}
 
 	return config, nil

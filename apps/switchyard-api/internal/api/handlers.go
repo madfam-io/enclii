@@ -33,6 +33,7 @@ type Handler struct {
 	projectService         *services.ProjectService
 	deploymentService      *services.DeploymentService
 	deploymentGroupService *services.DeploymentGroupService
+	domainSyncService      *services.DomainSyncService
 
 	// Infrastructure
 	config             *config.Config
@@ -117,6 +118,12 @@ func NewHandler(
 		// Roundhouse client (may be nil if in-process mode)
 		roundhouseClient: roundhouseClient,
 	}
+}
+
+// SetDomainSyncService sets the domain sync service for Cloudflare integration
+// This is optional - if not set, sync endpoints will return 503 Service Unavailable
+func (h *Handler) SetDomainSyncService(svc *services.DomainSyncService) {
+	h.domainSyncService = svc
 }
 
 // SetupRoutes configures all API routes
@@ -333,6 +340,11 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			// Global Domains (cross-service domain management)
 			protected.GET("/domains", h.GetAllDomains)
 			protected.GET("/domains/stats", h.GetDomainStats)
+			protected.POST("/domains/sync", h.auth.RequireRole(string(types.RoleAdmin)), h.SyncDomainsFromCloudflare)
+			protected.POST("/domains/:domain_id/sync", h.auth.RequireRole(string(types.RoleDeveloper)), h.SyncDomainFromCloudflare)
+
+			// Cloudflare Tunnel Status
+			protected.GET("/tunnel/status", h.GetTunnelStatus)
 
 			// Activity (Audit Logs)
 			protected.GET("/activity", h.GetActivity)

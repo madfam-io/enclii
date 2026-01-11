@@ -9,6 +9,8 @@ resources:
   - redis-sentinel.yaml
   # oidc-secrets.yaml not needed - using local mode with external JWKS
   - build-secrets.yaml
+  # cloudflare-secrets.yaml for domain status sync (optional - create secret directly via kubectl)
+  # - cloudflare-secrets.yaml
 
 patchesStrategicMerge:
   - replicas-patch.yaml

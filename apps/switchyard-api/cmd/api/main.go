@@ -18,6 +18,7 @@ import (
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/cache"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/clients"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/cloudflare"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/config"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
@@ -257,6 +258,37 @@ func main() {
 		logrus.WithField("build_mode", "in-process").Info("✓ Build mode: in-process (sync builds in API)")
 	}
 
+	// Initialize Cloudflare client (for domain status sync)
+	var cfClient *cloudflare.Client
+	var domainSyncService *services.DomainSyncService
+	if cfg.CloudflareAPIToken != "" && cfg.CloudflareAccountID != "" && cfg.CloudflareZoneID != "" {
+		var cfErr error
+		cfClient, cfErr = cloudflare.NewClient(&cloudflare.Config{
+			APIToken:  cfg.CloudflareAPIToken,
+			AccountID: cfg.CloudflareAccountID,
+			ZoneID:    cfg.CloudflareZoneID,
+			TunnelID:  cfg.CloudflareTunnelID,
+		})
+		if cfErr != nil {
+			logrus.WithError(cfErr).Warn("⚠ Failed to initialize Cloudflare client")
+		} else {
+			// Verify token works
+			if verifyErr := cfClient.VerifyToken(ctx); verifyErr != nil {
+				logrus.WithError(verifyErr).Warn("⚠ Cloudflare API token verification failed")
+				cfClient = nil
+			} else {
+				logrus.Info("✓ Cloudflare client initialized")
+
+				// Create domain sync service
+				domainSyncService = services.NewDomainSyncService(cfClient, repos, logrus.StandardLogger())
+				logrus.Info("✓ Domain sync service initialized")
+			}
+		}
+	} else {
+		logrus.Info("ℹ Cloudflare integration not configured")
+		logrus.Info("   Set ENCLII_CLOUDFLARE_API_TOKEN, ENCLII_CLOUDFLARE_ACCOUNT_ID, ENCLII_CLOUDFLARE_ZONE_ID to enable")
+	}
+
 	// Setup HTTP server
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -295,6 +327,13 @@ func main() {
 		// Optional clients
 		roundhouseClient,
 	)
+
+	// Wire up optional domain sync service (if Cloudflare is configured)
+	if domainSyncService != nil {
+		apiHandler.SetDomainSyncService(domainSyncService)
+		logrus.Info("✓ Domain sync service wired to API handler")
+	}
+
 	api.SetupRoutes(router, apiHandler)
 
 	server := &http.Server{
@@ -333,6 +372,12 @@ func main() {
 	}
 
 	// Clean up resources
+	// Stop domain sync service if running
+	if domainSyncService != nil {
+		domainSyncService.StopBackgroundSync()
+		logrus.Info("Domain sync service stopped")
+	}
+
 	// Stop reconciler controller gracefully
 	reconcilerController.Stop()
 	logrus.Info("Reconciler controller stopped")

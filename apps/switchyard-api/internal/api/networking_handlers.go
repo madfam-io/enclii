@@ -121,21 +121,51 @@ func (h *Handler) GetServiceNetworking(c *gin.Context) {
 		})
 	}
 
-	// Build tunnel status (mock for now - will be populated from cloudflare_tunnels table)
+	// Build tunnel status from Cloudflare if available
 	var tunnelStatus *types.TunnelStatusInfo
-	// TODO: Query cloudflare_tunnels table when populated
-	// For now, provide a static tunnel status based on environment
 	platformDomain := os.Getenv("ENCLII_PLATFORM_DOMAIN")
 	if platformDomain == "" {
 		platformDomain = "enclii.dev"
 	}
 
-	tunnelStatus = &types.TunnelStatusInfo{
-		TunnelID:   "production-tunnel",
-		TunnelName: "enclii-prod",
-		Status:     types.TunnelStatusActive,
-		CNAME:      fmt.Sprintf("tunnel.%s", platformDomain),
-		Connectors: 3,
+	// Query real tunnel status from Cloudflare if service is configured
+	if h.domainSyncService != nil {
+		cfTunnelStatus, err := h.domainSyncService.GetTunnelStatus(ctx)
+		if err == nil && cfTunnelStatus != nil {
+			// Map Cloudflare status to types.TunnelStatus
+			status := types.TunnelStatusOffline
+			switch cfTunnelStatus.Status {
+			case "active":
+				status = types.TunnelStatusActive
+			case "degraded":
+				status = types.TunnelStatusDegraded
+			case "inactive":
+				status = types.TunnelStatusOffline
+			}
+
+			tunnelStatus = &types.TunnelStatusInfo{
+				TunnelID:   cfTunnelStatus.TunnelID,
+				TunnelName: cfTunnelStatus.TunnelName,
+				Status:     status,
+				CNAME:      fmt.Sprintf("tunnel.%s", platformDomain),
+				Connectors: cfTunnelStatus.ActiveConnectors,
+			}
+		} else {
+			// Log error but don't fail the request
+			h.logger.Warn(ctx, "Failed to get tunnel status from Cloudflare, using fallback",
+				logging.Error("error", err))
+		}
+	}
+
+	// Fallback to static status if Cloudflare integration not available
+	if tunnelStatus == nil {
+		tunnelStatus = &types.TunnelStatusInfo{
+			TunnelID:   "production-tunnel",
+			TunnelName: "enclii-prod",
+			Status:     types.TunnelStatusActive,
+			CNAME:      fmt.Sprintf("tunnel.%s", platformDomain),
+			Connectors: 3,
+		}
 	}
 
 	networking := types.ServiceNetworking{
