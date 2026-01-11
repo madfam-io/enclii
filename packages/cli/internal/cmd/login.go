@@ -30,7 +30,8 @@ const (
 	tokenPath           = "/api/v1/oauth/token"
 
 	// CLI OAuth client (public client with PKCE)
-	cliClientID = "enclii-cli"
+	// Registered in Janua SSO - public client for PKCE flow
+	cliClientID = "jnc_LrbLxHFQltYGazjmqPLB-JwN9FpYQKMB"
 
 	// Scopes needed for CLI access
 	cliScopes = "openid profile email offline_access"
