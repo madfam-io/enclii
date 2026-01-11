@@ -176,8 +176,16 @@ func runLogin(cmd *cobra.Command, cfg *config.Config, issuer, clientID string) e
 			if errMsg := r.URL.Query().Get("error"); errMsg != "" {
 				errDesc := r.URL.Query().Get("error_description")
 				errChan <- fmt.Errorf("OAuth error: %s - %s", errMsg, errDesc)
-				w.Header().Set("Content-Type", "text/html")
-				fmt.Fprintf(w, `<html><body><h1>Authentication Failed</h1><p>%s: %s</p><p>You can close this window.</p></body></html>`, errMsg, errDesc)
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				fmt.Fprintf(w, `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Login Failed</title></head>
+<body style="font-family: system-ui, sans-serif; text-align: center; padding: 50px;">
+<h1 style="color: #ef4444;">Authentication Failed</h1>
+<p>%s: %s</p>
+<p>You can close this window.</p>
+</body>
+</html>`, errMsg, errDesc)
 				return
 			}
 
@@ -192,12 +200,16 @@ func runLogin(cmd *cobra.Command, cfg *config.Config, issuer, clientID string) e
 			codeChan <- code
 
 			// Success response
-			w.Header().Set("Content-Type", "text/html")
-			fmt.Fprint(w, `<html><body>
-				<h1>✅ Authentication Successful!</h1>
-				<p>You can close this window and return to the terminal.</p>
-				<script>window.close();</script>
-			</body></html>`)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprint(w, `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Login Success</title></head>
+<body style="font-family: system-ui, sans-serif; text-align: center; padding: 50px;">
+<h1 style="color: #22c55e;">&#x2705; Authentication Successful!</h1>
+<p>You can close this window and return to the terminal.</p>
+<script>setTimeout(function(){window.close();}, 2000);</script>
+</body>
+</html>`)
 		}),
 	}
 

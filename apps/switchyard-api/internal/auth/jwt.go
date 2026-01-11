@@ -451,13 +451,8 @@ func (j *JWTManager) AuthMiddleware() gin.HandlerFunc {
 					"issuer": externalClaims.Issuer,
 				}).Debug("User authenticated via external token")
 
-				// Parse the subject UUID
-				userID := uuid.Nil
-				if externalClaims.Subject != "" {
-					if parsed, parseErr := uuid.Parse(externalClaims.Subject); parseErr == nil {
-						userID = parsed
-					}
-				}
+				// Use subject as user_id string (handlers expect string, not uuid.UUID)
+				userID := externalClaims.Subject
 
 				// Determine role - default to developer, but check admin email mapping
 				userRole := "developer"
