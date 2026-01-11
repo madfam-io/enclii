@@ -28,27 +28,14 @@ spec:
           value: "false"
         - name: ENCLII_MAX_REQUEST_SIZE
           value: "10MB"
-        # SSO/OIDC Configuration - Janua Integration
+        # SSO Configuration - Janua Integration (Local mode with external JWKS)
+        # CLI authenticates directly with Janua via PKCE, API validates via external JWKS
         - name: ENCLII_AUTH_MODE
-          value: "oidc"
-        - name: ENCLII_OIDC_ISSUER
-          value: "https://auth.madfam.io"
+          value: "local"
         - name: ENCLII_EXTERNAL_JWKS_URL
           value: "https://auth.madfam.io/.well-known/jwks.json"
         - name: ENCLII_EXTERNAL_ISSUER
           value: "https://auth.madfam.io"
-        - name: ENCLII_OIDC_CLIENT_ID
-          valueFrom:
-            secretKeyRef:
-              name: enclii-oidc-credentials
-              key: client-id
-        - name: ENCLII_OIDC_CLIENT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: enclii-oidc-credentials
-              key: client-secret
-        - name: ENCLII_OIDC_REDIRECT_URL
-          value: "https://api.enclii.dev/v1/auth/callback"
         # Admin email mapping for OIDC providers that don't include roles in JWT
         - name: ENCLII_ADMIN_EMAILS
           value: "admin@madfam.io"

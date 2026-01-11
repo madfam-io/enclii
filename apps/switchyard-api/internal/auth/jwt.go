@@ -21,9 +21,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
 	"github.com/sirupsen/logrus"
 )
+
+// APITokenValidator interface for validating API tokens
+// This avoids circular dependency with the db package
+type APITokenValidator interface {
+	ValidateTokenForAuth(ctx context.Context, rawToken string) (*db.APITokenInfo, error)
+	UpdateLastUsed(ctx context.Context, id uuid.UUID, ip string) error
+}
 
 type JWTManager struct {
 	privateKey      *rsa.PrivateKey
@@ -40,6 +47,9 @@ type JWTManager struct {
 
 	// Admin email mapping for external tokens (grants admin role based on email)
 	adminEmails map[string]bool
+
+	// API Token validation (for CLI/CI/CD access)
+	apiTokenValidator APITokenValidator
 }
 
 // jwksCache caches external JWKS keys with TTL and stale-while-revalidate support
@@ -348,6 +358,76 @@ func (j *JWTManager) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		// Check if this is an API token (starts with "enclii_")
+		if strings.HasPrefix(tokenString, "enclii_") {
+			if j.apiTokenValidator == nil {
+				logrus.WithFields(logrus.Fields{
+					"path":   c.Request.URL.Path,
+					"method": c.Request.Method,
+					"ip":     c.ClientIP(),
+				}).Warn("API token authentication not configured")
+
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "API token authentication not available"})
+				c.Abort()
+				return
+			}
+
+			// Validate the API token
+			apiToken, err := j.apiTokenValidator.ValidateTokenForAuth(c.Request.Context(), tokenString)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"path":   c.Request.URL.Path,
+					"method": c.Request.Method,
+					"ip":     c.ClientIP(),
+					"error":  err.Error(),
+				}).Warn("Invalid API token")
+
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired API token"})
+				c.Abort()
+				return
+			}
+
+			// Set user context from API token
+			c.Set("user_id", apiToken.UserID)
+			c.Set("auth_type", "api_token")
+			c.Set("api_token_id", apiToken.ID)
+			c.Set("api_token_name", apiToken.Name)
+
+			// API tokens get developer role by default (scoped by token scopes if needed)
+			userRole := "developer"
+			if len(apiToken.Scopes) > 0 {
+				// Check if admin scope is present
+				for _, scope := range apiToken.Scopes {
+					if scope == "admin" {
+						userRole = "admin"
+						break
+					}
+				}
+			}
+			c.Set("user_role", userRole)
+
+			// Update last used timestamp (async, don't block the request)
+			go func() {
+				if err := j.apiTokenValidator.UpdateLastUsed(context.Background(), apiToken.ID, c.ClientIP()); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"token_id": apiToken.ID,
+						"error":    err.Error(),
+					}).Warn("Failed to update API token last used")
+				}
+			}()
+
+			logrus.WithFields(logrus.Fields{
+				"path":       c.Request.URL.Path,
+				"method":     c.Request.Method,
+				"user_id":    apiToken.UserID,
+				"token_id":   apiToken.ID,
+				"token_name": apiToken.Name,
+			}).Debug("API token authentication successful")
+
+			c.Next()
+			return
+		}
+
 		// Try local token validation first
 		claims, err := j.ValidateToken(tokenString)
 		if err == nil {
@@ -371,13 +451,8 @@ func (j *JWTManager) AuthMiddleware() gin.HandlerFunc {
 					"issuer": externalClaims.Issuer,
 				}).Debug("User authenticated via external token")
 
-				// Parse the subject UUID
-				userID := uuid.Nil
-				if externalClaims.Subject != "" {
-					if parsed, parseErr := uuid.Parse(externalClaims.Subject); parseErr == nil {
-						userID = parsed
-					}
-				}
+				// Use subject as user_id string (handlers expect string, not uuid.UUID)
+				userID := externalClaims.Subject
 
 				// Determine role - default to developer, but check admin email mapping
 				userRole := "developer"
@@ -926,6 +1001,17 @@ func (j *JWTManager) GetJWKSCacheStatus() map[string]interface{} {
 // HasExternalJWKS returns true if external JWKS validation is configured
 func (j *JWTManager) HasExternalJWKS() bool {
 	return j.externalJWKSCache != nil && j.externalJWKSURL != ""
+}
+
+// SetAPITokenValidator sets the API token validator for API token authentication
+// This enables authentication via API tokens (enclii_xxx format) in addition to JWT
+func (j *JWTManager) SetAPITokenValidator(validator APITokenValidator) {
+	j.apiTokenValidator = validator
+}
+
+// HasAPITokenValidator returns true if API token validation is configured
+func (j *JWTManager) HasAPITokenValidator() bool {
+	return j.apiTokenValidator != nil
 }
 
 // GetExternalIssuer returns the expected issuer for external tokens

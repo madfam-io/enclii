@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { apiGet, apiPost, apiDelete } from '@/lib/api';
 
 interface UserProfile {
   id: string;
@@ -29,8 +30,23 @@ interface APIToken {
   name: string;
   prefix: string;
   created_at: string;
-  last_used?: string;
+  last_used_at?: string;
   expires_at?: string;
+  scopes?: string[];
+}
+
+interface APITokenCreateResponse {
+  token: string;  // Full token - only shown once
+  id: string;
+  name: string;
+  prefix: string;
+  created_at: string;
+  expires_at?: string;
+  scopes?: string[];
+}
+
+interface APITokenListResponse {
+  tokens: APIToken[];
 }
 
 export default function SettingsPage() {
@@ -48,28 +64,56 @@ export default function SettingsPage() {
   const [newTokenName, setNewTokenName] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Simulate loading user profile from localStorage or API
-    setLoading(true);
-    setTimeout(() => {
-      const storedAuth = localStorage.getItem('auth');
-      if (storedAuth) {
-        try {
-          const auth = JSON.parse(storedAuth);
-          setProfile({
-            id: auth.user?.id || 'unknown',
-            email: auth.user?.email || 'user@example.com',
-            name: auth.user?.name || auth.user?.email?.split('@')[0] || 'User',
-            created_at: auth.user?.created_at || new Date().toISOString(),
-            role: auth.user?.role || 'developer',
-          });
-        } catch (e) {
-          console.error('Failed to parse auth:', e);
-        }
-      }
-      setLoading(false);
-    }, 500);
+  // Token-specific state
+  const [tokensLoading, setTokensLoading] = useState(false);
+  const [tokensError, setTokensError] = useState<string | null>(null);
+  const [creatingToken, setCreatingToken] = useState(false);
+  const [revokingTokenId, setRevokingTokenId] = useState<string | null>(null);
+  const [newlyCreatedToken, setNewlyCreatedToken] = useState<string | null>(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
+
+  // Fetch tokens from API
+  const fetchTokens = useCallback(async () => {
+    setTokensLoading(true);
+    setTokensError(null);
+    try {
+      const response = await apiGet<APITokenListResponse>('/v1/user/tokens');
+      setTokens(response.tokens || []);
+    } catch (error) {
+      console.error('Failed to fetch tokens:', error);
+      setTokensError(error instanceof Error ? error.message : 'Failed to load tokens');
+    } finally {
+      setTokensLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    // Load user profile from localStorage
+    setLoading(true);
+    const storedAuth = localStorage.getItem('auth');
+    if (storedAuth) {
+      try {
+        const auth = JSON.parse(storedAuth);
+        setProfile({
+          id: auth.user?.id || 'unknown',
+          email: auth.user?.email || 'user@example.com',
+          name: auth.user?.name || auth.user?.email?.split('@')[0] || 'User',
+          created_at: auth.user?.created_at || new Date().toISOString(),
+          role: auth.user?.role || 'developer',
+        });
+      } catch (e) {
+        console.error('Failed to parse auth:', e);
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  // Fetch tokens when the tokens tab becomes active
+  useEffect(() => {
+    if (activeTab === 'tokens') {
+      fetchTokens();
+    }
+  }, [activeTab, fetchTokens]);
 
   const handleNotificationChange = (key: keyof NotificationPrefs) => {
     setNotifications(prev => ({
@@ -78,23 +122,71 @@ export default function SettingsPage() {
     }));
   };
 
-  const handleCreateToken = () => {
+  const handleCreateToken = async () => {
     if (!newTokenName.trim()) return;
 
-    const newToken: APIToken = {
-      id: crypto.randomUUID(),
-      name: newTokenName,
-      prefix: 'enclii_' + Math.random().toString(36).substring(2, 8),
-      created_at: new Date().toISOString(),
-    };
+    setCreatingToken(true);
+    setTokensError(null);
+    setNewlyCreatedToken(null);
 
-    setTokens(prev => [...prev, newToken]);
-    setNewTokenName('');
-    setShowNewToken(false);
+    try {
+      const response = await apiPost<APITokenCreateResponse>('/v1/user/tokens', {
+        name: newTokenName.trim(),
+      });
+
+      // Store the full token to display once
+      setNewlyCreatedToken(response.token);
+
+      // Add to tokens list (without the full token)
+      setTokens(prev => [...prev, {
+        id: response.id,
+        name: response.name,
+        prefix: response.prefix,
+        created_at: response.created_at,
+        expires_at: response.expires_at,
+        scopes: response.scopes,
+      }]);
+
+      setNewTokenName('');
+      setShowNewToken(false);
+    } catch (error) {
+      console.error('Failed to create token:', error);
+      setTokensError(error instanceof Error ? error.message : 'Failed to create token');
+    } finally {
+      setCreatingToken(false);
+    }
   };
 
-  const handleRevokeToken = (tokenId: string) => {
-    setTokens(prev => prev.filter(t => t.id !== tokenId));
+  const handleRevokeToken = async (tokenId: string) => {
+    setRevokingTokenId(tokenId);
+    setTokensError(null);
+
+    try {
+      await apiDelete(`/v1/user/tokens/${tokenId}`);
+      setTokens(prev => prev.filter(t => t.id !== tokenId));
+    } catch (error) {
+      console.error('Failed to revoke token:', error);
+      setTokensError(error instanceof Error ? error.message : 'Failed to revoke token');
+    } finally {
+      setRevokingTokenId(null);
+    }
+  };
+
+  const handleCopyToken = async () => {
+    if (!newlyCreatedToken) return;
+
+    try {
+      await navigator.clipboard.writeText(newlyCreatedToken);
+      setTokenCopied(true);
+      setTimeout(() => setTokenCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy token:', error);
+    }
+  };
+
+  const handleDismissNewToken = () => {
+    setNewlyCreatedToken(null);
+    setTokenCopied(false);
   };
 
   const tabs = [
@@ -350,7 +442,7 @@ export default function SettingsPage() {
                     <CardTitle>API Tokens</CardTitle>
                     <CardDescription>Manage API tokens for programmatic access</CardDescription>
                   </div>
-                  <Button onClick={() => setShowNewToken(true)}>
+                  <Button onClick={() => setShowNewToken(true)} disabled={showNewToken}>
                     <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
@@ -359,7 +451,55 @@ export default function SettingsPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {showNewToken && (
+                {/* Error message */}
+                {tokensError && (
+                  <div className="p-4 border border-red-200 rounded-lg bg-red-50 text-red-700">
+                    <p className="text-sm">{tokensError}</p>
+                  </div>
+                )}
+
+                {/* Newly created token display */}
+                {newlyCreatedToken && (
+                  <div className="p-4 border border-green-200 rounded-lg bg-green-50 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <p className="font-medium text-green-700">Token created successfully!</p>
+                    </div>
+                    <p className="text-sm text-green-600">
+                      Copy this token now. You won&apos;t be able to see it again.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 p-2 bg-white border rounded text-sm font-mono break-all">
+                        {newlyCreatedToken}
+                      </code>
+                      <Button size="sm" onClick={handleCopyToken}>
+                        {tokenCopied ? (
+                          <>
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={handleDismissNewToken}>
+                      Done
+                    </Button>
+                  </div>
+                )}
+
+                {/* Create new token form */}
+                {showNewToken && !newlyCreatedToken && (
                   <div className="p-4 border rounded-lg bg-gray-50 space-y-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Token Name</label>
@@ -367,21 +507,40 @@ export default function SettingsPage() {
                         placeholder="e.g., CI/CD Pipeline"
                         value={newTokenName}
                         onChange={(e) => setNewTokenName(e.target.value)}
+                        disabled={creatingToken}
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={handleCreateToken}>Create Token</Button>
+                      <Button onClick={handleCreateToken} disabled={creatingToken || !newTokenName.trim()}>
+                        {creatingToken ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Creating...
+                          </>
+                        ) : (
+                          'Create Token'
+                        )}
+                      </Button>
                       <Button variant="outline" onClick={() => {
                         setShowNewToken(false);
                         setNewTokenName('');
-                      }}>
+                      }} disabled={creatingToken}>
                         Cancel
                       </Button>
                     </div>
                   </div>
                 )}
 
-                {tokens.length === 0 && !showNewToken ? (
+                {/* Loading state */}
+                {tokensLoading && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                    <span className="ml-3 text-muted-foreground">Loading tokens...</span>
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {!tokensLoading && tokens.length === 0 && !showNewToken ? (
                   <div className="text-center py-12 text-muted-foreground">
                     <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
@@ -389,7 +548,7 @@ export default function SettingsPage() {
                     <p className="text-lg font-medium">No API tokens</p>
                     <p className="text-sm mt-1">Create a token to access the API programmatically</p>
                   </div>
-                ) : (
+                ) : !tokensLoading && tokens.length > 0 && (
                   <div className="space-y-2">
                     {tokens.map((token) => (
                       <div key={token.id} className="flex items-center justify-between p-4 border rounded-lg">
@@ -398,11 +557,24 @@ export default function SettingsPage() {
                           <p className="text-sm text-muted-foreground font-mono">{token.prefix}...</p>
                           <p className="text-xs text-muted-foreground">
                             Created {new Date(token.created_at).toLocaleDateString()}
-                            {token.last_used && ` • Last used ${new Date(token.last_used).toLocaleDateString()}`}
+                            {token.last_used_at && ` • Last used ${new Date(token.last_used_at).toLocaleDateString()}`}
+                            {token.expires_at && ` • Expires ${new Date(token.expires_at).toLocaleDateString()}`}
                           </p>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => handleRevokeToken(token.id)}>
-                          Revoke
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRevokeToken(token.id)}
+                          disabled={revokingTokenId === token.id}
+                        >
+                          {revokingTokenId === token.id ? (
+                            <>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-600 mr-2"></div>
+                              Revoking...
+                            </>
+                          ) : (
+                            'Revoke'
+                          )}
                         </Button>
                       </div>
                     ))}

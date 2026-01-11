@@ -1,4 +1,4 @@
-module github.com/madfam/enclii/apps/waybill
+module github.com/madfam-org/enclii/apps/waybill
 
 go 1.24.0
 

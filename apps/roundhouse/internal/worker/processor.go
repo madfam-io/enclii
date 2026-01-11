@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/madfam/enclii/apps/roundhouse/internal/builder"
-	"github.com/madfam/enclii/apps/roundhouse/internal/config"
-	"github.com/madfam/enclii/apps/roundhouse/internal/queue"
+	"github.com/madfam-org/enclii/apps/roundhouse/internal/builder"
+	"github.com/madfam-org/enclii/apps/roundhouse/internal/config"
+	"github.com/madfam-org/enclii/apps/roundhouse/internal/queue"
 	"go.uber.org/zap"
 )
 

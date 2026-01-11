@@ -9,8 +9,8 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/madfam/enclii/packages/cli/internal/config"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/packages/cli/internal/config"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 func NewInitCommand(cfg *config.Config) *cobra.Command {

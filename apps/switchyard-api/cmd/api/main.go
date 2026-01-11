@@ -13,23 +13,23 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/api"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/auth"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/builder"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/cache"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/clients"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/config"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/k8s"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/middleware"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/reconciler"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/topology"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/validation"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/api"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/auth"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/builder"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/cache"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/clients"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/compliance"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/config"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/k8s"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/middleware"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/provenance"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/topology"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/validation"
 )
 
 func main() {
@@ -115,6 +115,19 @@ func main() {
 
 	// Log which authentication mode is active
 	logrus.WithField("auth_mode", cfg.AuthMode).Info("✓ Authentication manager initialized")
+
+	// Wire up API token validator for CLI/CI/CD authentication
+	// This enables "enclii_xxx" tokens in addition to JWT/OIDC tokens
+	switch am := authManager.(type) {
+	case *auth.JWTManager:
+		am.SetAPITokenValidator(repos.APITokens)
+		logrus.Info("✓ API token authentication enabled (JWT mode)")
+	case *auth.OIDCManager:
+		am.SetAPITokenValidator(repos.APITokens)
+		logrus.Info("✓ API token authentication enabled (OIDC mode)")
+	default:
+		logrus.Warn("⚠ API token authentication not configured (unknown auth manager type)")
+	}
 
 	// Initialize Kubernetes client
 	k8sClient, err := k8s.NewClient(cfg.KubeConfig, cfg.KubeContext)

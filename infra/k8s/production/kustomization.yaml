@@ -7,7 +7,7 @@ resources:
   - ../base
   - cloudflared.yaml
   - redis-sentinel.yaml
-  - oidc-secrets.yaml
+  # oidc-secrets.yaml not needed - using local mode with external JWKS
   - build-secrets.yaml
 
 patchesStrategicMerge:

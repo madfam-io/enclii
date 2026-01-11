@@ -12,8 +12,8 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/db"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 )
@@ -155,6 +155,27 @@ func (o *OIDCManager) GetRedirectURL() string {
 	return o.oauth2Config.RedirectURL
 }
 
+// loadUserProjectIDs loads the project IDs that a user has access to
+func (o *OIDCManager) loadUserProjectIDs(ctx context.Context, userID uuid.UUID) []string {
+	access, err := o.repos.ProjectAccess.ListByUser(ctx, userID)
+	if err != nil {
+		logrus.WithError(err).WithField("user_id", userID).Warn("Failed to load user project access")
+		return []string{}
+	}
+
+	// Extract unique project IDs
+	projectIDSet := make(map[string]bool)
+	for _, a := range access {
+		projectIDSet[a.ProjectID.String()] = true
+	}
+
+	projectIDs := make([]string, 0, len(projectIDSet))
+	for id := range projectIDSet {
+		projectIDs = append(projectIDs, id)
+	}
+	return projectIDs
+}
+
 // HandleCallback processes the OAuth callback and creates/updates user
 func (o *OIDCManager) HandleCallback(ctx context.Context, code string) (*TokenPair, error) {
 	// Exchange authorization code for token
@@ -243,7 +264,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 			Email:      user.Email,
 			Name:       user.Name,
 			Role:       user.Role,
-			ProjectIDs: []string{}, // TODO: Load from project_access
+			ProjectIDs: o.loadUserProjectIDs(ctx, user.ID),
 			Active:     user.Active,
 		}, nil
 	}
@@ -270,7 +291,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 			Email:      user.Email,
 			Name:       user.Name,
 			Role:       user.Role,
-			ProjectIDs: []string{},
+			ProjectIDs: o.loadUserProjectIDs(ctx, user.ID),
 			Active:     user.Active,
 		}, nil
 	}
@@ -303,7 +324,7 @@ func (o *OIDCManager) getOrCreateUser(ctx context.Context, claims *struct {
 		Email:      newUser.Email,
 		Name:       newUser.Name,
 		Role:       newUser.Role,
-		ProjectIDs: []string{},
+		ProjectIDs: o.loadUserProjectIDs(ctx, newUser.ID),
 		Active:     newUser.Active,
 	}, nil
 }
@@ -333,6 +354,75 @@ func (o *OIDCManager) AuthMiddleware() gin.HandlerFunc {
 		if tokenString == "" {
 			c.JSON(401, gin.H{"error": "Authorization required (header or token query param)"})
 			c.Abort()
+			return
+		}
+
+		// Check if this is an API token (starts with "enclii_")
+		if strings.HasPrefix(tokenString, "enclii_") {
+			if !o.jwtManager.HasAPITokenValidator() {
+				logrus.WithFields(logrus.Fields{
+					"path":   c.Request.URL.Path,
+					"method": c.Request.Method,
+					"ip":     c.ClientIP(),
+				}).Warn("API token authentication not configured")
+
+				c.JSON(401, gin.H{"error": "API token authentication not available"})
+				c.Abort()
+				return
+			}
+
+			// Validate the API token via jwtManager
+			apiToken, err := o.jwtManager.apiTokenValidator.ValidateTokenForAuth(c.Request.Context(), tokenString)
+			if err != nil {
+				logrus.WithFields(logrus.Fields{
+					"path":   c.Request.URL.Path,
+					"method": c.Request.Method,
+					"ip":     c.ClientIP(),
+					"error":  err.Error(),
+				}).Warn("Invalid API token")
+
+				c.JSON(401, gin.H{"error": "Invalid or expired API token"})
+				c.Abort()
+				return
+			}
+
+			// Set user context from API token
+			c.Set("user_id", apiToken.UserID)
+			c.Set("auth_type", "api_token")
+			c.Set("api_token_id", apiToken.ID)
+			c.Set("api_token_name", apiToken.Name)
+
+			// API tokens get developer role by default (scoped by token scopes if needed)
+			userRole := "developer"
+			if len(apiToken.Scopes) > 0 {
+				for _, scope := range apiToken.Scopes {
+					if scope == "admin" {
+						userRole = "admin"
+						break
+					}
+				}
+			}
+			c.Set("user_role", userRole)
+
+			// Update last used timestamp (async)
+			go func() {
+				if err := o.jwtManager.apiTokenValidator.UpdateLastUsed(context.Background(), apiToken.ID, c.ClientIP()); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"token_id": apiToken.ID,
+						"error":    err.Error(),
+					}).Warn("Failed to update API token last used")
+				}
+			}()
+
+			logrus.WithFields(logrus.Fields{
+				"path":       c.Request.URL.Path,
+				"method":     c.Request.Method,
+				"user_id":    apiToken.UserID,
+				"token_id":   apiToken.ID,
+				"token_name": apiToken.Name,
+			}).Debug("API token authentication successful")
+
+			c.Next()
 			return
 		}
 
@@ -435,7 +525,7 @@ func (o *OIDCManager) getOrCreateUserFromExternalTokenWithStatus(ctx context.Con
 			Email:      user.Email,
 			Name:       user.Name,
 			Role:       user.Role,
-			ProjectIDs: []string{},
+			ProjectIDs: o.loadUserProjectIDs(ctx, user.ID),
 			Active:     user.Active,
 		}, false, nil
 	}
@@ -464,7 +554,7 @@ func (o *OIDCManager) getOrCreateUserFromExternalTokenWithStatus(ctx context.Con
 			Email:      user.Email,
 			Name:       user.Name,
 			Role:       user.Role,
-			ProjectIDs: []string{},
+			ProjectIDs: o.loadUserProjectIDs(ctx, user.ID),
 			Active:     user.Active,
 		}, false, nil
 	}
@@ -498,7 +588,7 @@ func (o *OIDCManager) getOrCreateUserFromExternalTokenWithStatus(ctx context.Con
 		Email:      newUser.Email,
 		Name:       newUser.Name,
 		Role:       newUser.Role,
-		ProjectIDs: []string{},
+		ProjectIDs: o.loadUserProjectIDs(ctx, newUser.ID),
 		Active:     newUser.Active,
 	}, true, nil
 }
@@ -506,6 +596,12 @@ func (o *OIDCManager) getOrCreateUserFromExternalTokenWithStatus(ctx context.Con
 // RequireRole returns a middleware that requires specific roles
 func (o *OIDCManager) RequireRole(roles ...string) gin.HandlerFunc {
 	return o.jwtManager.RequireRole(roles...)
+}
+
+// SetAPITokenValidator sets the API token validator for API token authentication
+// This enables authentication via API tokens (enclii_xxx format) in addition to OIDC
+func (o *OIDCManager) SetAPITokenValidator(validator APITokenValidator) {
+	o.jwtManager.SetAPITokenValidator(validator)
 }
 
 // GenerateState generates a cryptographically random state parameter for CSRF protection

@@ -2,8 +2,8 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/madfam/enclii/apps/roundhouse/internal/queue"
-	"github.com/madfam/enclii/apps/roundhouse/internal/webhook"
+	"github.com/madfam-org/enclii/apps/roundhouse/internal/queue"
+	"github.com/madfam-org/enclii/apps/roundhouse/internal/webhook"
 	"go.uber.org/zap"
 )
 

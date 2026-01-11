@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/services"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
 )
 
 // FlexibleTime is a time.Time that can unmarshal from multiple formats

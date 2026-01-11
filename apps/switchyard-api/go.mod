@@ -1,8 +1,8 @@
-module github.com/madfam/enclii/apps/switchyard-api
+module github.com/madfam-org/enclii/apps/switchyard-api
 
 go 1.24.0
 
-replace github.com/madfam/enclii/packages/sdk-go => ../../packages/sdk-go
+replace github.com/madfam-org/enclii/packages/sdk-go => ../../packages/sdk-go
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.0
@@ -18,7 +18,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/lib/pq v1.10.9
-	github.com/madfam/enclii/packages/sdk-go v0.0.0-00010101000000-000000000000
+	github.com/madfam-org/enclii/packages/sdk-go v0.0.0-00010101000000-000000000000
 	github.com/prometheus/client_golang v1.17.0
 	github.com/redis/go-redis/v9 v9.3.1
 	github.com/sirupsen/logrus v1.9.3

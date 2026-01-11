@@ -509,3 +509,34 @@ type PreviewAccessLog struct {
 	StatusCode     *int `json:"status_code,omitempty" db:"status_code"`
 	ResponseTimeMs *int `json:"response_time_ms,omitempty" db:"response_time_ms"`
 }
+
+// ============================================================================
+// API TOKEN TYPES
+// ============================================================================
+
+// APIToken represents a programmatic access token for CLI/CI/CD use
+type APIToken struct {
+	ID         uuid.UUID  `json:"id" db:"id"`
+	UserID     uuid.UUID  `json:"user_id" db:"user_id"`
+	Name       string     `json:"name" db:"name"`
+	Prefix     string     `json:"prefix" db:"prefix"`           // First 8 chars for display
+	TokenHash  string     `json:"-" db:"token_hash"`            // SHA-256 hash (never exposed)
+	Scopes     []string   `json:"scopes,omitempty" db:"scopes"` // Permission scopes
+	ExpiresAt  *time.Time `json:"expires_at,omitempty" db:"expires_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty" db:"last_used_at"`
+	LastUsedIP string     `json:"last_used_ip,omitempty" db:"last_used_ip"`
+	Revoked    bool       `json:"revoked" db:"revoked"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty" db:"revoked_at"`
+	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at" db:"updated_at"`
+}
+
+// APITokenCreateResponse is returned when creating a new token
+// This is the ONLY time the raw token is exposed
+type APITokenCreateResponse struct {
+	Token    string    `json:"token"`     // Full token (only shown once!)
+	ID       uuid.UUID `json:"id"`        // Token ID for management
+	Name     string    `json:"name"`      // User-provided name
+	Prefix   string    `json:"prefix"`    // Display prefix
+	ExpireAt *string   `json:"expire_at"` // ISO8601 expiration (if set)
+}

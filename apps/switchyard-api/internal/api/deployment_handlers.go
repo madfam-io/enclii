@@ -12,11 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/compliance"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/monitoring"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/provenance"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/compliance"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/provenance"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 // DeployService handles service deployment requests

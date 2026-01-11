@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/madfam/enclii/packages/cli/internal/config"
+	"github.com/madfam-org/enclii/packages/cli/internal/config"
 )
 
 func NewRootCommand(cfg *config.Config) *cobra.Command {
@@ -44,6 +44,11 @@ Learn more at https://enclii.dev`,
 	rootCmd.AddCommand(NewVersionCommand())
 	rootCmd.AddCommand(NewLocalCommand(cfg))
 	rootCmd.AddCommand(NewServicesSyncCommand(cfg))
+
+	// Authentication commands
+	rootCmd.AddCommand(NewLoginCommand(cfg))
+	rootCmd.AddCommand(NewLogoutCommand(cfg))
+	rootCmd.AddCommand(NewWhoamiCommand(cfg))
 
 	return rootCmd
 }

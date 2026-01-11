@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 type Repositories struct {
@@ -34,6 +34,7 @@ type Repositories struct {
 	Teams               *TeamRepository
 	TeamMembers         *TeamMemberRepository
 	TeamInvitations     *TeamInvitationRepository
+	APITokens           *APITokenRepository
 }
 
 func NewRepositories(db *sql.DB) *Repositories {
@@ -59,6 +60,7 @@ func NewRepositories(db *sql.DB) *Repositories {
 		Teams:               NewTeamRepository(db),
 		TeamMembers:         NewTeamMemberRepository(db),
 		TeamInvitations:     NewTeamInvitationRepository(db),
+		APITokens:           NewAPITokenRepository(db),
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 type APIClient struct {

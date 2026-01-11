@@ -160,7 +160,17 @@ Enclii runs on cost-optimized infrastructure validated through independent resea
 **Compute & Kubernetes:**
 - **Hetzner Cloud** (3x CPX31) - AMD EPYC, NVMe SSD - $45/month
 - **k3s** - Lightweight Kubernetes distribution
-- **Cloudflare Tunnel** - Replaces LoadBalancer (saves $108/year) - $0
+- **Cloudflare Tunnel** - Zero-trust ingress (replaces LoadBalancer) - $0
+
+**Ingress Architecture (Cloudflare Tunnel):**
+```
+Internet → Cloudflare Edge → cloudflared pods → ClusterIP Services
+           (TLS, DDoS)        (2 replicas)       (internal routing)
+```
+- Zero exposed node ports (all traffic through tunnel)
+- Zero-downtime RollingUpdate deployments
+- NetworkPolicy isolation per namespace
+- Configuration: `infra/k8s/production/cloudflared-unified.yaml`
 
 **Database & Caching:**
 - **Ubicloud PostgreSQL** - Managed DB on Hetzner infrastructure - $50/month
@@ -184,6 +194,7 @@ See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_R
 - ✅ **RBAC** with admin/developer/viewer roles
 - ✅ **Session Management** via Redis
 - ✅ **API Keys** for CI/CD integration
+- ✅ **SSO Logout** - RP-Initiated Logout terminates Janua sessions (Jan 2026)
 
 **Janua Integration (Complete):**
 - **Repository:** [github.com/madfam-org/janua](https://github.com/madfam-org/janua)

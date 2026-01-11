@@ -10,9 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/clients"
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/clients"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 // BuildService triggers a build for a service from a given git SHA
@@ -26,12 +26,19 @@ func (h *Handler) BuildService(c *gin.Context) {
 	}
 
 	var req struct {
-		GitSHA string `json:"git_sha" binding:"required"`
+		GitSHA    string `json:"git_sha" binding:"required"`
+		GitBranch string `json:"git_branch"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Default to main branch if not specified
+	gitBranch := req.GitBranch
+	if gitBranch == "" {
+		gitBranch = "main"
 	}
 
 	// Get service details
@@ -61,19 +68,19 @@ func (h *Handler) BuildService(c *gin.Context) {
 	}
 
 	// Trigger async build process (mode-aware)
-	h.triggerBuildAsync(service, release, req.GitSHA)
+	h.triggerBuildAsync(service, release, req.GitSHA, gitBranch)
 
 	c.JSON(http.StatusCreated, release)
 }
 
 // triggerBuildAsync routes builds to either in-process execution or Roundhouse queue
 // based on the ENCLII_BUILD_MODE configuration
-func (h *Handler) triggerBuildAsync(service *types.Service, release *types.Release, gitSHA string) {
+func (h *Handler) triggerBuildAsync(service *types.Service, release *types.Release, gitSHA, gitBranch string) {
 	ctx := context.Background()
 
 	if h.config.BuildMode == "roundhouse" && h.roundhouseClient != nil {
 		// Enqueue to Roundhouse for fault-tolerant, scalable builds
-		h.enqueueToRoundhouse(ctx, service, release, gitSHA)
+		h.enqueueToRoundhouse(ctx, service, release, gitSHA, gitBranch)
 	} else {
 		// Fall back to in-process builds (legacy behavior)
 		go h.triggerBuild(service, release, gitSHA)
@@ -81,7 +88,7 @@ func (h *Handler) triggerBuildAsync(service *types.Service, release *types.Relea
 }
 
 // enqueueToRoundhouse sends a build job to the Roundhouse worker queue
-func (h *Handler) enqueueToRoundhouse(ctx context.Context, service *types.Service, release *types.Release, gitSHA string) {
+func (h *Handler) enqueueToRoundhouse(ctx context.Context, service *types.Service, release *types.Release, gitSHA, gitBranch string) {
 	h.logger.Info(ctx, "Enqueueing build to Roundhouse",
 		logging.String("service_id", service.ID.String()),
 		logging.String("service_name", service.Name),
@@ -108,7 +115,7 @@ func (h *Handler) enqueueToRoundhouse(ctx context.Context, service *types.Servic
 		ProjectID:   project.ID,
 		GitRepo:     service.GitRepo,
 		GitSHA:      gitSHA,
-		GitBranch:   "main", // TODO: Extract from webhook payload
+		GitBranch:   gitBranch,
 		BuildConfig: clients.BuildServiceConfigToRoundhouse(service.BuildConfig),
 		CallbackURL: callbackURL,
 		Priority:    1, // Normal priority

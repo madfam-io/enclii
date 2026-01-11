@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 type Client struct {
@@ -255,18 +255,105 @@ func (c *Client) RollbackDeployment(ctx context.Context, name, namespace string)
 		return fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	// Note: DeploymentRollback API was deprecated in Kubernetes 1.16+
-	// For now, we'll implement rollback by updating the deployment with previous image
-	// TODO: Track previous images in deployment metadata or database
-	deployment.Spec.Template.Spec.Containers[0].Image = "previous-image"
+	// Find the previous image from ReplicaSet history
+	previousImage, err := c.getPreviousImage(ctx, name, namespace, deployment)
+	if err != nil {
+		return fmt.Errorf("failed to find previous image: %w", err)
+	}
+
+	if previousImage == "" {
+		return fmt.Errorf("no previous revision found to rollback to")
+	}
+
+	// Update the deployment with the previous image
+	if len(deployment.Spec.Template.Spec.Containers) == 0 {
+		return fmt.Errorf("deployment has no containers")
+	}
+
+	currentImage := deployment.Spec.Template.Spec.Containers[0].Image
+	if currentImage == previousImage {
+		return fmt.Errorf("already at previous revision (image: %s)", currentImage)
+	}
+
+	deployment.Spec.Template.Spec.Containers[0].Image = previousImage
+
+	// Add rollback annotation for audit trail
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = make(map[string]string)
+	}
+	deployment.Spec.Template.Annotations["enclii.dev/rollback-from"] = currentImage
+	deployment.Spec.Template.Annotations["enclii.dev/rollback-at"] = metav1.Now().Format(time.RFC3339)
 
 	_, err = c.Clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to rollback deployment: %w", err)
 	}
 
-	// In production, we'd use: kubectl rollout undo deployment/name -n namespace
 	return nil
+}
+
+// getPreviousImage finds the image from the previous ReplicaSet revision
+func (c *Client) getPreviousImage(ctx context.Context, deploymentName, namespace string, deployment *appsv1.Deployment) (string, error) {
+	// List all ReplicaSets owned by this deployment
+	rsList, err := c.Clientset.AppsV1().ReplicaSets(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app=%s", deploymentName),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list replica sets: %w", err)
+	}
+
+	if len(rsList.Items) < 2 {
+		return "", fmt.Errorf("no previous revision available (only %d replica set(s) found)", len(rsList.Items))
+	}
+
+	// Find the current revision number
+	currentRevision := deployment.Annotations["deployment.kubernetes.io/revision"]
+
+	// Find the previous revision's ReplicaSet
+	var previousRS *appsv1.ReplicaSet
+	var previousRevision int64
+
+	for i := range rsList.Items {
+		rs := &rsList.Items[i]
+
+		// Skip ReplicaSets not owned by this deployment
+		isOwned := false
+		for _, ownerRef := range rs.OwnerReferences {
+			if ownerRef.UID == deployment.UID {
+				isOwned = true
+				break
+			}
+		}
+		if !isOwned {
+			continue
+		}
+
+		rsRevision := rs.Annotations["deployment.kubernetes.io/revision"]
+		if rsRevision == currentRevision {
+			continue // Skip current revision
+		}
+
+		// Parse revision number
+		var rev int64
+		fmt.Sscanf(rsRevision, "%d", &rev)
+
+		// Keep track of the highest revision that's not current
+		if rev > previousRevision {
+			previousRevision = rev
+			previousRS = rs
+		}
+	}
+
+	if previousRS == nil {
+		return "", fmt.Errorf("could not find previous replica set")
+	}
+
+	// Get the image from the previous ReplicaSet
+	if len(previousRS.Spec.Template.Spec.Containers) == 0 {
+		return "", fmt.Errorf("previous replica set has no containers")
+	}
+
+	return previousRS.Spec.Template.Spec.Containers[0].Image, nil
 }
 
 func (c *Client) GetPodLogs(ctx context.Context, podName, namespace string) (string, error) {
@@ -503,6 +590,58 @@ func (c *Client) ListDeployments(ctx context.Context, namespace string) ([]appsv
 		return nil, fmt.Errorf("failed to list deployments in namespace %s: %w", namespace, err)
 	}
 	return list.Items, nil
+}
+
+// ScaleDeployment scales a deployment to the specified number of replicas
+func (c *Client) ScaleDeployment(ctx context.Context, namespace, name string, replicas int32) error {
+	deployment, err := c.Clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	deployment.Spec.Replicas = &replicas
+
+	_, err = c.Clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to scale deployment: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteDeploymentAndService deletes a deployment and its associated service
+func (c *Client) DeleteDeploymentAndService(ctx context.Context, namespace, name string) error {
+	// Delete deployment
+	err := c.Clientset.AppsV1().Deployments(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		// Ignore not found errors
+		if !strings.Contains(err.Error(), "not found") {
+			return fmt.Errorf("failed to delete deployment: %w", err)
+		}
+	}
+
+	// Delete service
+	err = c.Clientset.CoreV1().Services(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil {
+		// Ignore not found errors
+		if !strings.Contains(err.Error(), "not found") {
+			return fmt.Errorf("failed to delete service: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// DeploymentExists checks if a deployment exists
+func (c *Client) DeploymentExists(ctx context.Context, namespace, name string) (bool, error) {
+	_, err := c.Clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check deployment: %w", err)
+	}
+	return true, nil
 }
 
 // RollingRestart triggers a rolling restart of a deployment by updating the restart annotation

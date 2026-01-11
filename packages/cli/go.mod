@@ -1,9 +1,9 @@
-module github.com/madfam/enclii/packages/cli
+module github.com/madfam-org/enclii/packages/cli
 
 go 1.22
 
 require (
-	github.com/madfam/enclii/packages/sdk-go v0.0.0
+	github.com/madfam-org/enclii/packages/sdk-go v0.0.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
@@ -36,4 +36,4 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
 
-replace github.com/madfam/enclii/packages/sdk-go => ../sdk-go
+replace github.com/madfam-org/enclii/packages/sdk-go => ../sdk-go

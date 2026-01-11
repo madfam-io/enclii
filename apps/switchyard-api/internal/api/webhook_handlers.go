@@ -16,8 +16,8 @@ import (
 	"github.com/google/uuid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/madfam/enclii/apps/switchyard-api/internal/logging"
-	"github.com/madfam/enclii/packages/sdk-go/pkg/types"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 // GitHubWebhook handles incoming GitHub webhook events
@@ -212,8 +212,8 @@ func (h *Handler) handleGitHubPush(c *gin.Context, ctx context.Context, body []b
 			continue
 		}
 
-		// Trigger async build
-		go h.triggerBuild(service, release, gitSHA)
+		// Trigger async build (routes to Roundhouse or in-process based on config)
+		h.triggerBuildAsync(service, release, gitSHA, branch)
 
 		h.logger.Info(ctx, "Build triggered for service",
 			logging.String("service_id", service.ID.String()),

@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/madfam/enclii/apps/waybill/internal/billing"
-	"github.com/madfam/enclii/apps/waybill/internal/events"
+	"github.com/madfam-org/enclii/apps/waybill/internal/billing"
+	"github.com/madfam-org/enclii/apps/waybill/internal/events"
 	"go.uber.org/zap"
 )
 
