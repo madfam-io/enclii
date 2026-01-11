@@ -293,6 +293,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.PUT("/services/:id/env-vars/:var_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateEnvVar)
 			protected.DELETE("/services/:id/env-vars/:var_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteEnvVar)
 			protected.POST("/services/:id/env-vars/bulk", h.auth.RequireRole(string(types.RoleDeveloper)), h.BulkUpsertEnvVars)
+			protected.POST("/services/:id/env-vars/sync-from-pod", h.auth.RequireRole(string(types.RoleAdmin)), h.SyncEnvVarsFromPod)
 			protected.POST("/services/:id/env-vars/:var_id/reveal", h.auth.RequireRole(string(types.RoleDeveloper)), h.RevealEnvVar)
 
 			// Preview Environments (PR-based ephemeral deployments)

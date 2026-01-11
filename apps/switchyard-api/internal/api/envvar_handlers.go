@@ -529,3 +529,173 @@ func hashValue(value string) string {
 	h.Write([]byte(value))
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+// SyncEnvVarsFromPodRequest represents a request to sync env vars from a running pod
+type SyncEnvVarsFromPodRequest struct {
+	EnvironmentID string `json:"environment_id" binding:"required"`
+	Namespace     string `json:"namespace" binding:"required"`
+	PodName       string `json:"pod_name" binding:"required"`
+	Overwrite     bool   `json:"overwrite"` // If true, overwrite existing vars
+}
+
+// SyncEnvVarsFromPod captures environment variables from a running pod
+// POST /v1/services/:id/env-vars/sync-from-pod
+func (h *Handler) SyncEnvVarsFromPod(c *gin.Context) {
+	ctx := c.Request.Context()
+	serviceID := c.Param("id")
+
+	// Parse service ID
+	svcID, err := uuid.Parse(serviceID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Validate service exists
+	service, err := h.repos.Services.GetByID(svcID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		return
+	}
+
+	var req SyncEnvVarsFromPodRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Parse environment ID
+	envID, err := uuid.Parse(req.EnvironmentID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid environment ID"})
+		return
+	}
+
+	// Verify environment exists
+	_, err = h.repos.Environments.GetByID(ctx, envID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Environment not found"})
+		return
+	}
+
+	// Check if reconciler has k8s client
+	if h.reconciler == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Kubernetes client not available"})
+		return
+	}
+
+	// Get environment variables from the pod
+	podEnvVars, err := h.reconciler.GetPodEnvVars(ctx, req.Namespace, req.PodName)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get pod env vars",
+			logging.String("namespace", req.Namespace),
+			logging.String("pod", req.PodName),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read pod environment variables: " + err.Error()})
+		return
+	}
+
+	// Filter to only ENCLII_ prefixed vars (application config)
+	// and exclude some internal ones
+	excludeKeys := map[string]bool{
+		"ENCLII_SERVICE_NAME":    true, // Set by reconciler
+		"ENCLII_PROJECT_ID":      true, // Set by reconciler
+		"ENCLII_RELEASE_VERSION": true, // Set by reconciler
+		"ENCLII_DEPLOYMENT_ID":   true, // Set by reconciler
+		"PORT":                   true, // Set by reconciler
+	}
+
+	// Get user info for audit
+	userID := c.GetString("user_id")
+	userEmail := c.GetString("user_email")
+
+	var created, updated, skipped int
+	var syncedVars []string
+
+	for key, value := range podEnvVars {
+		// Skip internal vars
+		if excludeKeys[key] {
+			skipped++
+			continue
+		}
+
+		// Only sync ENCLII_ prefixed variables by default
+		if !strings.HasPrefix(key, "ENCLII_") {
+			skipped++
+			continue
+		}
+
+		// Check if var already exists
+		existing, _ := h.repos.EnvVars.GetByServiceEnvKey(ctx, svcID, &envID, key)
+
+		if existing != nil && !req.Overwrite {
+			skipped++
+			continue
+		}
+
+		// Determine if this is a secret (contains sensitive keywords)
+		isSecret := isSensitiveKey(key)
+
+		if existing != nil {
+			// Update existing
+			existing.Value = value
+			existing.IsSecret = isSecret
+			if err := h.repos.EnvVars.Update(ctx, existing); err != nil {
+				h.logger.Warn(ctx, "Failed to update env var", logging.String("key", key), logging.Error("error", err))
+				continue
+			}
+			updated++
+		} else {
+			// Create new
+			ev := &types.EnvironmentVariable{
+				ServiceID:      svcID,
+				EnvironmentID:  &envID,
+				Key:            key,
+				Value:          value,
+				IsSecret:       isSecret,
+				CreatedByEmail: userEmail,
+			}
+			if userID != "" {
+				parsed, _ := uuid.Parse(userID)
+				ev.CreatedBy = &parsed
+			}
+			if err := h.repos.EnvVars.Create(ctx, ev); err != nil {
+				h.logger.Warn(ctx, "Failed to create env var", logging.String("key", key), logging.Error("error", err))
+				continue
+			}
+			created++
+		}
+		syncedVars = append(syncedVars, key)
+	}
+
+	h.logger.Info(ctx, "Synced env vars from pod",
+		logging.String("service", service.Name),
+		logging.String("namespace", req.Namespace),
+		logging.String("pod", req.PodName),
+		logging.Int("created", created),
+		logging.Int("updated", updated),
+		logging.Int("skipped", skipped))
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Environment variables synced successfully",
+		"created":     created,
+		"updated":     updated,
+		"skipped":     skipped,
+		"synced_keys": syncedVars,
+	})
+}
+
+// isSensitiveKey checks if a key name suggests sensitive content
+func isSensitiveKey(key string) bool {
+	sensitivePatterns := []string{
+		"SECRET", "PASSWORD", "TOKEN", "KEY", "CREDENTIAL",
+		"PRIVATE", "AUTH", "API_KEY", "APIKEY",
+	}
+	upperKey := strings.ToUpper(key)
+	for _, pattern := range sensitivePatterns {
+		if strings.Contains(upperKey, pattern) {
+			return true
+		}
+	}
+	return false
+}

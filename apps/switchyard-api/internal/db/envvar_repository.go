@@ -172,6 +172,64 @@ func (r *EnvVarRepository) GetByID(ctx context.Context, id uuid.UUID) (*types.En
 	return ev, nil
 }
 
+// GetByServiceEnvKey retrieves an environment variable by service ID, environment ID, and key
+func (r *EnvVarRepository) GetByServiceEnvKey(ctx context.Context, serviceID uuid.UUID, environmentID *uuid.UUID, key string) (*types.EnvironmentVariable, error) {
+	ev := &types.EnvironmentVariable{}
+	var query string
+	var args []interface{}
+
+	if environmentID != nil {
+		query = `
+			SELECT id, service_id, environment_id, key, value_encrypted, is_secret,
+			       created_at, updated_at, created_by, created_by_email
+			FROM environment_variables
+			WHERE service_id = $1 AND environment_id = $2 AND key = $3
+		`
+		args = []interface{}{serviceID, *environmentID, key}
+	} else {
+		query = `
+			SELECT id, service_id, environment_id, key, value_encrypted, is_secret,
+			       created_at, updated_at, created_by, created_by_email
+			FROM environment_variables
+			WHERE service_id = $1 AND environment_id IS NULL AND key = $2
+		`
+		args = []interface{}{serviceID, key}
+	}
+
+	var envID sql.NullString
+	var createdBy sql.NullString
+	var createdByEmail sql.NullString
+
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(
+		&ev.ID, &ev.ServiceID, &envID, &ev.Key, &ev.ValueEncrypted, &ev.IsSecret,
+		&ev.CreatedAt, &ev.UpdatedAt, &createdBy, &createdByEmail,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if envID.Valid {
+		parsedEnvID, _ := uuid.Parse(envID.String)
+		ev.EnvironmentID = &parsedEnvID
+	}
+	if createdBy.Valid {
+		parsedCreatedBy, _ := uuid.Parse(createdBy.String)
+		ev.CreatedBy = &parsedCreatedBy
+	}
+	if createdByEmail.Valid {
+		ev.CreatedByEmail = createdByEmail.String
+	}
+
+	// Decrypt the value
+	decrypted, err := r.decrypt(ev.ValueEncrypted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt value: %w", err)
+	}
+	ev.Value = decrypted
+
+	return ev, nil
+}
+
 // List retrieves all environment variables for a service, optionally filtered by environment
 func (r *EnvVarRepository) List(ctx context.Context, serviceID uuid.UUID, environmentID *uuid.UUID) ([]*types.EnvironmentVariable, error) {
 	var query string

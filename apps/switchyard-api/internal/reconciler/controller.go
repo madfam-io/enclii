@@ -705,3 +705,8 @@ func extractGitSHAFromImage(imageURI string) string {
 
 	return imageURI[lastColon+1:]
 }
+
+// GetPodEnvVars retrieves environment variables from a running pod (delegates to ServiceReconciler)
+func (c *Controller) GetPodEnvVars(ctx context.Context, namespace, podName string) (map[string]string, error) {
+	return c.serviceReconciler.GetPodEnvVars(ctx, namespace, podName)
+}

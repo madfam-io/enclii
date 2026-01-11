@@ -824,3 +824,28 @@ func sanitizeDomainForSecret(domain string) string {
 func stringPtr(s string) *string {
 	return &s
 }
+
+// GetPodEnvVars retrieves environment variables from a running pod
+func (r *ServiceReconciler) GetPodEnvVars(ctx context.Context, namespace, podName string) (map[string]string, error) {
+	podClient := r.k8sClient.Clientset.CoreV1().Pods(namespace)
+
+	pod, err := podClient.Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get pod: %w", err)
+	}
+
+	envVars := make(map[string]string)
+
+	// Extract env vars from all containers
+	for _, container := range pod.Spec.Containers {
+		for _, env := range container.Env {
+			// Skip vars that reference secrets or configmaps (can't read the actual value)
+			if env.ValueFrom != nil {
+				continue
+			}
+			envVars[env.Name] = env.Value
+		}
+	}
+
+	return envVars, nil
+}
