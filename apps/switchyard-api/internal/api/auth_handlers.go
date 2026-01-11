@@ -46,7 +46,21 @@ type RefreshResponse struct {
 	TokenType   string    `json:"token_type"`
 }
 
-// Login handles user authentication with email and password
+// Login handles user authentication with email and password.
+//
+// This endpoint authenticates a user using their email and password credentials.
+// On success, it returns JWT access and refresh tokens for subsequent API calls.
+//
+// Request:
+//   - Method: POST /api/v1/auth/login
+//   - Content-Type: application/json
+//   - Body: LoginRequest {email: string, password: string}
+//
+// Response:
+//   - 200 OK: LoginResponse with access_token, refresh_token, expires_at
+//   - 400 Bad Request: Invalid request body
+//   - 401 Unauthorized: Invalid credentials
+//   - 500 Internal Server Error: Server error
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -87,7 +101,20 @@ func (h *Handler) Login(c *gin.Context) {
 	})
 }
 
-// Logout handles user logout by revoking the session
+// Logout handles user logout by revoking the session.
+//
+// This endpoint invalidates the user's current session and access token.
+// In OIDC mode, it also returns the IdP logout URL for SSO session termination.
+//
+// Request:
+//   - Method: POST /api/v1/auth/logout
+//   - Authorization: Bearer <access_token>
+//
+// Response:
+//   - 200 OK: {message: "Logged out successfully", logout_url?: string}
+//   - 400 Bad Request: Missing authorization header
+//   - 401 Unauthorized: Invalid or missing user context
+//   - 500 Internal Server Error: Failed to logout
 func (h *Handler) Logout(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -146,7 +173,21 @@ func (h *Handler) Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// RefreshToken handles token refresh
+// RefreshToken handles JWT token refresh.
+//
+// This endpoint exchanges a valid refresh token for a new access token.
+// Refresh tokens have longer validity than access tokens.
+//
+// Request:
+//   - Method: POST /api/v1/auth/refresh
+//   - Content-Type: application/json
+//   - Body: RefreshRequest {refresh_token: string}
+//
+// Response:
+//   - 200 OK: RefreshResponse {access_token, expires_at, token_type}
+//   - 400 Bad Request: Invalid request body
+//   - 401 Unauthorized: Invalid or expired refresh token
+//   - 500 Internal Server Error: Server error
 func (h *Handler) RefreshToken(c *gin.Context) {
 	var req RefreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -179,7 +220,21 @@ func (h *Handler) RefreshToken(c *gin.Context) {
 	})
 }
 
-// Register handles new user registration
+// Register handles new user registration.
+//
+// This endpoint creates a new user account and returns authentication tokens.
+// Email must be unique across the system.
+//
+// Request:
+//   - Method: POST /api/v1/auth/register
+//   - Content-Type: application/json
+//   - Body: {email: string, password: string, name: string}
+//
+// Response:
+//   - 201 Created: LoginResponse with tokens and user info
+//   - 400 Bad Request: Invalid request or validation error
+//   - 409 Conflict: User with email already exists
+//   - 500 Internal Server Error: Failed to create user
 func (h *Handler) Register(c *gin.Context) {
 	type RegisterRequest struct {
 		Email    string `json:"email" binding:"required,email"`

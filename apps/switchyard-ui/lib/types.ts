@@ -1,9 +1,21 @@
-// Shared TypeScript interfaces for Enclii UI
+/**
+ * Shared TypeScript interfaces for Enclii UI
+ *
+ * This module defines all TypeScript interfaces used across the Enclii
+ * web dashboard. These types correspond to API responses from the
+ * Switchyard API (api.enclii.dev).
+ *
+ * @module types
+ */
 
 // ============================================================================
 // GitHub Integration Types
 // ============================================================================
 
+/**
+ * Represents a GitHub repository from the GitHub API.
+ * Used in repository selection flows for service creation.
+ */
 export interface GitHubRepository {
   id: number;
   name: string;
@@ -76,6 +88,19 @@ export interface BranchesResponse {
 // Project Types
 // ============================================================================
 
+/**
+ * Represents a project in the Enclii platform.
+ *
+ * Projects are the top-level organizational unit. Each project can contain
+ * multiple services, environments, and team members.
+ *
+ * @example
+ * const project: Project = {
+ *   id: "550e8400-e29b-41d4-a716-446655440000",
+ *   name: "My App",
+ *   slug: "my-app"
+ * };
+ */
 export interface Project {
   id: string;
   name: string;
@@ -93,6 +118,19 @@ export interface ProjectsResponse {
 // Service Types
 // ============================================================================
 
+/**
+ * Represents a deployable service in Enclii.
+ *
+ * Services are the primary deployable units. Each service is linked to
+ * a git repository and can be deployed to multiple environments.
+ *
+ * @property id - Unique service identifier (UUID)
+ * @property name - Human-readable service name
+ * @property project_id - Parent project ID
+ * @property git_repo - Source repository URL
+ * @property git_branch - Default branch for deployments
+ * @property build_config - Build configuration (buildpack or dockerfile)
+ */
 export interface Service {
   id: string;
   name: string;
@@ -115,6 +153,18 @@ export interface ServiceOverview {
   replicas: string;
 }
 
+/**
+ * Build configuration for a service.
+ *
+ * Enclii supports two build modes:
+ * - `buildpack`: Auto-detected build using Cloud Native Buildpacks
+ * - `dockerfile`: Custom Dockerfile-based builds
+ *
+ * @property type - Build type (buildpack or dockerfile)
+ * @property port - Port the service listens on
+ * @property dockerfile_path - Path to Dockerfile (for dockerfile type)
+ * @property build_args - Additional build arguments
+ */
 export interface BuildConfig {
   type: "buildpack" | "dockerfile";
   port: number;
@@ -126,6 +176,19 @@ export interface BuildConfig {
 // Release Types
 // ============================================================================
 
+/**
+ * Represents a release (build + deploy) of a service.
+ *
+ * Releases track the full lifecycle from code commit to deployment:
+ * pending → building → ready → deploying → deployed
+ *
+ * @property id - Unique release identifier
+ * @property version - Semantic version or auto-generated version
+ * @property status - Current release status
+ * @property git_sha - Git commit SHA this release was built from
+ * @property image_tag - Container image tag
+ * @property error_message - Error details if status is 'failed'
+ */
 export interface Release {
   id: string;
   version: string;
