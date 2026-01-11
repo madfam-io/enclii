@@ -11,6 +11,9 @@ vendor/
 .env
 .env.local
 .env.*.local
+.env.build
+.env.production
+.env.staging
 
 # IDE
 .vscode/
@@ -66,7 +69,18 @@ temp/
 # Secrets (NEVER commit)
 infra/k8s/production/oidc-secrets.yaml
 *-secrets.yaml
+secrets.dev.yaml
+secrets.*.yaml
 !*-secrets.example.yaml
+!*.TEMPLATE
+!secrets.yaml.TEMPLATE
+
+# Terraform
+terraform.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
 
 # CLI binary artifacts
 packages/cli/enclii

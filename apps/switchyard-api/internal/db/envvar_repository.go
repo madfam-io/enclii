@@ -20,14 +20,12 @@ import (
 
 // EnvVarRepository handles environment variable CRUD operations with encryption
 type EnvVarRepository struct {
-	db            *sql.DB
+	db            DBTX
 	encryptionKey []byte // 32-byte AES-256 key
 }
 
-// NewEnvVarRepository creates a new environment variable repository
-// The encryption key is read from ENCLII_ENVVAR_ENCRYPTION_KEY environment variable
-// or defaults to a development key (NOT safe for production)
-func NewEnvVarRepository(db *sql.DB) *EnvVarRepository {
+// getEncryptionKey returns the encryption key from environment or default
+func getEncryptionKey() []byte {
 	keyStr := os.Getenv("ENCLII_ENVVAR_ENCRYPTION_KEY")
 	if keyStr == "" {
 		// Development fallback - NOT for production use
@@ -37,10 +35,24 @@ func NewEnvVarRepository(db *sql.DB) *EnvVarRepository {
 	// Ensure key is exactly 32 bytes for AES-256
 	key := make([]byte, 32)
 	copy(key, []byte(keyStr))
+	return key
+}
 
+// NewEnvVarRepository creates a new environment variable repository
+// The encryption key is read from ENCLII_ENVVAR_ENCRYPTION_KEY environment variable
+// or defaults to a development key (NOT safe for production)
+func NewEnvVarRepository(db DBTX) *EnvVarRepository {
 	return &EnvVarRepository{
 		db:            db,
-		encryptionKey: key,
+		encryptionKey: getEncryptionKey(),
+	}
+}
+
+// NewEnvVarRepositoryWithTx creates a repository using a transaction
+func NewEnvVarRepositoryWithTx(tx DBTX) *EnvVarRepository {
+	return &EnvVarRepository{
+		db:            tx,
+		encryptionKey: getEncryptionKey(),
 	}
 }
 
@@ -357,14 +369,9 @@ func (r *EnvVarRepository) DeleteByService(ctx context.Context, serviceID uuid.U
 	return err
 }
 
-// BulkUpsert inserts or updates multiple environment variables
+// BulkUpsert inserts or updates multiple environment variables.
+// For atomic operations across multiple vars, use Repositories.WithTransaction.
 func (r *EnvVarRepository) BulkUpsert(ctx context.Context, serviceID uuid.UUID, environmentID *uuid.UUID, vars []types.EnvironmentVariable) error {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
 	for _, ev := range vars {
 		// Encrypt the value
 		encrypted, err := r.encrypt(ev.Value)
@@ -390,7 +397,7 @@ func (r *EnvVarRepository) BulkUpsert(ctx context.Context, serviceID uuid.UUID, 
 		}
 		now := time.Now()
 
-		_, err = tx.ExecContext(ctx, query,
+		_, err = r.db.ExecContext(ctx, query,
 			id, serviceID, environmentID, ev.Key, encrypted, ev.IsSecret,
 			now, now, ev.CreatedBy, ev.CreatedByEmail,
 		)
@@ -399,7 +406,7 @@ func (r *EnvVarRepository) BulkUpsert(ctx context.Context, serviceID uuid.UUID, 
 		}
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 // GetDecrypted retrieves all environment variables as a key-value map for deployment injection

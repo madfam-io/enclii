@@ -13,6 +13,7 @@ import (
 )
 
 type Repositories struct {
+	db                  *sql.DB // Keep reference for transaction support
 	Projects            *ProjectRepository
 	Environments        *EnvironmentRepository
 	Services            *ServiceRepository
@@ -37,8 +38,60 @@ type Repositories struct {
 	APITokens           *APITokenRepository
 }
 
+// WithTransaction executes the given function within a database transaction.
+// If the function returns an error, the transaction is rolled back.
+// If the function succeeds, the transaction is committed.
+func (r *Repositories) WithTransaction(ctx context.Context, fn func(txRepos *Repositories) error) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Create transaction-scoped repositories
+	txRepos := &Repositories{
+		db:                  r.db, // Keep original db for nested transaction prevention
+		Projects:            &ProjectRepository{db: tx},
+		Environments:        &EnvironmentRepository{db: tx},
+		Services:            &ServiceRepository{db: tx},
+		Releases:            &ReleaseRepository{db: tx},
+		Deployments:         &DeploymentRepository{db: tx},
+		Users:               &UserRepository{db: tx},
+		ProjectAccess:       &ProjectAccessRepository{db: tx},
+		AuditLogs:           &AuditLogRepository{db: tx},
+		ApprovalRecords:     &ApprovalRecordRepository{db: tx},
+		RotationAuditLogs:   &RotationAuditLogRepository{db: tx},
+		CustomDomains:       NewCustomDomainRepositoryWithTx(tx),
+		Routes:              NewRouteRepositoryWithTx(tx),
+		DeploymentGroups:    NewDeploymentGroupRepositoryWithTx(tx),
+		ServiceDependencies: NewServiceDependencyRepositoryWithTx(tx),
+		EnvVars:             NewEnvVarRepositoryWithTx(tx),
+		PreviewEnvironments: NewPreviewEnvironmentRepositoryWithTx(tx),
+		PreviewComments:     NewPreviewCommentRepositoryWithTx(tx),
+		PreviewAccessLogs:   NewPreviewAccessLogRepositoryWithTx(tx),
+		Teams:               NewTeamRepositoryWithTx(tx),
+		TeamMembers:         NewTeamMemberRepositoryWithTx(tx),
+		TeamInvitations:     NewTeamInvitationRepositoryWithTx(tx),
+		APITokens:           NewAPITokenRepositoryWithTx(tx),
+	}
+
+	// Execute the function with transaction repositories
+	if err := fn(txRepos); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return fmt.Errorf("tx failed: %v, rollback failed: %w", err, rbErr)
+		}
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
 func NewRepositories(db *sql.DB) *Repositories {
 	return &Repositories{
+		db:                  db,
 		Projects:            NewProjectRepository(db),
 		Environments:        NewEnvironmentRepository(db),
 		Services:            NewServiceRepository(db),
@@ -66,10 +119,10 @@ func NewRepositories(db *sql.DB) *Repositories {
 
 // ProjectRepository handles project CRUD operations
 type ProjectRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewProjectRepository(db *sql.DB) *ProjectRepository {
+func NewProjectRepository(db DBTX) *ProjectRepository {
 	return &ProjectRepository{db: db}
 }
 
@@ -140,10 +193,10 @@ func (r *ProjectRepository) List() ([]*types.Project, error) {
 
 // ServiceRepository handles service CRUD operations
 type ServiceRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewServiceRepository(db *sql.DB) *ServiceRepository {
+func NewServiceRepository(db DBTX) *ServiceRepository {
 	return &ServiceRepository{db: db}
 }
 
@@ -467,10 +520,10 @@ func (r *ServiceRepository) Delete(ctx context.Context, id uuid.UUID) error {
 
 // Environment Repository
 type EnvironmentRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewEnvironmentRepository(db *sql.DB) *EnvironmentRepository {
+func NewEnvironmentRepository(db DBTX) *EnvironmentRepository {
 	return &EnvironmentRepository{db: db}
 }
 
@@ -579,10 +632,10 @@ func (r *EnvironmentRepository) GetByKubeNamespace(namespace string) (*types.Env
 
 // Release Repository
 type ReleaseRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewReleaseRepository(db *sql.DB) *ReleaseRepository {
+func NewReleaseRepository(db DBTX) *ReleaseRepository {
 	return &ReleaseRepository{db: db}
 }
 
@@ -700,10 +753,10 @@ func (r *ReleaseRepository) ListByService(serviceID uuid.UUID) ([]*types.Release
 
 // Deployment Repository
 type DeploymentRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewDeploymentRepository(db *sql.DB) *DeploymentRepository {
+func NewDeploymentRepository(db DBTX) *DeploymentRepository {
 	return &DeploymentRepository{db: db}
 }
 
@@ -835,10 +888,10 @@ func (r *DeploymentRepository) ListByGroup(ctx context.Context, groupID uuid.UUI
 
 // UserRepository handles user CRUD operations
 type UserRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewUserRepository(db *sql.DB) *UserRepository {
+func NewUserRepository(db DBTX) *UserRepository {
 	return &UserRepository{db: db}
 }
 
@@ -964,10 +1017,10 @@ func (r *UserRepository) List(ctx context.Context) ([]*types.User, error) {
 
 // ProjectAccessRepository handles project access control
 type ProjectAccessRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewProjectAccessRepository(db *sql.DB) *ProjectAccessRepository {
+func NewProjectAccessRepository(db DBTX) *ProjectAccessRepository {
 	return &ProjectAccessRepository{db: db}
 }
 
@@ -1108,10 +1161,10 @@ func (r *ProjectAccessRepository) ListByProject(ctx context.Context, projectID u
 
 // AuditLogRepository handles audit log operations (immutable)
 type AuditLogRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewAuditLogRepository(db *sql.DB) *AuditLogRepository {
+func NewAuditLogRepository(db DBTX) *AuditLogRepository {
 	return &AuditLogRepository{db: db}
 }
 
@@ -1218,10 +1271,10 @@ func (r *AuditLogRepository) Query(ctx context.Context, filters map[string]inter
 
 // ApprovalRecordRepository handles approval record operations
 type ApprovalRecordRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewApprovalRecordRepository(db *sql.DB) *ApprovalRecordRepository {
+func NewApprovalRecordRepository(db DBTX) *ApprovalRecordRepository {
 	return &ApprovalRecordRepository{db: db}
 }
 
@@ -1355,10 +1408,10 @@ func (r *ApprovalRecordRepository) List(ctx context.Context, filters map[string]
 
 // RotationAuditLogRepository handles rotation audit log operations
 type RotationAuditLogRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewRotationAuditLogRepository(db *sql.DB) *RotationAuditLogRepository {
+func NewRotationAuditLogRepository(db DBTX) *RotationAuditLogRepository {
 	return &RotationAuditLogRepository{db: db}
 }
 

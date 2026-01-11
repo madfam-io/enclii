@@ -89,10 +89,22 @@ type GitHubPRPayload struct {
 
 // Handle processes incoming GitHub webhooks
 func (h *GitHubHandler) Handle(c *gin.Context) {
-	// Validate signature
+	// SECURITY: Require webhook secret to be configured
+	// Without a secret, anyone could send fake webhooks to trigger builds
+	if h.secret == "" {
+		h.logger.Error("webhook secret not configured - rejecting request for security")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "webhook secret not configured",
+			"hint":  "set GITHUB_WEBHOOK_SECRET environment variable",
+		})
+		return
+	}
+
+	// Validate signature - always required when secret is configured
 	signature := c.GetHeader("X-Hub-Signature-256")
-	if h.secret != "" && signature == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing signature"})
+	if signature == "" {
+		h.logger.Warn("webhook received without signature header")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing signature header"})
 		return
 	}
 
@@ -102,11 +114,12 @@ func (h *GitHubHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	if h.secret != "" {
-		if !h.validateSignature(body, signature) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
-			return
-		}
+	if !h.validateSignature(body, signature) {
+		h.logger.Warn("webhook signature validation failed",
+			zap.String("signature", signature[:20]+"..."),
+		)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid signature"})
+		return
 	}
 
 	// Determine event type

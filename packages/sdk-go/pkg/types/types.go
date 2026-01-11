@@ -34,12 +34,50 @@ type Service struct {
 	AppPath     string      `json:"app_path" db:"app_path"` // Monorepo subdirectory path (e.g., "apps/api", "packages/web")
 	BuildConfig BuildConfig `json:"build_config" db:"build_config"`
 	Volumes     []Volume    `json:"volumes,omitempty" db:"volumes"`
+	// HealthCheck configuration for Kubernetes probes
+	HealthCheck *HealthCheckConfig `json:"health_check,omitempty" db:"health_check"`
+	// Resource configuration for container limits
+	Resources *ResourceConfig `json:"resources,omitempty" db:"resources"`
 	// AutoDeploy configuration for webhook-triggered deployments
 	AutoDeploy       bool      `json:"auto_deploy" db:"auto_deploy"`               // Enable auto-deploy on successful build
 	AutoDeployBranch string    `json:"auto_deploy_branch" db:"auto_deploy_branch"` // Branch to auto-deploy (e.g., "main", "master")
 	AutoDeployEnv    string    `json:"auto_deploy_env" db:"auto_deploy_env"`       // Target environment (e.g., "development", "staging")
 	CreatedAt        time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// HealthCheckConfig defines how Kubernetes probes should check service health
+type HealthCheckConfig struct {
+	// Path for HTTP health check endpoint (default: "/health")
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
+	// Port to check (default: container port from ENCLII_PORT or 8080)
+	Port int `json:"port,omitempty" yaml:"port,omitempty"`
+	// LivenessPath overrides Path for liveness probe only
+	LivenessPath string `json:"liveness_path,omitempty" yaml:"livenessPath,omitempty"`
+	// ReadinessPath overrides Path for readiness probe only
+	ReadinessPath string `json:"readiness_path,omitempty" yaml:"readinessPath,omitempty"`
+	// InitialDelaySeconds before starting probes (default: 10 for readiness, 30 for liveness)
+	InitialDelaySeconds int `json:"initial_delay_seconds,omitempty" yaml:"initialDelaySeconds,omitempty"`
+	// PeriodSeconds between probe checks (default: 10)
+	PeriodSeconds int `json:"period_seconds,omitempty" yaml:"periodSeconds,omitempty"`
+	// TimeoutSeconds for each probe (default: 5)
+	TimeoutSeconds int `json:"timeout_seconds,omitempty" yaml:"timeoutSeconds,omitempty"`
+	// FailureThreshold before marking unhealthy (default: 3)
+	FailureThreshold int `json:"failure_threshold,omitempty" yaml:"failureThreshold,omitempty"`
+	// Disabled skips health checks entirely (use with caution)
+	Disabled bool `json:"disabled,omitempty" yaml:"disabled,omitempty"`
+}
+
+// ResourceConfig defines container resource requests and limits
+type ResourceConfig struct {
+	// CPURequest is the minimum CPU (e.g., "100m", "0.5")
+	CPURequest string `json:"cpu_request,omitempty" yaml:"cpuRequest,omitempty"`
+	// CPULimit is the maximum CPU (e.g., "500m", "2")
+	CPULimit string `json:"cpu_limit,omitempty" yaml:"cpuLimit,omitempty"`
+	// MemoryRequest is the minimum memory (e.g., "128Mi", "1Gi")
+	MemoryRequest string `json:"memory_request,omitempty" yaml:"memoryRequest,omitempty"`
+	// MemoryLimit is the maximum memory (e.g., "512Mi", "2Gi")
+	MemoryLimit string `json:"memory_limit,omitempty" yaml:"memoryLimit,omitempty"`
 }
 
 // BuildConfig defines how to build a service

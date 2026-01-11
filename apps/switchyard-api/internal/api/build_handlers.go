@@ -345,7 +345,11 @@ func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service,
 	}
 
 	// Schedule deployment with reconciler (high priority)
-	h.reconciler.ScheduleReconciliation(deployment.ID.String(), 1)
+	if err := h.reconciler.ScheduleReconciliation(deployment.ID.String(), 1); err != nil {
+		h.logger.Warn(ctx, "Reconciler queue full, work queued for retry",
+			logging.String("deployment_id", deployment.ID.String()),
+			logging.Error("queue_error", err))
+	}
 
 	h.logger.Info(ctx, "Auto-deploy scheduled successfully",
 		logging.String("deployment_id", deployment.ID.String()),

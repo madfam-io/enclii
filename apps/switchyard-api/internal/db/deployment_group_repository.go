@@ -68,12 +68,17 @@ type ServiceDependency struct {
 
 // DeploymentGroupRepository handles deployment group CRUD operations
 type DeploymentGroupRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewDeploymentGroupRepository creates a new DeploymentGroupRepository
-func NewDeploymentGroupRepository(db *sql.DB) *DeploymentGroupRepository {
+func NewDeploymentGroupRepository(db DBTX) *DeploymentGroupRepository {
 	return &DeploymentGroupRepository{db: db}
+}
+
+// NewDeploymentGroupRepositoryWithTx creates a repository using a transaction
+func NewDeploymentGroupRepositoryWithTx(tx DBTX) *DeploymentGroupRepository {
+	return &DeploymentGroupRepository{db: tx}
 }
 
 // Create inserts a new deployment group
@@ -318,12 +323,17 @@ func (r *DeploymentGroupRepository) scanGroups(rows *sql.Rows) ([]*DeploymentGro
 
 // ServiceDependencyRepository handles service dependency CRUD operations
 type ServiceDependencyRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewServiceDependencyRepository creates a new ServiceDependencyRepository
-func NewServiceDependencyRepository(db *sql.DB) *ServiceDependencyRepository {
+func NewServiceDependencyRepository(db DBTX) *ServiceDependencyRepository {
 	return &ServiceDependencyRepository{db: db}
+}
+
+// NewServiceDependencyRepositoryWithTx creates a repository using a transaction
+func NewServiceDependencyRepositoryWithTx(tx DBTX) *ServiceDependencyRepository {
+	return &ServiceDependencyRepository{db: tx}
 }
 
 // Create inserts a new service dependency

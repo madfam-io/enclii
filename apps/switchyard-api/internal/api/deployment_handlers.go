@@ -186,7 +186,11 @@ func (h *Handler) DeployService(c *gin.Context) {
 	}
 
 	// Schedule deployment with reconciler
-	h.reconciler.ScheduleReconciliation(deployment.ID.String(), 1) // High priority
+	if err := h.reconciler.ScheduleReconciliation(deployment.ID.String(), 1); err != nil {
+		h.logger.Warn(ctx, "Reconciler queue full, work queued for retry",
+			logging.String("deployment_id", deployment.ID.String()),
+			logging.Error("queue_error", err))
+	}
 
 	// Record metrics
 	// TODO: Use proper metrics method

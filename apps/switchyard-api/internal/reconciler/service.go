@@ -223,11 +223,25 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 	replicas := int32(1)
 
 	// Determine the port to use (from ENCLII_PORT env var or default to 8080)
-	containerPort := int32(8080)
-	if portStr, ok := req.EnvVars["ENCLII_PORT"]; ok {
-		if port, err := strconv.ParseInt(portStr, 10, 32); err == nil {
-			containerPort = int32(port)
-		}
+	containerPort, portErr := parseContainerPort(req.EnvVars)
+	if portErr != nil {
+		// Log the error but continue with default - this is a configuration issue
+		logrus.WithFields(logrus.Fields{
+			"service":      req.Service.Name,
+			"enclii_port":  req.EnvVars["ENCLII_PORT"],
+			"error":        portErr.Error(),
+			"default_port": 8080,
+		}).Warn("Invalid ENCLII_PORT value, using default port 8080")
+	} else if _, ok := req.EnvVars["ENCLII_PORT"]; ok {
+		logrus.WithFields(logrus.Fields{
+			"service": req.Service.Name,
+			"port":    containerPort,
+		}).Info("Using ENCLII_PORT from environment variables")
+	} else {
+		logrus.WithFields(logrus.Fields{
+			"service": req.Service.Name,
+			"port":    containerPort,
+		}).Debug("No ENCLII_PORT set, using default port 8080")
 	}
 
 	// Build environment variables
@@ -296,40 +310,9 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 								},
 							},
 							Env: envVars,
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    mustParseQuantity("100m"),
-									corev1.ResourceMemory: mustParseQuantity("128Mi"),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    mustParseQuantity("500m"),
-									corev1.ResourceMemory: mustParseQuantity("512Mi"),
-								},
-							},
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/health",
-										Port: intstr.FromInt32(containerPort),
-									},
-								},
-								InitialDelaySeconds: 30,
-								TimeoutSeconds:      5,
-								PeriodSeconds:       10,
-								FailureThreshold:    3,
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/health",
-										Port: intstr.FromInt32(containerPort),
-									},
-								},
-								InitialDelaySeconds: 5,
-								TimeoutSeconds:      3,
-								PeriodSeconds:       5,
-								FailureThreshold:    2,
-							},
+							Resources:      buildResourceRequirements(req.Service.Resources),
+							LivenessProbe:  buildLivenessProbe(req.Service.HealthCheck, containerPort),
+							ReadinessProbe: buildReadinessProbe(req.Service.HealthCheck, containerPort),
 							VolumeMounts: buildVolumeMountsWithKubeconfig(req.Service.Volumes, req.EnvVars),
 						},
 					},
@@ -546,6 +529,170 @@ func mustParseQuantity(s string) resource.Quantity {
 	return resource.MustParse(s)
 }
 
+// parseContainerPort extracts and validates the container port from environment variables.
+// Returns the port number (defaulting to 8080) and any validation error.
+func parseContainerPort(envVars map[string]string) (int32, error) {
+	const defaultPort int32 = 8080
+	const minPort = 1
+	const maxPort = 65535
+
+	portStr, ok := envVars["ENCLII_PORT"]
+	if !ok || portStr == "" {
+		return defaultPort, nil
+	}
+
+	port, err := strconv.ParseInt(portStr, 10, 32)
+	if err != nil {
+		return defaultPort, fmt.Errorf("invalid ENCLII_PORT value '%s': %w", portStr, err)
+	}
+
+	if port < minPort || port > maxPort {
+		return defaultPort, fmt.Errorf("ENCLII_PORT %d out of valid range (%d-%d)", port, minPort, maxPort)
+	}
+
+	return int32(port), nil
+}
+
+// buildResourceRequirements creates container resource requirements from config or defaults
+func buildResourceRequirements(cfg *types.ResourceConfig) corev1.ResourceRequirements {
+	// Default values
+	cpuRequest := "100m"
+	cpuLimit := "500m"
+	memRequest := "128Mi"
+	memLimit := "512Mi"
+
+	if cfg != nil {
+		if cfg.CPURequest != "" {
+			cpuRequest = cfg.CPURequest
+		}
+		if cfg.CPULimit != "" {
+			cpuLimit = cfg.CPULimit
+		}
+		if cfg.MemoryRequest != "" {
+			memRequest = cfg.MemoryRequest
+		}
+		if cfg.MemoryLimit != "" {
+			memLimit = cfg.MemoryLimit
+		}
+	}
+
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    mustParseQuantity(cpuRequest),
+			corev1.ResourceMemory: mustParseQuantity(memRequest),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    mustParseQuantity(cpuLimit),
+			corev1.ResourceMemory: mustParseQuantity(memLimit),
+		},
+	}
+}
+
+// buildLivenessProbe creates a liveness probe from config or defaults
+func buildLivenessProbe(cfg *types.HealthCheckConfig, containerPort int32) *corev1.Probe {
+	// Check if probes are disabled
+	if cfg != nil && cfg.Disabled {
+		return nil
+	}
+
+	// Default values
+	path := "/health"
+	port := containerPort
+	initialDelay := int32(30)
+	timeout := int32(5)
+	period := int32(10)
+	failureThreshold := int32(3)
+
+	if cfg != nil {
+		if cfg.LivenessPath != "" {
+			path = cfg.LivenessPath
+		} else if cfg.Path != "" {
+			path = cfg.Path
+		}
+		if cfg.Port > 0 {
+			port = int32(cfg.Port)
+		}
+		if cfg.InitialDelaySeconds > 0 {
+			initialDelay = int32(cfg.InitialDelaySeconds)
+		}
+		if cfg.TimeoutSeconds > 0 {
+			timeout = int32(cfg.TimeoutSeconds)
+		}
+		if cfg.PeriodSeconds > 0 {
+			period = int32(cfg.PeriodSeconds)
+		}
+		if cfg.FailureThreshold > 0 {
+			failureThreshold = int32(cfg.FailureThreshold)
+		}
+	}
+
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: path,
+				Port: intstr.FromInt32(port),
+			},
+		},
+		InitialDelaySeconds: initialDelay,
+		TimeoutSeconds:      timeout,
+		PeriodSeconds:       period,
+		FailureThreshold:    failureThreshold,
+	}
+}
+
+// buildReadinessProbe creates a readiness probe from config or defaults
+func buildReadinessProbe(cfg *types.HealthCheckConfig, containerPort int32) *corev1.Probe {
+	// Check if probes are disabled
+	if cfg != nil && cfg.Disabled {
+		return nil
+	}
+
+	// Default values
+	path := "/health"
+	port := containerPort
+	initialDelay := int32(5)
+	timeout := int32(3)
+	period := int32(5)
+	failureThreshold := int32(2)
+
+	if cfg != nil {
+		if cfg.ReadinessPath != "" {
+			path = cfg.ReadinessPath
+		} else if cfg.Path != "" {
+			path = cfg.Path
+		}
+		if cfg.Port > 0 {
+			port = int32(cfg.Port)
+		}
+		if cfg.InitialDelaySeconds > 0 {
+			// For readiness, use a shorter initial delay if not explicitly set
+			initialDelay = int32(cfg.InitialDelaySeconds)
+		}
+		if cfg.TimeoutSeconds > 0 {
+			timeout = int32(cfg.TimeoutSeconds)
+		}
+		if cfg.PeriodSeconds > 0 {
+			period = int32(cfg.PeriodSeconds)
+		}
+		if cfg.FailureThreshold > 0 {
+			failureThreshold = int32(cfg.FailureThreshold)
+		}
+	}
+
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: path,
+				Port: intstr.FromInt32(port),
+			},
+		},
+		InitialDelaySeconds: initialDelay,
+		TimeoutSeconds:      timeout,
+		PeriodSeconds:       period,
+		FailureThreshold:    failureThreshold,
+	}
+}
+
 // generatePVCs creates PersistentVolumeClaim manifests for service volumes
 func (r *ServiceReconciler) generatePVCs(req *ReconcileRequest, namespace string) ([]*corev1.PersistentVolumeClaim, error) {
 	var pvcs []*corev1.PersistentVolumeClaim
@@ -636,22 +783,6 @@ func (r *ServiceReconciler) applyPVC(ctx context.Context, pvc *corev1.Persistent
 	return nil
 }
 
-// buildVolumeMounts creates volumeMounts for the container
-func buildVolumeMounts(volumes []types.Volume) []corev1.VolumeMount {
-	if len(volumes) == 0 {
-		return nil
-	}
-
-	var volumeMounts []corev1.VolumeMount
-	for _, vol := range volumes {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      vol.Name,
-			MountPath: vol.MountPath,
-		})
-	}
-	return volumeMounts
-}
-
 // buildVolumeMountsWithKubeconfig creates volume mounts including kubeconfig if needed
 func buildVolumeMountsWithKubeconfig(volumes []types.Volume, envVars map[string]string) []corev1.VolumeMount {
 	var volumeMounts []corev1.VolumeMount
@@ -674,27 +805,6 @@ func buildVolumeMountsWithKubeconfig(volumes []types.Volume, envVars map[string]
 	}
 
 	return volumeMounts
-}
-
-// buildVolumes creates volume references for the pod spec
-func buildVolumes(volumes []types.Volume, serviceName string) []corev1.Volume {
-	if len(volumes) == 0 {
-		return nil
-	}
-
-	var podVolumes []corev1.Volume
-	for _, vol := range volumes {
-		pvcName := fmt.Sprintf("%s-%s", serviceName, vol.Name)
-		podVolumes = append(podVolumes, corev1.Volume{
-			Name: vol.Name,
-			VolumeSource: corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: pvcName,
-				},
-			},
-		})
-	}
-	return podVolumes
 }
 
 // buildVolumesWithKubeconfig creates volumes including kubeconfig ConfigMap if needed

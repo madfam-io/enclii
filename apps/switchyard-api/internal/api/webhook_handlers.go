@@ -761,7 +761,11 @@ func (h *Handler) reconcilePreviewDeployment(ctx context.Context, req *previewRe
 	reconcileReq.EnvVars["ENCLII_IS_PREVIEW"] = "true"
 
 	// Schedule reconciliation
-	h.reconciler.ScheduleReconciliation(req.Deployment.ID.String(), 1)
+	if err := h.reconciler.ScheduleReconciliation(req.Deployment.ID.String(), 1); err != nil {
+		h.logger.Warn(context.Background(), "Reconciler queue full, work queued for retry",
+			logging.String("deployment_id", req.Deployment.ID.String()),
+			logging.Error("queue_error", err))
+	}
 
 	return &previewReconcileResult{
 		Success: true,
