@@ -104,14 +104,14 @@ func (h *Handler) GetService(c *gin.Context) {
 
 // BulkServiceRequest represents a single service in a bulk import request
 type BulkServiceRequest struct {
-	Name            string `json:"name" binding:"required"`
-	AppPath         string `json:"app_path" binding:"required"`
-	Port            int    `json:"port"`
-	BuildCommand    string `json:"build_command"`
-	StartCommand    string `json:"start_command"`
-	AutoDeploy      *bool  `json:"auto_deploy"`       // Enable auto-deploy (defaults to true)
+	Name             string `json:"name" binding:"required"`
+	AppPath          string `json:"app_path" binding:"required"`
+	Port             int    `json:"port"`
+	BuildCommand     string `json:"build_command"`
+	StartCommand     string `json:"start_command"`
+	AutoDeploy       *bool  `json:"auto_deploy"`        // Enable auto-deploy (defaults to true)
 	AutoDeployBranch string `json:"auto_deploy_branch"` // Override branch for this service
-	AutoDeployEnv   string `json:"auto_deploy_env"`   // Target environment (e.g., "production")
+	AutoDeployEnv    string `json:"auto_deploy_env"`    // Target environment (e.g., "production")
 }
 
 // BulkCreateServicesRequest represents a request to create multiple services at once
