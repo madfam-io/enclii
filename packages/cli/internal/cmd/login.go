@@ -123,14 +123,24 @@ func runLogin(cmd *cobra.Command, cfg *config.Config, issuer, clientID string) e
 		return fmt.Errorf("failed to generate state: %w", err)
 	}
 
-	// Start local callback server
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return fmt.Errorf("failed to start callback server: %w", err)
+	// Start local callback server on fixed port for OAuth redirect URI matching
+	// Try port 8080 first, fall back to 3000 if busy
+	var listener net.Listener
+	var port int
+	var listenErr error
+
+	for _, tryPort := range []int{8080, 3000} {
+		listener, listenErr = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", tryPort))
+		if listenErr == nil {
+			port = tryPort
+			break
+		}
+	}
+	if listener == nil {
+		return fmt.Errorf("failed to start callback server on ports 8080 or 3000: %w", listenErr)
 	}
 	defer listener.Close()
 
-	port := listener.Addr().(*net.TCPAddr).Port
 	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/callback", port)
 
 	// Build authorization URL
