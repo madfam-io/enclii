@@ -321,7 +321,7 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 							ReadinessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
-										Path: "/health/ready",
+										Path: "/health",
 										Port: intstr.FromInt32(containerPort),
 									},
 								},
