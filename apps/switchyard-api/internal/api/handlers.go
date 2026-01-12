@@ -211,6 +211,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.POST("/projects", h.auth.RequireRole(string(types.RoleAdmin)), h.CreateProject)
 			protected.GET("/projects", h.ListProjects)
 			protected.GET("/projects/:slug", h.GetProject)
+			protected.DELETE("/projects/:slug", h.auth.RequireRole(string(types.RoleAdmin)), h.DeleteProject)
 
 			// Environments
 			protected.POST("/projects/:slug/environments", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateEnvironment)
