@@ -148,4 +148,4 @@ stringData:
   github-token: "REPLACE_WITH_ACTUAL_TOKEN"
   redis-password: "REPLACE_WITH_ACTUAL_PASSWORD"
   anthropic-api-key: "REPLACE_WITH_ACTUAL_KEY"
-  janua-client-secret: "jns_3SRnFv5IF32bM3fkHH5bFQ3su9LlLJB3zqlvKbwIVdnqJ5paKc4u7DfMhg10ZTsc"
+  janua-client-secret: "REPLACE_WITH_ACTUAL_SECRET"

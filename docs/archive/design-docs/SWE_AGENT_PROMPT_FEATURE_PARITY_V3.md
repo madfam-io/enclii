@@ -161,7 +161,7 @@ gh api repos/madfam-org/enclii/hooks -X POST \
   -f events[]="push" \
   -f events[]="pull_request" \
   -f config[url]="https://api.enclii.dev/v1/webhooks/github" \
-  -f config[secret]="0a619aa7b0bf6b1bf75e252dacfc02a2afac33e4ccbe19a9ff0077bdc9d33508" \
+  -f config[secret]="$GITHUB_WEBHOOK_SECRET" \
   -f config[content_type]="json"
 ```
 
@@ -884,7 +884,7 @@ OIDC_CLIENT_SECRET=<secret>
 OIDC_REDIRECT_URI=https://app.enclii.dev/api/auth/callback
 
 # GitHub
-GITHUB_WEBHOOK_SECRET=0a619aa7b0bf6b1bf75e252dacfc02a2afac33e4ccbe19a9ff0077bdc9d33508
+GITHUB_WEBHOOK_SECRET=<secret>
 
 # Container Registry
 REGISTRY_URL=ghcr.io/madfam-org
