@@ -191,6 +191,25 @@ func (r *ProjectRepository) List() ([]*types.Project, error) {
 	return projects, nil
 }
 
+// Delete removes a project by ID
+// Note: All related records (services, environments, etc.) are automatically
+// deleted via ON DELETE CASCADE foreign key constraints
+func (r *ProjectRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	query := `DELETE FROM projects WHERE id = $1`
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // ServiceRepository handles service CRUD operations
 type ServiceRepository struct {
 	db DBTX

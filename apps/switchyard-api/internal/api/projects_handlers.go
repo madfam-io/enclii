@@ -127,3 +127,54 @@ func (h *Handler) GetProject(c *gin.Context) {
 
 	c.JSON(http.StatusOK, project)
 }
+
+// DeleteProject deletes a project and all associated resources.
+//
+// Projects can only be deleted by administrators. All services, environments,
+// and other resources associated with the project are automatically deleted
+// via database cascading deletes.
+//
+// Request:
+//   - Method: DELETE /api/v1/projects/:slug
+//   - Authorization: Bearer <access_token> (Admin role required)
+//   - Path Parameters: slug (string) - Project slug
+//
+// Response:
+//   - 200 OK: {message: "Project deleted successfully"}
+//   - 404 Not Found: Project not found
+//   - 500 Internal Server Error: Failed to delete project
+func (h *Handler) DeleteProject(c *gin.Context) {
+	ctx := c.Request.Context()
+	slug := c.Param("slug")
+
+	// Get project first to verify it exists and get its ID
+	project, err := h.projectService.GetProject(ctx, slug)
+	if err != nil {
+		if errors.Is(err, errors.ErrProjectNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Project not found"})
+		} else {
+			h.logger.Error(ctx, "Failed to get project for deletion",
+				logging.Error("error", err),
+				logging.String("project_slug", slug))
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get project"})
+		}
+		return
+	}
+
+	// Delete the project (CASCADE will handle related records)
+	if err := h.repos.Projects.Delete(ctx, project.ID); err != nil {
+		h.logger.Error(ctx, "Failed to delete project",
+			logging.Error("error", err),
+			logging.String("project_slug", slug),
+			logging.String("project_id", project.ID.String()))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete project"})
+		return
+	}
+
+	h.logger.Info(ctx, "Project deleted",
+		logging.String("project_id", project.ID.String()),
+		logging.String("project_slug", slug),
+		logging.String("deleted_by", c.GetString("user_email")))
+
+	c.JSON(http.StatusOK, gin.H{"message": "Project deleted successfully"})
+}
