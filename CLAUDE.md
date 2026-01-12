@@ -497,3 +497,4 @@ pnpm test:e2e
 | Deploy timeout | `kubectl describe deploy` | Check resource limits, probes |
 | Preview not created | Webhook logs | Verify GitHub integration |
 | SSL errors | Cert-manager logs | Check issuer, DNS |
+# Build test 1768185875
