@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"time"
 
@@ -317,6 +318,58 @@ func (sm *StorageManager) UploadArtifact(ctx context.Context, projectID, version
 func (sm *StorageManager) GetArtifactURL(ctx context.Context, projectID, version, filename string) (string, error) {
 	key := fmt.Sprintf("%s%s/%s/%s", sm.config.ArtifactPrefix, projectID, version, filename)
 	return sm.r2.GetPresignedURL(ctx, key, 24*time.Hour)
+}
+
+// UploadFile uploads a local file to R2 (implements builder.R2Uploader interface)
+func (r *R2Client) UploadFile(ctx context.Context, localPath, r2Key string) error {
+	file, err := os.Open(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to open local file: %w", err)
+	}
+	defer file.Close()
+
+	return r.Upload(ctx, r2Key, file, "application/octet-stream")
+}
+
+// DownloadFile downloads from R2 to a local file (implements builder.R2Uploader interface)
+func (r *R2Client) DownloadFile(ctx context.Context, r2Key, localPath string) error {
+	reader, err := r.Download(ctx, r2Key)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+
+	file, err := os.Create(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to create local file: %w", err)
+	}
+	defer file.Close()
+
+	_, err = io.Copy(file, reader)
+	if err != nil {
+		return fmt.Errorf("failed to write to local file: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteObject deletes an object from R2 (implements builder.R2Uploader interface)
+func (r *R2Client) DeleteObject(ctx context.Context, key string) error {
+	return r.Delete(ctx, key)
+}
+
+// ListObjects lists object keys with a prefix (implements builder.R2Uploader interface)
+func (r *R2Client) ListObjects(ctx context.Context, prefix string) ([]string, error) {
+	objects, err := r.List(ctx, prefix, 1000)
+	if err != nil {
+		return nil, err
+	}
+
+	keys := make([]string, len(objects))
+	for i, obj := range objects {
+		keys[i] = obj.Key
+	}
+	return keys, nil
 }
 
 // CleanupOldObjects removes objects older than retention period

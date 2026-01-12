@@ -9,11 +9,14 @@ on:
 env:
   GO_VERSION: '1.24'
   NODE_VERSION: '20'
+  # Runner selection: Use self-hosted if ARC bootstrap is complete, otherwise GitHub-hosted
+  # Set ARC_BOOTSTRAP_COMPLETE=true in repository variables after ARC is installed
+  RUNNER_LABEL: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
 
 jobs:
   lint:
     name: Lint & Format
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,7 +56,7 @@ jobs:
 
   unit-tests:
     name: Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
     needs: lint
 
     services:
@@ -129,7 +132,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
     needs: unit-tests
 
     steps:
@@ -174,7 +177,7 @@ jobs:
 
   ui-tests:
     name: UI Tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -204,7 +207,7 @@ jobs:
 
   security-scan:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -242,7 +245,8 @@ jobs:
 
   docker-build:
     name: Docker Build
-    runs-on: ubuntu-latest
+    # Docker builds benefit most from self-hosted runners (DinD, build cache)
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
     needs: [build, ui-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -315,7 +319,7 @@ jobs:
 
   test-summary:
     name: Test Summary
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
     needs: [lint, unit-tests, ui-tests, security-scan]
     if: always()
 

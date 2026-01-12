@@ -22,10 +22,10 @@ COPY apps/switchyard-ui ./switchyard-ui
 # Install dependencies from deps stage
 COPY --from=deps /app/switchyard-ui/node_modules ./switchyard-ui/node_modules
 
-# Build arguments for public env vars
-ARG NEXT_PUBLIC_API_URL=http://localhost:4200
-ARG NEXT_PUBLIC_AUTH_MODE=local
-ARG NEXT_PUBLIC_JANUA_URL=http://localhost:8000
+# Build arguments for public env vars (production defaults)
+ARG NEXT_PUBLIC_API_URL=https://api.enclii.dev
+ARG NEXT_PUBLIC_AUTH_MODE=oidc
+ARG NEXT_PUBLIC_JANUA_URL=https://auth.madfam.io
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_AUTH_MODE=$NEXT_PUBLIC_AUTH_MODE
 ENV NEXT_PUBLIC_JANUA_URL=$NEXT_PUBLIC_JANUA_URL

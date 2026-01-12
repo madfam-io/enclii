@@ -54,6 +54,25 @@ interface CostBreakdown {
   grand_total: number;
 }
 
+interface ServiceMetrics {
+  service_id: string;
+  service_name: string;
+  namespace: string;
+  pod_count: number;
+  cpu_usage_millicores: number;
+  memory_usage_mb: number;
+  status: string;
+}
+
+interface RealtimeMetrics {
+  total_cpu_millicores: number;
+  total_memory_mb: number;
+  total_pods: number;
+  metrics_enabled: boolean;
+  services: ServiceMetrics[];
+  collected_at: string;
+}
+
 function getProgressColor(percentage: number): string {
   if (percentage >= 90) return 'bg-red-500';
   if (percentage >= 75) return 'bg-yellow-500';
@@ -99,6 +118,7 @@ const iconMap: Record<string, React.ReactNode> = {
 export default function UsagePage() {
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [costs, setCosts] = useState<CostBreakdown | null>(null);
+  const [realtime, setRealtime] = useState<RealtimeMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,13 +127,15 @@ export default function UsagePage() {
       setError(null);
       setLoading(true);
 
-      const [usageData, costsData] = await Promise.all([
+      const [usageData, costsData, realtimeData] = await Promise.all([
         apiGet<UsageSummary>('/v1/usage'),
         apiGet<CostBreakdown>('/v1/usage/costs'),
+        apiGet<RealtimeMetrics>('/v1/usage/realtime').catch(() => null),
       ]);
 
       setUsage(usageData);
       setCosts(costsData);
+      setRealtime(realtimeData);
     } catch (err) {
       console.error('Failed to fetch usage data:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch usage data');
@@ -124,6 +146,13 @@ export default function UsagePage() {
 
   useEffect(() => {
     fetchData();
+    // Auto-refresh realtime metrics every 30 seconds
+    const interval = setInterval(() => {
+      apiGet<RealtimeMetrics>('/v1/usage/realtime')
+        .then(setRealtime)
+        .catch(console.error);
+    }, 30000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   if (loading) {
@@ -226,6 +255,128 @@ export default function UsagePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Real-time Resource Metrics */}
+      {realtime && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                  </span>
+                  Live Resource Usage
+                </CardTitle>
+                <CardDescription>
+                  Real-time metrics from your running services
+                  {realtime.collected_at && (
+                    <span className="ml-2 text-xs">
+                      (Updated {new Date(realtime.collected_at).toLocaleTimeString()})
+                    </span>
+                  )}
+                </CardDescription>
+              </div>
+              {!realtime.metrics_enabled && (
+                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
+                  Metrics server unavailable
+                </span>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {realtime.metrics_enabled ? (
+              <>
+                {/* Cluster Summary */}
+                <div className="grid gap-4 md:grid-cols-3 mb-6">
+                  <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-4">
+                    <div className="text-sm text-muted-foreground">Total CPU</div>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {(realtime.total_cpu_millicores / 1000).toFixed(2)} cores
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {realtime.total_cpu_millicores.toFixed(0)} millicores
+                    </div>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-950 rounded-lg p-4">
+                    <div className="text-sm text-muted-foreground">Total Memory</div>
+                    <div className="text-2xl font-bold text-purple-600">
+                      {realtime.total_memory_mb >= 1024
+                        ? (realtime.total_memory_mb / 1024).toFixed(2) + ' GB'
+                        : realtime.total_memory_mb.toFixed(0) + ' MB'}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Across all services
+                    </div>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950 rounded-lg p-4">
+                    <div className="text-sm text-muted-foreground">Running Pods</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {realtime.total_pods}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {realtime.services.length} services
+                    </div>
+                  </div>
+                </div>
+
+                {/* Service-level Metrics */}
+                {realtime.services.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-muted-foreground">Service Breakdown</h4>
+                    <div className="space-y-2">
+                      {realtime.services.map((svc) => (
+                        <div
+                          key={svc.service_id}
+                          className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-2 h-2 rounded-full ${
+                              svc.status === 'running' ? 'bg-green-500' :
+                              svc.status === 'unknown' ? 'bg-yellow-500' : 'bg-red-500'
+                            }`} />
+                            <div>
+                              <div className="font-medium">{svc.service_name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {svc.pod_count} pod{svc.pod_count !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-6 text-sm">
+                            <div className="text-right">
+                              <div className="font-mono text-blue-600">
+                                {(svc.cpu_usage_millicores / 1000).toFixed(2)} cores
+                              </div>
+                              <div className="text-xs text-muted-foreground">CPU</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="font-mono text-purple-600">
+                                {svc.memory_usage_mb >= 1024
+                                  ? (svc.memory_usage_mb / 1024).toFixed(2) + ' GB'
+                                  : svc.memory_usage_mb.toFixed(0) + ' MB'}
+                              </div>
+                              <div className="text-xs text-muted-foreground">Memory</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <svg className="w-12 h-12 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <p className="font-medium">Metrics collection unavailable</p>
+                <p className="text-sm">Install metrics-server in your cluster to enable real-time resource monitoring</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Usage Meters & Cost Breakdown */}
       <div className="grid gap-6 md:grid-cols-2">

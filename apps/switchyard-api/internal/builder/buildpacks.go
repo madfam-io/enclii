@@ -19,6 +19,7 @@ type BuildpacksBuilder struct {
 	registryPassword string
 	cacheDir         string
 	timeout          time.Duration
+	buildCache       *BuildCache
 }
 
 func NewBuildpacksBuilder(registry, registryUsername, registryPassword, cacheDir string, timeout time.Duration) *BuildpacksBuilder {
@@ -31,20 +32,29 @@ func NewBuildpacksBuilder(registry, registryUsername, registryPassword, cacheDir
 	}
 }
 
+// SetBuildCache configures the build cache for layer caching
+func (b *BuildpacksBuilder) SetBuildCache(cache *BuildCache) {
+	b.buildCache = cache
+}
+
 type BuildRequest struct {
 	ServiceName string
 	SourcePath  string
 	GitSHA      string
+	ProjectID   string // For cache key generation
 	BuildConfig types.BuildConfig
 	Env         map[string]string
+	CacheKey    *CacheKey // Optional cache key for layer caching
 }
 
 type BuildResult struct {
-	ImageURI string
-	Success  bool
-	Error    error
-	Logs     []string
-	Duration time.Duration
+	ImageURI   string
+	Success    bool
+	Error      error
+	Logs       []string
+	Duration   time.Duration
+	CacheHit   bool   // Whether build used cached layers
+	CacheImage string // Cache image URI used
 }
 
 func (b *BuildpacksBuilder) Build(ctx context.Context, req *BuildRequest) *BuildResult {
@@ -131,13 +141,28 @@ func (b *BuildpacksBuilder) buildWithBuildpacks(ctx context.Context, req *BuildR
 	result.Logs = append(result.Logs, "Building with Cloud Native Buildpacks...")
 
 	// Create build command
-	// Note: pack CLI uses Docker volumes for caching by default
-	// The --cache-dir flag doesn't exist; use --cache-image for remote caching
 	args := []string{
 		"build", result.ImageURI,
 		"--path", req.SourcePath,
 		"--builder", "paketocommunity/builder-ubi-base:latest",
 		"--publish",
+	}
+
+	// Add cache image for remote layer caching (major speed improvement)
+	if b.buildCache != nil && req.CacheKey != nil {
+		cacheImage := b.buildCache.GetCacheImage(req.CacheKey)
+		args = append(args, "--cache-image", cacheImage)
+		result.CacheImage = cacheImage
+		result.Logs = append(result.Logs, fmt.Sprintf("Using cache image: %s", cacheImage))
+
+		// Check if cache exists
+		cacheMetadata, err := b.buildCache.LookupCache(ctx, req.CacheKey)
+		if err == nil && cacheMetadata != nil {
+			result.CacheHit = true
+			result.Logs = append(result.Logs, fmt.Sprintf("Cache hit! Previous builds: %d", cacheMetadata.HitCount))
+		} else {
+			result.Logs = append(result.Logs, "Cache miss - creating new cache")
+		}
 	}
 
 	// Add environment variables
@@ -154,6 +179,19 @@ func (b *BuildpacksBuilder) buildWithBuildpacks(ctx context.Context, req *BuildR
 
 	if err != nil {
 		return fmt.Errorf("pack build failed: %w", err)
+	}
+
+	// Save cache metadata on successful build
+	if b.buildCache != nil && req.CacheKey != nil {
+		metadata := &CacheMetadata{
+			Key:        *req.CacheKey,
+			CacheImage: result.CacheImage,
+			CreatedAt:  time.Now(),
+			LastHit:    time.Now(),
+		}
+		if saveErr := b.buildCache.SaveCacheMetadata(ctx, metadata); saveErr != nil {
+			logrus.Warnf("Failed to save cache metadata: %v", saveErr)
+		}
 	}
 
 	return nil
@@ -279,10 +317,23 @@ func (b *BuildpacksBuilder) BuildService(ctx context.Context, service *types.Ser
 		ServiceName: service.Name,
 		SourcePath:  sourcePath,
 		GitSHA:      gitSHA,
+		ProjectID:   service.ProjectID.String(),
 		BuildConfig: service.BuildConfig,
 		Env: map[string]string{
 			"GIT_SHA": gitSHA,
 		},
+	}
+
+	// Generate cache key if build cache is configured
+	if b.buildCache != nil {
+		cacheKey, err := b.buildCache.GenerateCacheKey(ctx, service.ProjectID.String(), service.Name, sourcePath)
+		if err != nil {
+			logrus.Warnf("Failed to generate cache key: %v", err)
+		} else {
+			req.CacheKey = cacheKey
+			logrus.Infof("Generated cache key for %s: deps=%s builder=%s",
+				service.Name, cacheKey.DepsHash[:8], cacheKey.BuilderHash[:8])
+		}
 	}
 
 	// Execute build

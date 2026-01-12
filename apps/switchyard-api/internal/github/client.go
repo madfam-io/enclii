@@ -3,12 +3,14 @@
 package github
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -401,4 +403,161 @@ func (c *Client) GetOAuthURL(state, redirectURI string) string {
 		redirectURI,
 		state,
 	)
+}
+
+// IssueComment represents a GitHub issue/PR comment
+type IssueComment struct {
+	ID        int64     `json:"id"`
+	Body      string    `json:"body"`
+	User      Account   `json:"user"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	HTMLURL   string    `json:"html_url"`
+}
+
+// CreateIssueComment posts a comment to a GitHub issue or PR
+func (c *Client) CreateIssueComment(ctx context.Context, installationID int64, owner, repo string, issueNumber int, body string) (*IssueComment, error) {
+	token, err := c.GetInstallationToken(ctx, installationID)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.createCommentWithToken(ctx, token, owner, repo, issueNumber, body)
+}
+
+// CreateIssueCommentWithPAT posts a comment using a Personal Access Token
+func (c *Client) CreateIssueCommentWithPAT(ctx context.Context, pat, owner, repo string, issueNumber int, body string) (*IssueComment, error) {
+	return c.createCommentWithToken(ctx, pat, owner, repo, issueNumber, body)
+}
+
+// createCommentWithToken posts a comment using any token
+func (c *Client) createCommentWithToken(ctx context.Context, token, owner, repo string, issueNumber int, body string) (*IssueComment, error) {
+	type commentRequest struct {
+		Body string `json:"body"`
+	}
+
+	payload := commentRequest{Body: body}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal comment: %w", err)
+	}
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%d/comments", owner, repo, issueNumber)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, io.NopCloser(
+		io.NewSectionReader(bytes.NewReader(payloadBytes), 0, int64(len(payloadBytes))),
+	))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create comment: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API error: %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var comment IssueComment
+	if err := json.NewDecoder(resp.Body).Decode(&comment); err != nil {
+		return nil, fmt.Errorf("failed to decode comment response: %w", err)
+	}
+
+	c.logger.WithFields(logrus.Fields{
+		"repo":         fmt.Sprintf("%s/%s", owner, repo),
+		"issue_number": issueNumber,
+		"comment_id":   comment.ID,
+	}).Info("Created GitHub PR comment")
+
+	return &comment, nil
+}
+
+// FindExistingPreviewComment finds an existing preview comment on a PR by looking for a marker
+func (c *Client) FindExistingPreviewComment(ctx context.Context, token, owner, repo string, issueNumber int, marker string) (*IssueComment, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%d/comments?per_page=100", owner, repo, issueNumber)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list comments: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API error: %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var comments []IssueComment
+	if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
+		return nil, fmt.Errorf("failed to decode comments: %w", err)
+	}
+
+	// Find comment containing the marker
+	for _, comment := range comments {
+		if strings.Contains(comment.Body, marker) {
+			return &comment, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// UpdateIssueComment updates an existing comment
+func (c *Client) UpdateIssueComment(ctx context.Context, token, owner, repo string, commentID int64, body string) (*IssueComment, error) {
+	type commentRequest struct {
+		Body string `json:"body"`
+	}
+
+	payload := commentRequest{Body: body}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal comment: %w", err)
+	}
+
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/comments/%d", owner, repo, commentID)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", url, io.NopCloser(
+		io.NewSectionReader(bytes.NewReader(payloadBytes), 0, int64(len(payloadBytes))),
+	))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update comment: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API error: %d - %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var comment IssueComment
+	if err := json.NewDecoder(resp.Body).Decode(&comment); err != nil {
+		return nil, fmt.Errorf("failed to decode comment response: %w", err)
+	}
+
+	return &comment, nil
 }

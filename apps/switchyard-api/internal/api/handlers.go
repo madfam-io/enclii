@@ -17,6 +17,7 @@ import (
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/addons"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/notifications"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/reconciler"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/topology"
@@ -36,6 +37,7 @@ type Handler struct {
 	deploymentGroupService *services.DeploymentGroupService
 	domainSyncService      *services.DomainSyncService
 	addonService           *addons.AddonService
+	notificationService    *notifications.Service
 
 	// Infrastructure
 	config             *config.Config
@@ -132,6 +134,12 @@ func (h *Handler) SetDomainSyncService(svc *services.DomainSyncService) {
 // This is optional - if not set, addon endpoints will return 503 Service Unavailable
 func (h *Handler) SetAddonService(svc *addons.AddonService) {
 	h.addonService = svc
+}
+
+// SetNotificationService sets the notification service for webhook delivery
+// This is optional - if not set, notification test endpoints will return 503 Service Unavailable
+func (h *Handler) SetNotificationService(svc *notifications.Service) {
+	h.notificationService = svc
 }
 
 // SetupRoutes configures all API routes
@@ -242,6 +250,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 
 			// Status & Deployments
 			protected.GET("/services/:id/status", h.GetServiceStatus)
+			protected.GET("/services/:id/metrics", h.GetServiceResourceMetrics)
 			protected.GET("/services/:id/deployments", h.ListServiceDeployments)
 			protected.GET("/services/:id/deployments/latest", h.GetLatestDeployment)
 			protected.GET("/deployments/:id", h.GetDeployment)
@@ -346,6 +355,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			// Usage & Billing
 			protected.GET("/usage", h.GetUsageSummary)
 			protected.GET("/usage/costs", h.GetCostBreakdown)
+			protected.GET("/usage/realtime", h.GetRealTimeMetrics)
 
 			// Global Domains (cross-service domain management)
 			protected.GET("/domains", h.GetAllDomains)
@@ -384,6 +394,27 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.POST("/addons/:id/bindings", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateAddonBinding)
 			protected.DELETE("/addons/:id/bindings/:service_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteAddonBinding)
 			protected.GET("/services/:id/bindings", h.GetServiceBindings)
+
+			// Notification Webhooks (Slack/Discord/Telegram/Custom)
+			protected.POST("/projects/:slug/webhooks", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateWebhook)
+			protected.GET("/projects/:slug/webhooks", h.ListWebhooks)
+			protected.GET("/webhooks/event-types", h.GetWebhookEventTypes)
+			protected.GET("/webhooks/:id", h.GetWebhook)
+			protected.PATCH("/webhooks/:id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateWebhook)
+			protected.DELETE("/webhooks/:id", h.auth.RequireRole(string(types.RoleAdmin)), h.DeleteWebhook)
+			protected.POST("/webhooks/:id/test", h.auth.RequireRole(string(types.RoleDeveloper)), h.TestWebhook)
+			protected.GET("/webhooks/:id/deliveries", h.ListWebhookDeliveries)
+			protected.POST("/webhooks/:id/deliveries/:delivery_id/retry", h.auth.RequireRole(string(types.RoleDeveloper)), h.RetryWebhookDelivery)
+
+			// Templates (Starter templates and marketplace)
+			protected.GET("/templates", h.ListTemplates)
+			protected.GET("/templates/featured", h.GetFeaturedTemplates)
+			protected.GET("/templates/filters", h.GetTemplateFilters)
+			protected.GET("/templates/search", h.SearchTemplates)
+			protected.GET("/templates/:slug", h.GetTemplate)
+			protected.POST("/templates/:slug/deploy", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeployTemplate)
+			protected.GET("/templates/deployments/:id", h.GetTemplateDeployment)
+			protected.POST("/templates/import", h.auth.RequireRole(string(types.RoleDeveloper)), h.ImportTemplateFromGitHub)
 		}
 	}
 }

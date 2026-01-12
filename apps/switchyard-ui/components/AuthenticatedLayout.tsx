@@ -21,6 +21,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
     { name: 'Dashboard', href: '/' },
     { name: 'Projects', href: '/projects' },
     { name: 'Services', href: '/services' },
+    { name: 'Templates', href: '/templates' },
     { name: 'Databases', href: '/databases' },
     { name: 'Deployments', href: '/deployments' },
     { name: 'Domains', href: '/domains' },

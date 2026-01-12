@@ -28,6 +28,7 @@ import (
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/addons"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/notifications"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/reconciler"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/topology"
@@ -347,6 +348,12 @@ func main() {
 	// Wire up addon service (database add-ons)
 	apiHandler.SetAddonService(addonService)
 	logrus.Info("✓ Addon service wired to API handler")
+
+	// Initialize notification service (Slack/Discord/Telegram webhooks)
+	notificationService := notifications.NewService(repos.Webhooks, logrus.StandardLogger())
+	apiHandler.SetNotificationService(notificationService)
+	reconcilerController.SetNotificationService(notificationService)
+	logrus.Info("✓ Notification service wired to API handler and reconciler (Slack/Discord/Telegram)")
 
 	api.SetupRoutes(router, apiHandler)
 

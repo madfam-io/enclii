@@ -15,6 +15,7 @@ import (
 type Service struct {
 	git          *GitService
 	builder      *BuildpacksBuilder
+	buildCache   *BuildCache
 	sbomGen      *sbom.Generator
 	signer       *signing.Signer
 	logger       *logrus.Logger
@@ -23,6 +24,7 @@ type Service struct {
 	timeout      time.Duration
 	generateSBOM bool // Enable/disable SBOM generation
 	signImages   bool // Enable/disable image signing
+	useCache     bool // Enable/disable build caching
 }
 
 type Config struct {
@@ -32,13 +34,19 @@ type Config struct {
 	RegistryPassword string
 	CacheDir         string
 	Timeout          time.Duration
-	GenerateSBOM     bool // Enable SBOM generation (requires Syft)
-	SignImages       bool // Enable image signing (requires Cosign)
+	GenerateSBOM     bool         // Enable SBOM generation (requires Syft)
+	SignImages       bool         // Enable image signing (requires Cosign)
+	UseCache         bool         // Enable build layer caching
+	CachePrefix      string       // Cache image prefix (e.g., "cache")
+	R2Client         R2Uploader   // R2 client for cache metadata storage
 }
 
 func NewService(cfg *Config, logger *logrus.Logger) *Service {
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 30 * time.Minute
+	}
+	if cfg.CachePrefix == "" {
+		cfg.CachePrefix = "build-cache"
 	}
 
 	sbomGenerator := sbom.NewGenerator(5 * time.Minute)
@@ -68,9 +76,26 @@ func NewService(cfg *Config, logger *logrus.Logger) *Service {
 		}
 	}
 
+	// Initialize build cache if enabled
+	var buildCache *BuildCache
+	useCache := cfg.UseCache
+	if useCache && cfg.R2Client != nil {
+		buildCache = NewBuildCache(cfg.Registry, cfg.CachePrefix, cfg.R2Client, cfg.CacheDir)
+		logger.Info("✓ Build caching enabled (R2 storage configured)")
+	} else if useCache {
+		logger.Warn("Build caching disabled: R2 client not configured")
+		useCache = false
+	}
+
+	builder := NewBuildpacksBuilder(cfg.Registry, cfg.RegistryUsername, cfg.RegistryPassword, cfg.CacheDir, cfg.Timeout)
+	if buildCache != nil {
+		builder.SetBuildCache(buildCache)
+	}
+
 	return &Service{
 		git:          NewGitService(cfg.WorkDir),
-		builder:      NewBuildpacksBuilder(cfg.Registry, cfg.RegistryUsername, cfg.RegistryPassword, cfg.CacheDir, cfg.Timeout),
+		builder:      builder,
+		buildCache:   buildCache,
 		sbomGen:      sbomGenerator,
 		signer:       imageSigner,
 		logger:       logger,
@@ -79,6 +104,7 @@ func NewService(cfg *Config, logger *logrus.Logger) *Service {
 		timeout:      cfg.Timeout,
 		generateSBOM: generateSBOM,
 		signImages:   signImages,
+		useCache:     useCache,
 	}
 }
 
@@ -95,6 +121,8 @@ type CompleteBuildResult struct {
 	SBOMGenerated bool                // Whether SBOM was successfully generated
 	Signature     *signing.SignResult // Image signature information
 	ImageSigned   bool                // Whether image was successfully signed
+	CacheHit      bool                // Whether build used cached layers
+	CacheImage    string              // Cache image URI used
 }
 
 // BuildFromGit clones a repository and builds it
@@ -145,6 +173,8 @@ func (s *Service) BuildFromGit(ctx context.Context, service *types.Service, gitS
 	// Success!
 	result.ImageURI = buildResult.ImageURI
 	result.Success = true
+	result.CacheHit = buildResult.CacheHit
+	result.CacheImage = buildResult.CacheImage
 	result.Logs = append(result.Logs, buildResult.Logs...)
 
 	// Step 3: Generate SBOM (if enabled)
@@ -243,5 +273,27 @@ func (s *Service) GetBuildStatus() map[string]interface{} {
 		}
 	}
 
+	// Check if build caching is enabled
+	status["cache_enabled"] = s.useCache
+	if s.useCache && s.buildCache != nil {
+		status["cache_available"] = true
+	}
+
 	return status
+}
+
+// GetCacheStats returns build cache performance statistics
+func (s *Service) GetCacheStats(ctx context.Context, projectID string) (*CacheStats, error) {
+	if s.buildCache == nil {
+		return nil, fmt.Errorf("build cache not configured")
+	}
+	return s.buildCache.GetCacheStats(ctx, projectID)
+}
+
+// CleanupCache removes old cache entries for a project
+func (s *Service) CleanupCache(ctx context.Context, projectID string, maxAge time.Duration) (int, error) {
+	if s.buildCache == nil {
+		return 0, fmt.Errorf("build cache not configured")
+	}
+	return s.buildCache.CleanupOldCaches(ctx, projectID, maxAge)
 }

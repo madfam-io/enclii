@@ -78,13 +78,13 @@ data:
 
       # Landing Page (apex domain)
       - hostname: enclii.dev
-        service: http://landing-page.enclii.svc.cluster.local:4204
+        service: http://landing-page.enclii.svc.cluster.local:80
         originRequest:
           httpHostHeader: enclii.dev
 
       # Landing Page (www subdomain)
       - hostname: www.enclii.dev
-        service: http://landing-page.enclii.svc.cluster.local:4204
+        service: http://landing-page.enclii.svc.cluster.local:80
         originRequest:
           httpHostHeader: www.enclii.dev
 
