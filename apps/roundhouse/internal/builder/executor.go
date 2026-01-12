@@ -201,7 +201,20 @@ func (e *Executor) detectBuildType(buildDir string, config *queue.BuildConfig) s
 		dockerfilePath = "Dockerfile"
 	}
 
-	fullPath := filepath.Join(buildDir, dockerfilePath)
+	contextPath := config.Context
+	if contextPath == "" {
+		contextPath = "."
+	}
+
+	// Build the full path to the Dockerfile, considering context
+	// If dockerfile is a relative name (not a path) and context is not root,
+	// look for it inside the context directory
+	searchPath := dockerfilePath
+	if contextPath != "." && !filepath.IsAbs(dockerfilePath) && !strings.Contains(dockerfilePath, "/") {
+		searchPath = filepath.Join(contextPath, dockerfilePath)
+	}
+
+	fullPath := filepath.Join(buildDir, searchPath)
 	if _, err := os.Stat(fullPath); err == nil {
 		config.Dockerfile = dockerfilePath
 		return "dockerfile"
@@ -237,12 +250,20 @@ func (e *Executor) buildDockerfile(ctx context.Context, job *queue.BuildJob, bui
 		contextPath = "."
 	}
 
+	// If dockerfile is a relative name (not a path) and context is not root,
+	// we need to prefix the dockerfile with the context path so Docker can find it.
+	// Example: context="apps/waybill", dockerfile="Dockerfile" -> "apps/waybill/Dockerfile"
+	dockerfilePath := dockerfile
+	if contextPath != "." && !filepath.IsAbs(dockerfile) && !strings.Contains(dockerfile, "/") {
+		dockerfilePath = filepath.Join(contextPath, dockerfile)
+	}
+
 	imageTag := e.generateImageTag(job)
 
 	args := []string{
 		"build",
 		"-t", imageTag,
-		"-f", dockerfile,
+		"-f", dockerfilePath,
 	}
 
 	// Add build args
@@ -265,7 +286,7 @@ func (e *Executor) buildDockerfile(ctx context.Context, job *queue.BuildJob, bui
 
 	args = append(args, contextPath)
 
-	e.log(job.ID, "🐳 Building Dockerfile: %s", dockerfile)
+	e.log(job.ID, "🐳 Building Dockerfile: %s (context: %s)", dockerfilePath, contextPath)
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = buildDir
