@@ -85,6 +85,7 @@ type BuildConfig struct {
 	Type       BuildType `json:"type"`
 	Dockerfile string    `json:"dockerfile,omitempty"`
 	Buildpack  string    `json:"buildpack,omitempty"`
+	Context    string    `json:"context,omitempty"`
 }
 
 type BuildType string
