@@ -6,12 +6,12 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Copy go mod files (support repo root context with apps/roundhouse/ path)
+COPY apps/roundhouse/go.mod apps/roundhouse/go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY . .
+COPY apps/roundhouse/ .
 
 # Build API binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o /roundhouse-api ./cmd/api
