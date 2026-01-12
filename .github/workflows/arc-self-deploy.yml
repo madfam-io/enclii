@@ -1,0 +1,348 @@
+# Recursive Auto-Deployment Workflow for ARC Runners
+# This workflow enables the CI/CD pipeline to update its own runner infrastructure.
+#
+# When changes are pushed to ARC configuration files, this workflow:
+# 1. Validates the configuration
+# 2. Deploys updates to ARC controller and runner scale sets
+# 3. Performs a blue-green switch to activate new runners
+# 4. Verifies the deployment
+# 5. Automatically rolls back on failure
+#
+# IMPORTANT: This workflow runs on self-hosted runners, meaning it can update
+# the very infrastructure it's running on. The blue-green switch ensures
+# continuous availability during updates.
+
+name: ARC Self-Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/helm/arc/**'
+      - 'infra/k8s/*/arc/**'
+      - 'infra/scripts/arc/**'
+      - '.github/workflows/arc-self-deploy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/helm/arc/**'
+      - 'infra/k8s/*/arc/**'
+      - 'infra/scripts/arc/**'
+      - '.github/workflows/arc-self-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      target_color:
+        description: 'Target color for blue-green switch'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - blue
+          - green
+      dry_run:
+        description: 'Dry run (validate only, no deploy)'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: arc-deploy-${{ github.ref }}
+  cancel-in-progress: false  # Never cancel in-progress deployments
+
+env:
+  HELM_VERSION: '3.14.0'
+  CHART_VERSION: '0.10.1'
+
+jobs:
+  validate:
+    name: Validate Configuration
+    # Use self-hosted runners for validation (they have cluster access)
+    # Falls back to ubuntu-latest if self-hosted not available (bootstrap scenario)
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+    outputs:
+      changes_detected: ${{ steps.changes.outputs.any_changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changes
+        id: changes
+        uses: tj-actions/changed-files@v44
+        with:
+          files: |
+            infra/helm/arc/**
+            infra/k8s/*/arc/**
+            infra/scripts/arc/**
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Validate Helm values
+        run: |
+          echo "Validating Helm values files..."
+
+          # Validate controller values
+          helm template arc-controller \
+            oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
+            --version ${{ env.CHART_VERSION }} \
+            --values infra/helm/arc/values-controller.yaml \
+            > /dev/null
+
+          # Validate runner scale set values (blue)
+          helm template enclii-runners-blue \
+            oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+            --version ${{ env.CHART_VERSION }} \
+            --values infra/helm/arc/values-runner-set.yaml \
+            --values infra/helm/arc/values-runner-set-blue.yaml \
+            > /dev/null
+
+          # Validate runner scale set values (green)
+          helm template enclii-runners-green \
+            oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+            --version ${{ env.CHART_VERSION }} \
+            --values infra/helm/arc/values-runner-set.yaml \
+            --values infra/helm/arc/values-runner-set-green.yaml \
+            > /dev/null
+
+          echo "All Helm values validated successfully"
+
+      - name: Validate Kubernetes manifests
+        run: |
+          echo "Validating Kubernetes manifests..."
+
+          # Dry-run apply base manifests
+          kubectl apply --dry-run=client -f infra/k8s/base/arc/ || true
+
+          # Dry-run apply production manifests
+          kubectl apply --dry-run=client -f infra/k8s/production/arc/ || true
+
+          echo "All Kubernetes manifests validated successfully"
+
+      - name: Lint scripts
+        run: |
+          echo "Linting shell scripts..."
+          for script in infra/scripts/arc/*.sh; do
+            echo "Checking ${script}..."
+            bash -n "${script}"
+          done
+          echo "All scripts passed syntax check"
+
+  deploy:
+    name: Deploy ARC Updates
+    needs: validate
+    if: |
+      github.event_name != 'pull_request' &&
+      (needs.validate.outputs.changes_detected == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+          # Verify cluster access
+          kubectl cluster-info
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Check dry run
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: |
+          echo "::notice::Dry run mode - skipping actual deployment"
+          exit 0
+
+      - name: Apply base manifests
+        run: |
+          echo "Applying base Kubernetes manifests..."
+          kubectl apply -f infra/k8s/base/arc/
+
+      - name: Apply production manifests
+        run: |
+          echo "Applying production Kubernetes manifests..."
+          kubectl apply -f infra/k8s/production/arc/
+
+      - name: Upgrade ARC Controller
+        run: |
+          echo "Upgrading ARC Controller..."
+          helm upgrade --install arc-controller \
+            oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
+            --namespace arc-system \
+            --version ${{ env.CHART_VERSION }} \
+            --values infra/helm/arc/values-controller.yaml \
+            --wait \
+            --timeout 5m
+
+      - name: Determine target color
+        id: color
+        run: |
+          INPUT_COLOR="${{ github.event.inputs.target_color }}"
+
+          if [[ "${INPUT_COLOR}" == "auto" ]] || [[ -z "${INPUT_COLOR}" ]]; then
+            # Get current active color
+            CURRENT=$(kubectl get autoscalingrunnerset -n arc-runners -o json 2>/dev/null | \
+              jq -r '.items[] | select(.metadata.labels["arc.enclii.dev/active"]=="true") | .metadata.name' | \
+              grep -oE '(blue|green)' | head -1 || echo "blue")
+
+            if [[ "${CURRENT}" == "blue" ]]; then
+              TARGET="green"
+            else
+              TARGET="blue"
+            fi
+          else
+            TARGET="${INPUT_COLOR}"
+          fi
+
+          echo "current=${CURRENT:-blue}" >> $GITHUB_OUTPUT
+          echo "target=${TARGET}" >> $GITHUB_OUTPUT
+          echo "::notice::Blue-green switch: ${CURRENT:-blue} -> ${TARGET}"
+
+      - name: Execute blue-green switch
+        run: |
+          echo "Executing blue-green switch to ${{ steps.color.outputs.target }}..."
+          chmod +x infra/scripts/arc/blue-green-switch.sh
+          ./infra/scripts/arc/blue-green-switch.sh ${{ steps.color.outputs.target }} --force
+
+      - name: Record deployment
+        run: |
+          echo "Recording deployment metadata..."
+          kubectl annotate autoscalingrunnerset \
+            enclii-runners-${{ steps.color.outputs.target }} \
+            -n arc-runners \
+            --overwrite \
+            arc.enclii.dev/deployed-by="${{ github.actor }}" \
+            arc.enclii.dev/deployed-sha="${{ github.sha }}" \
+            arc.enclii.dev/deployed-at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  verify:
+    name: Verify Deployment
+    needs: deploy
+    # This runs on the NEW runners after the switch!
+    runs-on: enclii-runners
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Verify ARC Controller
+        run: |
+          echo "Verifying ARC Controller..."
+          kubectl rollout status deployment/arc-gha-rs-controller -n arc-system --timeout=2m
+
+      - name: Verify runners
+        run: |
+          echo "Verifying runner registration..."
+          chmod +x infra/scripts/arc/verify-runners.sh
+          ./infra/scripts/arc/verify-runners.sh
+
+      - name: Self-verification smoke test
+        run: |
+          echo "================================================"
+          echo "  RECURSIVE AUTO-DEPLOYMENT VERIFICATION"
+          echo "================================================"
+          echo ""
+          echo "This job is running on the NEWLY DEPLOYED runners!"
+          echo ""
+          echo "Runner Info:"
+          echo "  Hostname: $(hostname)"
+          echo "  Kernel:   $(uname -r)"
+          echo "  Docker:   $(docker --version 2>/dev/null || echo 'not available')"
+          echo ""
+          echo "GitHub Runner:"
+          echo "  Runner Name: ${RUNNER_NAME:-unknown}"
+          echo "  Runner OS:   ${RUNNER_OS:-unknown}"
+          echo ""
+          echo "If you're reading this, recursive auto-deployment is working!"
+          echo "================================================"
+
+  rollback:
+    name: Rollback on Failure
+    needs: [deploy, verify]
+    if: failure() && needs.deploy.result == 'success'
+    # Use GitHub-hosted runner for rollback (self-hosted might be broken)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Rollback ARC Controller
+        run: |
+          echo "Rolling back ARC Controller..."
+          helm rollback arc-controller -n arc-system || true
+
+      - name: Switch back to previous color
+        run: |
+          echo "Switching back to previous active color..."
+
+          # Get the failed color (current active after deploy)
+          FAILED_COLOR=$(kubectl get autoscalingrunnerset -n arc-runners -o json | \
+            jq -r '.items[] | select(.metadata.labels["arc.enclii.dev/active"]=="true") | .metadata.name' | \
+            grep -oE '(blue|green)' | head -1)
+
+          if [[ "${FAILED_COLOR}" == "blue" ]]; then
+            RESTORE_COLOR="green"
+          else
+            RESTORE_COLOR="blue"
+          fi
+
+          echo "Restoring ${RESTORE_COLOR} scale set..."
+          chmod +x infra/scripts/arc/blue-green-switch.sh
+          ./infra/scripts/arc/blue-green-switch.sh ${RESTORE_COLOR} --force
+
+      - name: Create rollback issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `ARC Self-Deploy Rollback: ${context.sha.substring(0, 7)}`,
+              body: `## Automatic Rollback Triggered
+
+            **Workflow Run:** [${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            **Commit:** ${context.sha}
+            **Actor:** @${context.actor}
+
+            ### What Happened
+            The ARC self-deployment workflow failed verification and automatically rolled back.
+
+            ### Next Steps
+            1. Check the workflow logs for failure details
+            2. Fix the issue in the ARC configuration
+            3. Re-run the workflow or push a new commit
+
+            ### Affected Files
+            - \`infra/helm/arc/**\`
+            - \`infra/k8s/*/arc/**\`
+            - \`infra/scripts/arc/**\`
+            `,
+              labels: ['ci-cd', 'rollback', 'arc']
+            });

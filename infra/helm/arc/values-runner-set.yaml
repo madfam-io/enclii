@@ -1,0 +1,119 @@
+# Shared configuration for runner scale sets
+# Blue and green scale sets inherit from this base configuration
+# Helm chart: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
+
+githubConfigUrl: "https://github.com/madfam-org"
+githubConfigSecret: github-app-secret
+
+runnerGroup: "default"
+
+# Auto-scaling configuration
+minRunners: 1
+maxRunners: 6
+
+# Container mode: Docker-in-Docker for building images
+containerMode:
+  type: "dind"
+
+# Runner pod template
+template:
+  spec:
+    serviceAccountName: arc-runner
+    securityContext:
+      fsGroup: 1000
+
+    # Init container to setup permissions
+    initContainers:
+      - name: init-permissions
+        image: busybox:1.36
+        command: ['sh', '-c', 'chown -R 1000:1000 /home/runner/_work || true']
+        volumeMounts:
+          - name: work
+            mountPath: /home/runner/_work
+
+    containers:
+      # Main runner container
+      - name: runner
+        image: ghcr.io/actions/actions-runner:2.321.0
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: "500m"
+            memory: 1Gi
+        env:
+          - name: DOCKER_HOST
+            value: tcp://localhost:2376
+          - name: DOCKER_TLS_VERIFY
+            value: "1"
+          - name: DOCKER_CERT_PATH
+            value: /certs/client
+          # Go module cache
+          - name: GOPATH
+            value: /home/runner/go
+          - name: GOCACHE
+            value: /home/runner/go/cache
+          # npm cache
+          - name: npm_config_cache
+            value: /home/runner/.npm
+        volumeMounts:
+          - name: docker-certs
+            mountPath: /certs/client
+            readOnly: true
+          - name: work
+            mountPath: /home/runner/_work
+          - name: go-cache
+            mountPath: /home/runner/go
+          - name: npm-cache
+            mountPath: /home/runner/.npm
+
+      # Docker-in-Docker sidecar
+      - name: dind
+        image: docker:26.1-dind
+        securityContext:
+          privileged: true
+        resources:
+          limits:
+            cpu: "2"
+            memory: 4Gi
+          requests:
+            cpu: "500m"
+            memory: 1Gi
+        env:
+          - name: DOCKER_TLS_CERTDIR
+            value: /certs
+        volumeMounts:
+          - name: docker-certs
+            mountPath: /certs
+          - name: work
+            mountPath: /home/runner/_work
+          - name: docker-cache
+            mountPath: /var/lib/docker
+        lifecycle:
+          preStop:
+            exec:
+              command: ["sh", "-c", "sleep 10"]
+
+    volumes:
+      - name: docker-certs
+        emptyDir: {}
+      - name: work
+        emptyDir: {}
+      # Cache volumes will be overridden by blue/green configs with PVCs
+
+    # Graceful termination
+    terminationGracePeriodSeconds: 300
+
+# Listener configuration
+listenerTemplate:
+  spec:
+    containers:
+      - name: listener
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi

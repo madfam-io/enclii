@@ -1,0 +1,46 @@
+# Blue runner scale set (primary)
+# This is the active scale set during normal operations
+# Usage: helm upgrade --install enclii-runners-blue \
+#          oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+#          --namespace arc-runners \
+#          --values values-runner-set.yaml \
+#          --values values-runner-set-blue.yaml
+
+runnerScaleSetName: "enclii-runners-blue"
+
+# Inherit shared config
+githubConfigUrl: "https://github.com/madfam-org"
+githubConfigSecret: github-app-secret
+
+minRunners: 1
+maxRunners: 6
+
+# Blue-specific labels for identification
+template:
+  metadata:
+    labels:
+      arc.enclii.dev/color: blue
+      arc.enclii.dev/active: "true"
+    annotations:
+      arc.enclii.dev/deployed-at: ""  # Will be set by Helm
+  spec:
+    # Node selector for future dedicated runner nodes
+    # nodeSelector:
+    #   node-role.kubernetes.io/runner: "true"
+
+    volumes:
+      - name: docker-certs
+        emptyDir: {}
+      - name: work
+        emptyDir: {}
+      # Shared caches across blue/green
+      - name: go-cache
+        persistentVolumeClaim:
+          claimName: arc-go-cache
+      - name: npm-cache
+        persistentVolumeClaim:
+          claimName: arc-npm-cache
+      # Blue-specific Docker cache (isolated for clean rebuilds)
+      - name: docker-cache
+        persistentVolumeClaim:
+          claimName: arc-docker-cache-blue

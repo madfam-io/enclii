@@ -1,0 +1,194 @@
+# Prometheus monitoring for ARC
+# Requires prometheus-operator CRDs (ServiceMonitor, PrometheusRule)
+---
+# ServiceMonitor for ARC Controller metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: arc-controller
+  namespace: arc-system
+  labels:
+    app.kubernetes.io/name: arc
+    app.kubernetes.io/component: controller
+    release: prometheus  # Match your Prometheus Helm release label
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gha-rs-controller
+  namespaceSelector:
+    matchNames:
+      - arc-system
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      scheme: http
+---
+# PrometheusRule for ARC alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: arc-alerts
+  namespace: arc-system
+  labels:
+    app.kubernetes.io/name: arc
+    app.kubernetes.io/component: controller
+    release: prometheus
+spec:
+  groups:
+    - name: arc.rules
+      rules:
+        # Critical: ARC Controller is down
+        - alert: ARCControllerDown
+          expr: up{job="arc-controller"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            service: arc
+          annotations:
+            summary: "ARC Controller is down"
+            description: "ARC Controller has been down for more than 5 minutes. Self-hosted runners cannot scale."
+            runbook_url: "https://github.com/madfam-org/enclii/blob/main/docs/runbooks/arc-controller-down.md"
+
+        # Warning: No runners available
+        - alert: ARCNoRunnersAvailable
+          expr: |
+            arc_runner_scale_set_min_runners > 0
+            and arc_runner_scale_set_available_runners == 0
+          for: 10m
+          labels:
+            severity: warning
+            service: arc
+          annotations:
+            summary: "No ARC runners available"
+            description: "No runners available for scale set {{ $labels.scale_set_name }} for more than 10 minutes."
+            runbook_url: "https://github.com/madfam-org/enclii/blob/main/docs/runbooks/arc-no-runners.md"
+
+        # Warning: Job queue backlog
+        - alert: ARCRunnerQueueBacklog
+          expr: arc_runner_scale_set_pending_jobs > 10
+          for: 15m
+          labels:
+            severity: warning
+            service: arc
+          annotations:
+            summary: "ARC runner queue backlog"
+            description: "More than 10 jobs pending for {{ $labels.scale_set_name }} for 15 minutes. Consider increasing maxRunners."
+            runbook_url: "https://github.com/madfam-org/enclii/blob/main/docs/runbooks/arc-queue-backlog.md"
+
+        # Warning: Runner pods failing
+        - alert: ARCRunnerPodsFailing
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="arc-runners"}[1h]) > 5
+          for: 5m
+          labels:
+            severity: warning
+            service: arc
+          annotations:
+            summary: "ARC runner pods are restarting frequently"
+            description: "Runner pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour."
+            runbook_url: "https://github.com/madfam-org/enclii/blob/main/docs/runbooks/arc-pod-restarts.md"
+
+        # Info: Scale set at max capacity
+        - alert: ARCScaleSetAtMaxCapacity
+          expr: |
+            arc_runner_scale_set_running_runners == arc_runner_scale_set_max_runners
+            and arc_runner_scale_set_pending_jobs > 0
+          for: 30m
+          labels:
+            severity: info
+            service: arc
+          annotations:
+            summary: "ARC scale set at maximum capacity"
+            description: "Scale set {{ $labels.scale_set_name }} is at max capacity ({{ $value }} runners) with pending jobs."
+
+    - name: arc.recording.rules
+      rules:
+        # Record total runner usage
+        - record: arc:runner_utilization:ratio
+          expr: |
+            arc_runner_scale_set_running_runners / arc_runner_scale_set_max_runners
+
+        # Record queue depth over time
+        - record: arc:queue_depth:avg_5m
+          expr: |
+            avg_over_time(arc_runner_scale_set_pending_jobs[5m])
+---
+# Grafana Dashboard ConfigMap (optional - for dashboard-as-code)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: arc-grafana-dashboard
+  namespace: arc-system
+  labels:
+    grafana_dashboard: "1"  # Label for Grafana sidecar to pick up
+data:
+  arc-dashboard.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 3},
+                  {"color": "red", "value": 5}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "id": 1,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": ["lastNotNull"],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "pluginVersion": "9.5.0",
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "prometheus"},
+              "expr": "arc_runner_scale_set_pending_jobs",
+              "refId": "A"
+            }
+          ],
+          "title": "Pending Jobs",
+          "type": "gauge"
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["arc", "ci-cd", "runners"],
+      "templating": {"list": []},
+      "time": {"from": "now-6h", "to": "now"},
+      "timepicker": {},
+      "timezone": "",
+      "title": "ARC - GitHub Actions Runners",
+      "uid": "arc-runners",
+      "version": 1
+    }

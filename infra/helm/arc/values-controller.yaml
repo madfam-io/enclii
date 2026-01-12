@@ -1,0 +1,71 @@
+# GitHub Actions Runner Controller
+# Helm chart: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller
+# Documentation: https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/actions/gha-runner-scale-set-controller
+  tag: "0.10.1"  # Pin version for stability
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Metrics for Prometheus
+metrics:
+  enabled: true
+  port: 8080
+
+# Pod disruption budget for HA
+podDisruptionBudget:
+  minAvailable: 1
+
+# Affinity for spreading across nodes (future multi-node)
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: gha-rs-controller
+          topologyKey: kubernetes.io/hostname
+
+# Tolerations for dedicated runner nodes (future)
+tolerations: []
+
+# Service account with minimal permissions
+serviceAccount:
+  create: true
+  name: arc-controller
+
+# Controller-specific settings
+flags:
+  # Log level: debug, info, warn, error
+  logLevel: info
+  # Log format: text, json
+  logFormat: json
+  # Watch all namespaces for AutoScalingRunnerSet resources
+  watchSingleNamespace: ""
+
+# Leader election for HA
+leaderElection:
+  enabled: true
+
+# Webhook configuration (for scale-from-zero)
+# Note: Requires Cloudflare Tunnel route to arc-webhook.enclii.dev
+webhookServer:
+  enabled: false  # Start with polling mode, enable webhook after verification
