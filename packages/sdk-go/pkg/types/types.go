@@ -579,3 +579,157 @@ type APITokenCreateResponse struct {
 	Prefix   string    `json:"prefix"`    // Display prefix
 	ExpireAt *string   `json:"expire_at"` // ISO8601 expiration (if set)
 }
+
+// ============================================================================
+// DATABASE ADDON TYPES
+// One-click database provisioning for PostgreSQL, Redis, MySQL
+// Matches Railway's core value proposition
+// ============================================================================
+
+// DatabaseAddonType represents the type of database addon
+type DatabaseAddonType string
+
+const (
+	DatabaseAddonTypePostgres DatabaseAddonType = "postgres"
+	DatabaseAddonTypeRedis    DatabaseAddonType = "redis"
+	DatabaseAddonTypeMySQL    DatabaseAddonType = "mysql"
+)
+
+// DatabaseAddonStatus represents the provisioning status of a database addon
+type DatabaseAddonStatus string
+
+const (
+	DatabaseAddonStatusPending      DatabaseAddonStatus = "pending"
+	DatabaseAddonStatusProvisioning DatabaseAddonStatus = "provisioning"
+	DatabaseAddonStatusReady        DatabaseAddonStatus = "ready"
+	DatabaseAddonStatusFailed       DatabaseAddonStatus = "failed"
+	DatabaseAddonStatusDeleting     DatabaseAddonStatus = "deleting"
+	DatabaseAddonStatusDeleted      DatabaseAddonStatus = "deleted"
+)
+
+// DatabaseAddonConfig represents the configuration for a database addon
+type DatabaseAddonConfig struct {
+	Version   string `json:"version,omitempty"`    // e.g., "16" for PostgreSQL 16
+	StorageGB int    `json:"storage_gb,omitempty"` // Storage size in GB
+	CPU       string `json:"cpu,omitempty"`        // CPU request/limit (e.g., "100m", "500m")
+	Memory    string `json:"memory,omitempty"`     // Memory request/limit (e.g., "256Mi", "1Gi")
+	HAEnabled bool   `json:"ha_enabled,omitempty"` // High availability mode
+	Replicas  int    `json:"replicas,omitempty"`   // Number of replicas (for HA)
+}
+
+// DatabaseAddon represents a provisioned database instance
+type DatabaseAddon struct {
+	ID            uuid.UUID           `json:"id" db:"id"`
+	ProjectID     uuid.UUID           `json:"project_id" db:"project_id"`
+	EnvironmentID *uuid.UUID          `json:"environment_id,omitempty" db:"environment_id"`
+	Type          DatabaseAddonType   `json:"type" db:"type"`
+	Name          string              `json:"name" db:"name"`
+	Status        DatabaseAddonStatus `json:"status" db:"status"`
+	StatusMessage string              `json:"status_message,omitempty" db:"status_message"`
+	Config        DatabaseAddonConfig `json:"config" db:"config"`
+
+	// Kubernetes resources
+	K8sNamespace     string `json:"k8s_namespace,omitempty" db:"k8s_namespace"`
+	K8sResourceName  string `json:"k8s_resource_name,omitempty" db:"k8s_resource_name"`
+	ConnectionSecret string `json:"connection_secret,omitempty" db:"connection_secret"`
+
+	// Connection info (populated after provisioning)
+	Host         string `json:"host,omitempty" db:"host"`
+	Port         int    `json:"port,omitempty" db:"port"`
+	DatabaseName string `json:"database_name,omitempty" db:"database_name"`
+	Username     string `json:"username,omitempty" db:"username"`
+
+	// Resource tracking
+	StorageUsedBytes  int64      `json:"storage_used_bytes" db:"storage_used_bytes"`
+	ConnectionsActive int        `json:"connections_active" db:"connections_active"`
+	LastBackupAt      *time.Time `json:"last_backup_at,omitempty" db:"last_backup_at"`
+
+	// Audit fields
+	CreatedBy      *uuid.UUID `json:"created_by,omitempty" db:"created_by"`
+	CreatedByEmail string     `json:"created_by_email,omitempty" db:"created_by_email"`
+
+	// Timestamps
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
+	ProvisionedAt *time.Time `json:"provisioned_at,omitempty" db:"provisioned_at"`
+	DeletedAt     *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+}
+
+// DatabaseAddonBindingStatus represents the status of a service binding
+type DatabaseAddonBindingStatus string
+
+const (
+	DatabaseAddonBindingStatusActive    DatabaseAddonBindingStatus = "active"
+	DatabaseAddonBindingStatusSuspended DatabaseAddonBindingStatus = "suspended"
+	DatabaseAddonBindingStatusDeleted   DatabaseAddonBindingStatus = "deleted"
+)
+
+// DatabaseAddonBinding links a database addon to a service for env var injection
+type DatabaseAddonBinding struct {
+	ID         uuid.UUID                  `json:"id" db:"id"`
+	AddonID    uuid.UUID                  `json:"addon_id" db:"addon_id"`
+	ServiceID  uuid.UUID                  `json:"service_id" db:"service_id"`
+	EnvVarName string                     `json:"env_var_name" db:"env_var_name"` // e.g., "DATABASE_URL", "REDIS_URL"
+	Status     DatabaseAddonBindingStatus `json:"status" db:"status"`
+	CreatedAt  time.Time                  `json:"created_at" db:"created_at"`
+	UpdatedAt  time.Time                  `json:"updated_at" db:"updated_at"`
+}
+
+// DatabaseAddonBackupType represents the type of backup
+type DatabaseAddonBackupType string
+
+const (
+	DatabaseAddonBackupTypeScheduled DatabaseAddonBackupType = "scheduled"
+	DatabaseAddonBackupTypeManual    DatabaseAddonBackupType = "manual"
+	DatabaseAddonBackupTypePreDelete DatabaseAddonBackupType = "pre_delete"
+)
+
+// DatabaseAddonBackupStatus represents the status of a backup
+type DatabaseAddonBackupStatus string
+
+const (
+	DatabaseAddonBackupStatusPending    DatabaseAddonBackupStatus = "pending"
+	DatabaseAddonBackupStatusInProgress DatabaseAddonBackupStatus = "in_progress"
+	DatabaseAddonBackupStatusCompleted  DatabaseAddonBackupStatus = "completed"
+	DatabaseAddonBackupStatusFailed     DatabaseAddonBackupStatus = "failed"
+)
+
+// DatabaseAddonBackup represents a backup of a database addon
+type DatabaseAddonBackup struct {
+	ID            uuid.UUID                 `json:"id" db:"id"`
+	AddonID       uuid.UUID                 `json:"addon_id" db:"addon_id"`
+	BackupType    DatabaseAddonBackupType   `json:"backup_type" db:"backup_type"`
+	Status        DatabaseAddonBackupStatus `json:"status" db:"status"`
+	StatusMessage string                    `json:"status_message,omitempty" db:"status_message"`
+	StoragePath   string                    `json:"storage_path,omitempty" db:"storage_path"`
+	SizeBytes     int64                     `json:"size_bytes,omitempty" db:"size_bytes"`
+	StartedAt     *time.Time                `json:"started_at,omitempty" db:"started_at"`
+	CompletedAt   *time.Time                `json:"completed_at,omitempty" db:"completed_at"`
+	ExpiresAt     *time.Time                `json:"expires_at,omitempty" db:"expires_at"`
+	CreatedAt     time.Time                 `json:"created_at" db:"created_at"`
+}
+
+// DatabaseAddonCredentials contains connection credentials for a database addon
+// Returned by the credentials API endpoint (requires authentication)
+type DatabaseAddonCredentials struct {
+	Host         string `json:"host"`
+	Port         int    `json:"port"`
+	DatabaseName string `json:"database_name"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`     // Only exposed via secure API
+	ConnectionURI string `json:"connection_uri"` // Full connection string (e.g., postgres://user:pass@host:port/db)
+}
+
+// DatabaseAddonCreateRequest is the API request for creating a database addon
+type DatabaseAddonCreateRequest struct {
+	Name          string              `json:"name" binding:"required"`
+	Type          DatabaseAddonType   `json:"type" binding:"required"`
+	EnvironmentID *uuid.UUID          `json:"environment_id,omitempty"`
+	Config        DatabaseAddonConfig `json:"config,omitempty"`
+}
+
+// DatabaseAddonWithBindings includes the addon and its service bindings
+type DatabaseAddonWithBindings struct {
+	DatabaseAddon
+	Bindings []DatabaseAddonBinding `json:"bindings,omitempty"`
+}

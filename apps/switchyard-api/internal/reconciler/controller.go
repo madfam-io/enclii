@@ -270,13 +270,47 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 		envVars = make(map[string]string)
 	}
 
+	// Get database addon bindings for this service
+	var addonBindings []AddonBinding
+	if c.repositories.DatabaseAddons != nil {
+		bindings, err := c.repositories.DatabaseAddons.GetBindingsByService(ctx, service.ID)
+		if err != nil {
+			logger.WithError(err).Warn("Failed to get addon bindings, continuing without them")
+		} else {
+			for _, binding := range bindings {
+				// Get the addon details
+				addon, err := c.repositories.DatabaseAddons.GetByID(ctx, binding.AddonID)
+				if err != nil {
+					logger.WithError(err).WithField("addon_id", binding.AddonID).Warn("Failed to get addon for binding")
+					continue
+				}
+				// Only include ready addons
+				if addon.Status != types.DatabaseAddonStatusReady {
+					logger.WithFields(logrus.Fields{
+						"addon_id": addon.ID,
+						"status":   addon.Status,
+					}).Debug("Skipping non-ready addon binding")
+					continue
+				}
+				addonBindings = append(addonBindings, AddonBinding{
+					EnvVarName:       binding.EnvVarName,
+					AddonType:        addon.Type,
+					K8sNamespace:     addon.K8sNamespace,
+					K8sResourceName:  addon.K8sResourceName,
+					ConnectionSecret: addon.ConnectionSecret,
+				})
+			}
+		}
+	}
+
 	// Create reconcile request
 	req := &ReconcileRequest{
-		Service:     service,
-		Release:     release,
-		Deployment:  deployment,
-		Environment: environment,
-		EnvVars:     envVars,
+		Service:       service,
+		Release:       release,
+		Deployment:    deployment,
+		Environment:   environment,
+		EnvVars:       envVars,
+		AddonBindings: addonBindings,
 	}
 
 	// Perform reconciliation

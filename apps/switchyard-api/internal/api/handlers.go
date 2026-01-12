@@ -16,6 +16,7 @@ import (
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/middleware"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/provenance"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/addons"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/reconciler"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/topology"
@@ -34,6 +35,7 @@ type Handler struct {
 	deploymentService      *services.DeploymentService
 	deploymentGroupService *services.DeploymentGroupService
 	domainSyncService      *services.DomainSyncService
+	addonService           *addons.AddonService
 
 	// Infrastructure
 	config             *config.Config
@@ -124,6 +126,12 @@ func NewHandler(
 // This is optional - if not set, sync endpoints will return 503 Service Unavailable
 func (h *Handler) SetDomainSyncService(svc *services.DomainSyncService) {
 	h.domainSyncService = svc
+}
+
+// SetAddonService sets the addon service for database addon management
+// This is optional - if not set, addon endpoints will return 503 Service Unavailable
+func (h *Handler) SetAddonService(svc *addons.AddonService) {
+	h.addonService = svc
 }
 
 // SetupRoutes configures all API routes
@@ -365,6 +373,17 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/user/tokens", h.ListAPITokens)
 			protected.GET("/user/tokens/:token_id", h.GetAPIToken)
 			protected.DELETE("/user/tokens/:token_id", h.RevokeAPIToken)
+
+			// Database Add-ons (PostgreSQL, Redis, MySQL)
+			protected.POST("/projects/:slug/addons", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateAddon)
+			protected.GET("/projects/:slug/addons", h.ListAddons)
+			protected.GET("/addons/:id", h.GetAddon)
+			protected.GET("/addons/:id/credentials", h.GetAddonCredentials)
+			protected.POST("/addons/:id/refresh", h.RefreshAddonStatus)
+			protected.DELETE("/addons/:id", h.auth.RequireRole(string(types.RoleAdmin)), h.DeleteAddon)
+			protected.POST("/addons/:id/bindings", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateAddonBinding)
+			protected.DELETE("/addons/:id/bindings/:service_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteAddonBinding)
+			protected.GET("/services/:id/bindings", h.GetServiceBindings)
 		}
 	}
 }

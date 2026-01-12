@@ -36,6 +36,7 @@ type Repositories struct {
 	TeamMembers         *TeamMemberRepository
 	TeamInvitations     *TeamInvitationRepository
 	APITokens           *APITokenRepository
+	DatabaseAddons      *DatabaseAddonRepository
 }
 
 // WithTransaction executes the given function within a database transaction.
@@ -72,6 +73,7 @@ func (r *Repositories) WithTransaction(ctx context.Context, fn func(txRepos *Rep
 		TeamMembers:         NewTeamMemberRepositoryWithTx(tx),
 		TeamInvitations:     NewTeamInvitationRepositoryWithTx(tx),
 		APITokens:           NewAPITokenRepositoryWithTx(tx),
+		DatabaseAddons:      NewDatabaseAddonRepositoryWithTx(tx),
 	}
 
 	// Execute the function with transaction repositories
@@ -114,6 +116,7 @@ func NewRepositories(db *sql.DB) *Repositories {
 		TeamMembers:         NewTeamMemberRepository(db),
 		TeamInvitations:     NewTeamInvitationRepository(db),
 		APITokens:           NewAPITokenRepository(db),
+		DatabaseAddons:      NewDatabaseAddonRepository(db),
 	}
 }
 

@@ -27,6 +27,7 @@ import (
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/middleware"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/provenance"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/addons"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/reconciler"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/topology"
@@ -246,6 +247,15 @@ func main() {
 	)
 	logrus.Info("✓ DeploymentGroupService initialized")
 
+	// Initialize addon service (database add-ons: PostgreSQL, Redis, MySQL)
+	addonService := addons.NewAddonService(repos, k8sClient, logrus.StandardLogger())
+	logrus.Info("✓ AddonService initialized (PostgreSQL, Redis, MySQL add-ons)")
+
+	// Initialize and start addon reconciler (syncs database addon status from K8s)
+	addonReconciler := reconciler.NewAddonReconciler(repos, k8sClient, logrus.StandardLogger())
+	go addonReconciler.Start(ctx)
+	logrus.Info("✓ Addon reconciler started (syncing database addon status)")
+
 	// Initialize Roundhouse client (for async builds)
 	var roundhouseClient *clients.RoundhouseClient
 	if cfg.BuildMode == "roundhouse" {
@@ -334,6 +344,10 @@ func main() {
 		logrus.Info("✓ Domain sync service wired to API handler")
 	}
 
+	// Wire up addon service (database add-ons)
+	apiHandler.SetAddonService(addonService)
+	logrus.Info("✓ Addon service wired to API handler")
+
 	api.SetupRoutes(router, apiHandler)
 
 	server := &http.Server{
@@ -381,6 +395,10 @@ func main() {
 	// Stop reconciler controller gracefully
 	reconcilerController.Stop()
 	logrus.Info("Reconciler controller stopped")
+
+	// Stop addon reconciler
+	addonReconciler.Stop()
+	logrus.Info("Addon reconciler stopped")
 
 	if cacheService != nil {
 		if err := cacheService.Close(); err != nil {

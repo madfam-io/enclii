@@ -33,6 +33,16 @@ type ReconcileRequest struct {
 	CustomDomains []types.CustomDomain
 	Routes        []types.Route
 	EnvVars       map[string]string // User-defined environment variables (decrypted)
+	AddonBindings []AddonBinding    // Database addon bindings for env var injection
+}
+
+// AddonBinding represents a database addon bound to this service
+type AddonBinding struct {
+	EnvVarName       string                      // e.g., "DATABASE_URL", "REDIS_URL"
+	AddonType        types.DatabaseAddonType     // postgres, redis, mysql
+	K8sNamespace     string                      // Namespace where addon resources exist
+	K8sResourceName  string                      // Name of the addon K8s resource
+	ConnectionSecret string                      // K8s secret name with credentials (for postgres)
 }
 
 type ReconcileResult struct {
@@ -263,6 +273,10 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 			Value: value,
 		})
 	}
+
+	// Add database addon environment variables (injected from bindings)
+	addonEnvVars := buildAddonEnvVars(req.AddonBindings)
+	envVars = append(envVars, addonEnvVars...)
 
 	// Create deployment manifest
 	deployment := &appsv1.Deployment{
@@ -1025,4 +1039,66 @@ func (r *ServiceReconciler) GetPodEnvVars(ctx context.Context, namespace, podNam
 	}
 
 	return envVars, nil
+}
+
+// buildAddonEnvVars creates environment variables for database addon bindings
+// For PostgreSQL: References the CloudNativePG-generated secret
+// For Redis: Uses direct connection URL (no authentication by default)
+func buildAddonEnvVars(bindings []AddonBinding) []corev1.EnvVar {
+	var envVars []corev1.EnvVar
+
+	for _, binding := range bindings {
+		switch binding.AddonType {
+		case types.DatabaseAddonTypePostgres:
+			// CloudNativePG creates a secret named "<cluster>-app" with the connection URI
+			secretName := binding.ConnectionSecret
+			if secretName == "" {
+				// Default CloudNativePG naming convention
+				secretName = fmt.Sprintf("%s-app", binding.K8sResourceName)
+			}
+
+			envVars = append(envVars, corev1.EnvVar{
+				Name: binding.EnvVarName,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secretName,
+						},
+						Key: "uri",
+					},
+				},
+			})
+
+		case types.DatabaseAddonTypeRedis:
+			// Redis uses direct connection URL (no secret needed for basic setup)
+			redisURL := fmt.Sprintf("redis://%s.%s.svc.cluster.local:6379/0",
+				binding.K8sResourceName, binding.K8sNamespace)
+
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  binding.EnvVarName,
+				Value: redisURL,
+			})
+
+		case types.DatabaseAddonTypeMySQL:
+			// MySQL secret reference (similar to PostgreSQL)
+			secretName := binding.ConnectionSecret
+			if secretName == "" {
+				secretName = fmt.Sprintf("%s-credentials", binding.K8sResourceName)
+			}
+
+			envVars = append(envVars, corev1.EnvVar{
+				Name: binding.EnvVarName,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secretName,
+						},
+						Key: "uri",
+					},
+				},
+			})
+		}
+	}
+
+	return envVars
 }
