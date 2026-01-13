@@ -69,10 +69,12 @@ jobs:
         env:
           BASE_URL: http://localhost:3000
           CI: true
-          # TEST_USER_EMAIL and TEST_USER_PASSWORD would be set from secrets
-          # for authenticated tests in staging/production
-          # TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
-          # TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+          # Test user credentials (set via repository secrets)
+          # See: docs/guides/E2E_TEST_USERS_SETUP.md
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
 
       - name: Upload Playwright report
         if: always()

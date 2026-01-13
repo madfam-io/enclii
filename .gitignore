@@ -68,10 +68,12 @@ temp/
 
 # Secrets (NEVER commit)
 infra/k8s/production/oidc-secrets.yaml
+infra/k8s/production/backup/backup-secrets.yaml
 *-secrets.yaml
 secrets.dev.yaml
 secrets.*.yaml
 !*-secrets.example.yaml
+!*-secrets.yaml.template
 !*.TEMPLATE
 !secrets.yaml.TEMPLATE
 
@@ -90,3 +92,6 @@ playwright-report/
 playwright/.cache/
 test-results/
 .playwright/
+
+# Serena MCP
+.serena/
