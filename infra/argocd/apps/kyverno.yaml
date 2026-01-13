@@ -22,7 +22,9 @@ spec:
     helm:
       values: |
         # Kyverno configuration for Enclii
-        replicaCount: 2
+        # Note: Kyverno only supports 1 (standalone) or 3 (HA) replicas
+        # Using 1 for single-node cluster, change to 3 for multi-node
+        replicaCount: 1
 
         # Resource limits
         resources:
@@ -35,7 +37,7 @@ spec:
 
         # Admission controller configuration
         admissionController:
-          replicas: 2
+          replicas: 1
           serviceMonitor:
             enabled: true
 
