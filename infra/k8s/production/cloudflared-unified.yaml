@@ -95,6 +95,19 @@ data:
           httpHostHeader: docs.enclii.dev
 
       # ============================================
+      # GitOps / Platform Services (namespace: argocd)
+      # ============================================
+
+      # ArgoCD UI (GitOps Dashboard)
+      - hostname: argocd.enclii.dev
+        service: https://argocd-server.argocd.svc.cluster.local:443
+        originRequest:
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          httpHostHeader: argocd.enclii.dev
+          noTLSVerify: true  # ArgoCD uses self-signed cert internally
+
+      # ============================================
       # Janua Identity Services (namespace: janua)
       # ============================================
 

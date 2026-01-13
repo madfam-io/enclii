@@ -33,6 +33,28 @@ kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -
 
 ### 2. Access ArgoCD UI
 
+#### Option A: Via Cloudflare Tunnel (Production)
+
+After deploying the tunnel, ArgoCD is accessible at:
+- **URL**: https://argocd.enclii.dev
+- **Username**: admin
+- **Password**: See below
+
+```bash
+# Get admin password
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo
+```
+
+**DNS Setup** (in Cloudflare dashboard):
+```
+Type: CNAME
+Name: argocd
+Target: <your-tunnel-id>.cfargotunnel.com
+Proxied: Yes
+```
+
+#### Option B: Via Port Forward (Local Development)
+
 ```bash
 # Get initial admin password
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
@@ -140,6 +162,49 @@ argocd app resources core-services
 # View specific resource
 kubectl describe deployment switchyard-api -n enclii
 ```
+
+## Repository Credentials
+
+For private repos or OCI registries (ghcr.io), configure credentials:
+
+### Quick Setup (Recommended)
+
+```bash
+# Set your GitHub PAT (needs read:packages scope)
+export GITHUB_TOKEN="ghp_your_token_here"
+
+# Run the setup script
+chmod +x infra/argocd/setup-credentials.sh
+./infra/argocd/setup-credentials.sh
+```
+
+### Manual Setup
+
+```bash
+# Create OCI registry credentials for ghcr.io
+kubectl create secret generic ghcr-oci-creds \
+    --namespace=argocd \
+    --from-literal=url=ghcr.io \
+    --from-literal=type=helm \
+    --from-literal=enableOCI=true \
+    --from-literal=username=madfam-org \
+    --from-literal=password="${GITHUB_TOKEN}"
+
+kubectl label secret ghcr-oci-creds -n argocd \
+    argocd.argoproj.io/secret-type=repository
+```
+
+### Verify Credentials
+
+```bash
+# List configured credentials
+kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=repository
+
+# Test by syncing an OCI-based application
+kubectl patch application arc-runners -n argocd --type merge -p '{"operation":{"sync":{}}}'
+```
+
+See `repo-credentials.yaml` for a declarative template (requires secret management).
 
 ## Security
 

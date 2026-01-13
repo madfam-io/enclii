@@ -42,15 +42,21 @@ func main() {
 
 	logger.Info("connected to Redis")
 
-	// Ensure build work directory exists
-	if err := os.MkdirAll(cfg.BuildWorkDir, 0755); err != nil {
-		logger.Fatal("failed to create build work directory", zap.Error(err))
+	// Ensure build work directory exists (only needed for Docker mode)
+	if cfg.BuildMode == "docker" {
+		if err := os.MkdirAll(cfg.BuildWorkDir, 0755); err != nil {
+			logger.Fatal("failed to create build work directory", zap.Error(err))
+		}
 	}
 
-	// Create and start processor
-	processor := worker.NewProcessor(cfg, redisQueue, logger)
+	// Create processor with appropriate builder
+	processor, err := worker.NewProcessor(cfg, redisQueue, logger)
+	if err != nil {
+		logger.Fatal("failed to create processor", zap.Error(err))
+	}
 
 	logger.Info("starting Roundhouse worker",
+		zap.String("build_mode", cfg.BuildMode),
 		zap.String("work_dir", cfg.BuildWorkDir),
 		zap.Int("max_concurrent", cfg.MaxConcurrentBuilds),
 		zap.Duration("timeout", cfg.BuildTimeout),
