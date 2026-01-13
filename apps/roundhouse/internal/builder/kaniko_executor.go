@@ -182,11 +182,14 @@ func (e *KanikoExecutor) createBuildJob(ctx context.Context, job *queue.BuildJob
 	ttlSeconds := int32(3600)           // Clean up after 1 hour
 	activeDeadlineSeconds := int64(e.timeout.Seconds())
 
-	// Security context - run as non-root
-	runAsNonRoot := true
-	runAsUser := int64(1000)
-	runAsGroup := int64(1000)
-	fsGroup := int64(1000)
+	// Security context - Kaniko MUST run as root (UID 0) to unpack container filesystem layers.
+	// When building images, Kaniko needs to create directories like /bin, /usr, etc. which
+	// are owned by root. This is safe because Kaniko runs in an unprivileged container
+	// (no elevated host capabilities), it just needs root within the container namespace.
+	runAsNonRoot := false
+	runAsUser := int64(0)
+	runAsGroup := int64(0)
+	fsGroup := int64(0)
 
 	k8sJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
