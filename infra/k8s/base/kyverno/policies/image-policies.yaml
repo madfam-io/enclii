@@ -1,0 +1,114 @@
+---
+# Kyverno Image Security Policies for Enclii
+# These policies control image sources and verify signatures
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/title: Restrict Image Registries
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Limits container images to approved registries only.
+      This prevents pulling from untrusted sources.
+spec:
+  validationFailureAction: Audit  # Start with audit, move to Enforce
+  background: true
+  rules:
+    - name: validate-registries
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kyverno
+                - longhorn-system
+      validate:
+        message: >-
+          Images must come from approved registries:
+          ghcr.io/madfam-org, gcr.io, docker.io, quay.io
+        pattern:
+          spec:
+            containers:
+              - image: "ghcr.io/madfam-org/* | gcr.io/* | docker.io/* | quay.io/* | registry.k8s.io/*"
+            =(initContainers):
+              - image: "ghcr.io/madfam-org/* | gcr.io/* | docker.io/* | quay.io/* | registry.k8s.io/*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify Image Signatures
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Verifies that container images are signed with Cosign.
+      Currently in audit mode to identify unsigned images.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: check-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              namespaces:
+                - enclii  # Only check production namespace
+      verifyImages:
+        - imageReferences:
+            - "ghcr.io/madfam-org/*"
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    # Sigstore keyless signing (Fulcio + Rekor)
+                    rekor:
+                      url: https://rekor.sigstore.dev
+                    ctlog:
+                      url: https://ctfe.sigstore.dev
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-image-pull-policy
+  annotations:
+    policies.kyverno.io/title: Require imagePullPolicy
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Ensures containers specify an explicit imagePullPolicy
+      for predictable behavior.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: require-pull-policy
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+      validate:
+        message: "imagePullPolicy should be explicitly set to IfNotPresent or Always."
+        pattern:
+          spec:
+            containers:
+              - imagePullPolicy: "IfNotPresent | Always"
