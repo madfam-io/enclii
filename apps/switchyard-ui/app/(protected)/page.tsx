@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { CheckCircle2, AlertTriangle, BarChart3, Clock, RefreshCw } from "lucide-react";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4200";
 
@@ -104,15 +105,15 @@ export default function Dashboard() {
     return (
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/4 mb-8"></div>
+          <div className="h-8 bg-muted rounded w-1/4 mb-8"></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 bg-gray-200 rounded"></div>
+              <div key={i} className="h-24 bg-muted rounded"></div>
             ))}
           </div>
           <div className="space-y-6">
-            <div className="h-64 bg-gray-200 rounded"></div>
-            <div className="h-64 bg-gray-200 rounded"></div>
+            <div className="h-64 bg-muted rounded"></div>
+            <div className="h-64 bg-muted rounded"></div>
           </div>
         </div>
       </div>
@@ -122,14 +123,14 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-red-800 mb-2">
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-destructive mb-2">
             Error Loading Dashboard
           </h2>
-          <p className="text-red-600 mb-4">{error}</p>
+          <p className="text-destructive/80 mb-4">{error}</p>
           <button
             onClick={fetchDashboardData}
-            className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50"
+            className="inline-flex items-center px-4 py-2 border border-destructive/30 rounded-md shadow-sm text-sm font-medium text-destructive bg-background hover:bg-destructive/10"
           >
             Try Again
           </button>
@@ -142,44 +143,32 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
       <div className="px-4 py-6 sm:px-0">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
           <button
             onClick={fetchDashboardData}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            className="inline-flex items-center px-4 py-2 border border-input rounded-md shadow-sm text-sm font-medium text-foreground bg-background hover:bg-accent"
           >
-            <svg
-              className="w-4 h-4 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
+            <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </button>
         </div>
 
         {/* Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-enclii-green rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">✓</span>
+                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4 text-white" />
                   </div>
                 </div>
                 <div className="ml-5 w-0 flex-1">
                   <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
+                    <dt className="text-sm font-medium text-muted-foreground truncate">
                       Healthy Services
                     </dt>
-                    <dd className="text-lg font-medium text-gray-900">
+                    <dd className="text-lg font-medium text-foreground">
                       {stats.healthy_services}
                     </dd>
                   </dl>
@@ -188,20 +177,20 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-enclii-orange rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">⚠</span>
+                  <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
+                    <AlertTriangle className="w-4 h-4 text-white" />
                   </div>
                 </div>
                 <div className="ml-5 w-0 flex-1">
                   <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
+                    <dt className="text-sm font-medium text-muted-foreground truncate">
                       Deployments Today
                     </dt>
-                    <dd className="text-lg font-medium text-gray-900">
+                    <dd className="text-lg font-medium text-foreground">
                       {stats.deployments_today}
                     </dd>
                   </dl>
@@ -210,20 +199,20 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-enclii-blue rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">📊</span>
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <BarChart3 className="w-4 h-4 text-white" />
                   </div>
                 </div>
                 <div className="ml-5 w-0 flex-1">
                   <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
+                    <dt className="text-sm font-medium text-muted-foreground truncate">
                       Active Projects
                     </dt>
-                    <dd className="text-lg font-medium text-gray-900">
+                    <dd className="text-lg font-medium text-foreground">
                       {stats.active_projects}
                     </dd>
                   </dl>
@@ -232,20 +221,20 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-gray-400 rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm font-bold">🕐</span>
+                  <div className="w-8 h-8 bg-muted-foreground rounded-full flex items-center justify-center">
+                    <Clock className="w-4 h-4 text-white" />
                   </div>
                 </div>
                 <div className="ml-5 w-0 flex-1">
                   <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">
+                    <dt className="text-sm font-medium text-muted-foreground truncate">
                       Avg Deploy Time
                     </dt>
-                    <dd className="text-lg font-medium text-gray-900">
+                    <dd className="text-lg font-medium text-foreground">
                       {stats.avg_deploy_time}
                     </dd>
                   </dl>
@@ -256,18 +245,18 @@ export default function Dashboard() {
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-white shadow overflow-hidden sm:rounded-md mb-8">
+        <div className="bg-card shadow overflow-hidden sm:rounded-md mb-8 border border-border">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">
+            <h3 className="text-lg leading-6 font-medium text-foreground">
               Recent Activity
             </h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500">
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               Latest deployments and system events
             </p>
           </div>
-          <ul className="divide-y divide-gray-200">
+          <ul className="divide-y divide-border">
             {activities.length === 0 ? (
-              <li className="px-4 py-8 text-center text-gray-500">
+              <li className="px-4 py-8 text-center text-muted-foreground">
                 No recent activity
               </li>
             ) : (
@@ -287,10 +276,10 @@ export default function Dashboard() {
                         }`}
                       ></div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-medium text-foreground">
                           {activity.message}
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-muted-foreground">
                           {activity.metadata?.version ||
                             activity.metadata?.environment ||
                             ""}{" "}
@@ -301,12 +290,12 @@ export default function Dashboard() {
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         activity.status === "success"
-                          ? "bg-green-100 text-green-800"
+                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                           : activity.status === "running"
-                            ? "bg-blue-100 text-blue-800"
+                            ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
                             : activity.status === "failed"
-                              ? "bg-red-100 text-red-800"
-                              : "bg-yellow-100 text-yellow-800"
+                              ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
                       }`}
                     >
                       {activity.status.charAt(0).toUpperCase() +
@@ -320,58 +309,58 @@ export default function Dashboard() {
         </div>
 
         {/* Services Overview */}
-        <div className="bg-white shadow overflow-hidden sm:rounded-md">
+        <div className="bg-card shadow overflow-hidden sm:rounded-md border border-border">
           <div className="px-4 py-5 sm:px-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">
+            <h3 className="text-lg leading-6 font-medium text-foreground">
               Services Overview
             </h3>
-            <p className="mt-1 max-w-2xl text-sm text-gray-500">
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               Current status of all services
             </p>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Service
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Environment
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Status
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Version
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Replicas
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-card divide-y divide-border">
                 {services.length === 0 ? (
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-6 py-8 text-center text-gray-500"
+                      className="px-6 py-8 text-center text-muted-foreground"
                     >
                       No services found
                     </td>
                   </tr>
                 ) : (
                   services.map((service) => (
-                    <tr key={service.id} className="hover:bg-gray-50">
+                    <tr key={service.id} className="hover:bg-accent">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
                           <Link
                             href={`/services/${service.id}`}
-                            className="text-sm font-medium text-gray-900 hover:text-enclii-blue"
+                            className="text-sm font-medium text-foreground hover:text-primary"
                           >
                             {service.name}
                           </Link>
-                          <div className="text-xs text-gray-500 ml-2">
+                          <div className="text-xs text-muted-foreground ml-2">
                             in {service.project_name}
                           </div>
                         </div>
@@ -380,10 +369,10 @@ export default function Dashboard() {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             service.environment === "production"
-                              ? "bg-green-100 text-green-800"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                               : service.environment === "staging"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-blue-100 text-blue-800"
+                                ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
                           }`}
                         >
                           {service.environment}
@@ -393,19 +382,19 @@ export default function Dashboard() {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             service.status === "healthy"
-                              ? "bg-green-100 text-green-800"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                               : service.status === "unhealthy"
-                                ? "bg-red-100 text-red-800"
-                                : "bg-gray-100 text-gray-800"
+                                ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                                : "bg-muted text-muted-foreground"
                           }`}
                         >
                           {service.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                         {service.version}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
                         {service.replicas}
                       </td>
                     </tr>

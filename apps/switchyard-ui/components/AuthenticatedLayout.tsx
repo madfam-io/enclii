@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { CommandPalette } from '@/components/command/command-palette';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Menu, X } from 'lucide-react';
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
@@ -16,6 +18,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigation = [
     { name: 'Dashboard', href: '/' },
@@ -75,7 +78,8 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                   <span className="ml-2 text-sm text-muted-foreground font-medium">Switchyard</span>
                 </Link>
               </div>
-              <div className="ml-10 flex items-baseline space-x-4">
+              {/* Desktop Navigation - Hidden on mobile */}
+              <div className="hidden lg:flex ml-10 items-baseline space-x-4">
                 {navigation.map((item) => {
                   const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
                   return (
@@ -94,12 +98,12 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                 })}
               </div>
             </div>
-            <div className="flex items-center space-x-4">
-              {/* Command Palette */}
+            <div className="flex items-center space-x-2 lg:space-x-4">
+              {/* Command Palette - Always visible */}
               <CommandPalette />
 
-              {/* Secondary Navigation */}
-              <div className="flex items-center space-x-2 mr-4 border-r border-border pr-4">
+              {/* Secondary Navigation - Hidden on mobile */}
+              <div className="hidden md:flex items-center space-x-2 mr-4 border-r border-border pr-4">
                 {secondaryNav.map((item) => {
                   const isActive = pathname === item.href || pathname.startsWith(item.href);
                   return (
@@ -118,20 +122,21 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                 })}
               </div>
 
-              <div className="flex items-center text-sm text-muted-foreground">
+              {/* System Health - Hidden on mobile */}
+              <div className="hidden md:flex items-center text-sm text-muted-foreground">
                 <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
                 <span>System Healthy</span>
               </div>
 
-              {/* Notifications */}
+              {/* Notifications - Always visible */}
               <NotificationBell />
 
-              {/* Theme Toggle */}
+              {/* Theme Toggle - Always visible */}
               <ThemeToggle />
 
-              {/* User Menu */}
-              <div className="relative flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">
+              {/* User Menu - Hidden on mobile, shown in hamburger */}
+              <div className="hidden lg:flex relative items-center gap-3">
+                <span className="text-sm text-muted-foreground truncate max-w-[150px]">
                   {user?.name || user?.email}
                 </span>
                 <button
@@ -141,6 +146,91 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                   Sign out
                 </button>
               </div>
+
+              {/* Mobile Hamburger Menu */}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <button className="lg:hidden p-2 rounded-md hover:bg-accent">
+                    <Menu className="h-6 w-6 text-foreground" />
+                    <span className="sr-only">Open menu</span>
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[300px] sm:w-[350px]">
+                  <SheetHeader>
+                    <SheetTitle>Menu</SheetTitle>
+                  </SheetHeader>
+                  <nav className="flex flex-col gap-4 mt-6">
+                    {/* Navigation Links */}
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        Navigation
+                      </p>
+                      {navigation.map((item) => {
+                        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+                        return (
+                          <Link
+                            key={item.name}
+                            href={item.href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={`block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                              isActive
+                                ? 'bg-accent text-enclii-blue'
+                                : 'text-foreground hover:bg-accent'
+                            }`}
+                          >
+                            {item.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+
+                    {/* Secondary Navigation */}
+                    <div className="space-y-1 border-t border-border pt-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        Settings
+                      </p>
+                      {secondaryNav.map((item) => {
+                        const isActive = pathname === item.href || pathname.startsWith(item.href);
+                        return (
+                          <Link
+                            key={item.name}
+                            href={item.href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={`block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                              isActive
+                                ? 'bg-accent text-enclii-blue'
+                                : 'text-foreground hover:bg-accent'
+                            }`}
+                          >
+                            {item.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+
+                    {/* User Section */}
+                    <div className="border-t border-border pt-4 mt-auto">
+                      <div className="px-3 py-2">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {user?.name || 'User'}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {user?.email}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          handleLogout();
+                        }}
+                        className="w-full mt-2 px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 rounded-md transition-colors text-left"
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  </nav>
+                </SheetContent>
+              </Sheet>
             </div>
           </div>
         </div>
