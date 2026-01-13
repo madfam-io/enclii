@@ -99,7 +99,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: roundhouse-worker
-          image: ghcr.io/madfam-org/roundhouse-worker:v20260110-docker27
+          image: ghcr.io/madfam-org/roundhouse-worker:v20260113-kaniko
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
@@ -108,9 +108,9 @@ spec:
               drop:
                 - ALL
           env:
-            # Build mode: Docker mode until new image with Kaniko support is built
+            # Build mode: Use Kaniko for secure rootless builds
             - name: BUILD_MODE
-              value: "docker"
+              value: "kaniko"
             # Redis connection
             - name: REDIS_URL
               valueFrom:
