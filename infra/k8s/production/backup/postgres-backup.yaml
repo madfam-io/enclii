@@ -170,11 +170,17 @@ spec:
               env:
                 # PostgreSQL connection
                 - name: POSTGRES_HOST
-                  value: postgres.enclii.svc.cluster.local
+                  value: postgres.data.svc.cluster.local
                 - name: POSTGRES_USER
-                  value: postgres
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: username
                 - name: POSTGRES_DB
-                  value: enclii
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: database
                 - name: POSTGRES_PASSWORD
                   valueFrom:
                     secretKeyRef:
@@ -248,11 +254,17 @@ spec:
             - /scripts/backup.sh
           env:
             - name: POSTGRES_HOST
-              value: postgres.enclii.svc.cluster.local
+              value: postgres.data.svc.cluster.local
             - name: POSTGRES_USER
-              value: postgres
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
             - name: POSTGRES_DB
-              value: enclii
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: database
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
