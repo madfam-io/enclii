@@ -189,6 +189,27 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req *ReconcileRequest
 		k8sObjects = append(k8sObjects, fmt.Sprintf("ingress/%s", ingress.Name))
 	}
 
+	// Generate and apply NetworkPolicies for service isolation
+	networkPolicies, err := r.generateNetworkPolicies(req, namespace)
+	if err != nil {
+		return &ReconcileResult{
+			Success: false,
+			Message: "Failed to generate network policies",
+			Error:   err,
+		}
+	}
+
+	for _, np := range networkPolicies {
+		if err := r.applyNetworkPolicy(ctx, np); err != nil {
+			return &ReconcileResult{
+				Success: false,
+				Message: fmt.Sprintf("Failed to apply network policy %s", np.Name),
+				Error:   err,
+			}
+		}
+		k8sObjects = append(k8sObjects, fmt.Sprintf("networkpolicy/%s", np.Name))
+	}
+
 	// Wait for deployment to be ready
 	ready, err := r.waitForDeploymentReady(ctx, deployment.Namespace, deployment.Name, 5*time.Minute)
 	if err != nil {
@@ -662,6 +683,22 @@ func (r *ServiceReconciler) Delete(ctx context.Context, namespace, serviceName s
 		}
 	}
 
+	// Delete NetworkPolicies associated with this service
+	npClient := r.k8sClient.Clientset.NetworkingV1().NetworkPolicies(namespace)
+	npList, err := npClient.List(ctx, listOptions)
+	if err != nil && !errors.IsNotFound(err) {
+		r.logger.WithError(err).Warn("Failed to list NetworkPolicies for deletion")
+	} else if npList != nil {
+		for _, np := range npList.Items {
+			err = npClient.Delete(ctx, np.Name, metav1.DeleteOptions{})
+			if err != nil && !errors.IsNotFound(err) {
+				r.logger.WithFields(logrus.Fields{
+					"networkpolicy": np.Name,
+				}).WithError(err).Warn("Failed to delete NetworkPolicy")
+			}
+		}
+	}
+
 	r.logger.WithFields(logrus.Fields{
 		"namespace": namespace,
 		"service":   serviceName,
@@ -1127,6 +1164,216 @@ func (r *ServiceReconciler) applyIngress(ctx context.Context, ingress *networkin
 
 	r.logger.WithField("ingress", ingress.Name).Info("Updated existing ingress")
 	return nil
+}
+
+// generateNetworkPolicies creates ingress and egress NetworkPolicy manifests for service isolation
+func (r *ServiceReconciler) generateNetworkPolicies(req *ReconcileRequest, namespace string) ([]*networkingv1.NetworkPolicy, error) {
+	labels := map[string]string{
+		"app":                   req.Service.Name,
+		"enclii.dev/service":    req.Service.Name,
+		"enclii.dev/project":    req.Service.ProjectID.String(),
+		"enclii.dev/managed-by": "switchyard",
+	}
+
+	podSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"app":                req.Service.Name,
+			"enclii.dev/service": req.Service.Name,
+		},
+	}
+
+	// Determine the container port
+	containerPort, _ := parseContainerPort(req.EnvVars)
+
+	var policies []*networkingv1.NetworkPolicy
+
+	// 1. Ingress Policy: Allow traffic only from ingress-nginx (Cloudflare Tunnel entry point)
+	ingressPolicy := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-ingress", req.Service.Name),
+			Namespace: namespace,
+			Labels:    labels,
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: podSelector,
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeIngress},
+			Ingress: []networkingv1.NetworkPolicyIngressRule{
+				{
+					// Allow from ingress-nginx namespace (where cloudflared routes traffic)
+					From: []networkingv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"kubernetes.io/metadata.name": "ingress-nginx",
+								},
+							},
+						},
+						{
+							// Also allow from cloudflare-tunnel namespace
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"kubernetes.io/metadata.name": "cloudflare-tunnel",
+								},
+							},
+						},
+						{
+							// Allow traffic from same namespace (inter-service communication)
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"kubernetes.io/metadata.name": namespace,
+								},
+							},
+						},
+					},
+					Ports: []networkingv1.NetworkPolicyPort{
+						{
+							Protocol: protocolPtr(corev1.ProtocolTCP),
+							Port:     &intstr.IntOrString{Type: intstr.Int, IntVal: containerPort},
+						},
+					},
+				},
+			},
+		},
+	}
+	policies = append(policies, ingressPolicy)
+
+	// 2. Egress Policy: Allow DNS, addon namespaces, and Kubernetes API
+	egressRules := []networkingv1.NetworkPolicyEgressRule{
+		// DNS egress (kube-dns in kube-system)
+		{
+			To: []networkingv1.NetworkPolicyPeer{
+				{
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"kubernetes.io/metadata.name": "kube-system",
+						},
+					},
+					PodSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"k8s-app": "kube-dns",
+						},
+					},
+				},
+			},
+			Ports: []networkingv1.NetworkPolicyPort{
+				{Protocol: protocolPtr(corev1.ProtocolUDP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 53}},
+				{Protocol: protocolPtr(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 53}},
+			},
+		},
+		// Kubernetes API server (for services that need K8s access)
+		{
+			To: []networkingv1.NetworkPolicyPeer{
+				{
+					IPBlock: &networkingv1.IPBlock{
+						// Kubernetes API server typically on 10.x.x.1 or cluster IP range
+						// Allow common ranges - could be made configurable
+						CIDR: "10.0.0.0/8",
+					},
+				},
+			},
+			Ports: []networkingv1.NetworkPolicyPort{
+				{Protocol: protocolPtr(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 443}},
+				{Protocol: protocolPtr(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 6443}},
+			},
+		},
+	}
+
+	// Add egress rules for each addon binding (database access)
+	for _, binding := range req.AddonBindings {
+		addonPort := getAddonPort(binding.AddonType)
+		egressRules = append(egressRules, networkingv1.NetworkPolicyEgressRule{
+			To: []networkingv1.NetworkPolicyPeer{
+				{
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"kubernetes.io/metadata.name": binding.K8sNamespace,
+						},
+					},
+				},
+			},
+			Ports: []networkingv1.NetworkPolicyPort{
+				{Protocol: protocolPtr(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: addonPort}},
+			},
+		})
+	}
+
+	// Allow egress to same namespace (inter-service communication)
+	egressRules = append(egressRules, networkingv1.NetworkPolicyEgressRule{
+		To: []networkingv1.NetworkPolicyPeer{
+			{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"kubernetes.io/metadata.name": namespace,
+					},
+				},
+			},
+		},
+	})
+
+	egressPolicy := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-egress", req.Service.Name),
+			Namespace: namespace,
+			Labels:    labels,
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: podSelector,
+			PolicyTypes: []networkingv1.PolicyType{networkingv1.PolicyTypeEgress},
+			Egress:      egressRules,
+		},
+	}
+	policies = append(policies, egressPolicy)
+
+	return policies, nil
+}
+
+// applyNetworkPolicy creates or updates a NetworkPolicy
+func (r *ServiceReconciler) applyNetworkPolicy(ctx context.Context, np *networkingv1.NetworkPolicy) error {
+	npClient := r.k8sClient.Clientset.NetworkingV1().NetworkPolicies(np.Namespace)
+
+	// Try to get existing NetworkPolicy
+	existing, err := npClient.Get(ctx, np.Name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create new NetworkPolicy
+			_, err = npClient.Create(ctx, np, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create network policy: %w", err)
+			}
+			r.logger.WithField("networkpolicy", np.Name).Info("Created new network policy")
+			return nil
+		}
+		return fmt.Errorf("failed to get network policy: %w", err)
+	}
+
+	// Update existing NetworkPolicy
+	np.ResourceVersion = existing.ResourceVersion
+	_, err = npClient.Update(ctx, np, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update network policy: %w", err)
+	}
+
+	r.logger.WithField("networkpolicy", np.Name).Info("Updated existing network policy")
+	return nil
+}
+
+// protocolPtr returns a pointer to the given Protocol
+func protocolPtr(p corev1.Protocol) *corev1.Protocol {
+	return &p
+}
+
+// getAddonPort returns the default port for a database addon type
+func getAddonPort(addonType types.DatabaseAddonType) int32 {
+	switch addonType {
+	case types.DatabaseAddonTypePostgres:
+		return 5432
+	case types.DatabaseAddonTypeRedis:
+		return 6379
+	case types.DatabaseAddonTypeMySQL:
+		return 3306
+	default:
+		return 5432 // Default to PostgreSQL port
+	}
 }
 
 // sanitizeDomainForSecret converts a domain name to a valid Kubernetes secret name
