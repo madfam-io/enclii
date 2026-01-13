@@ -45,6 +45,7 @@ Learn more at https://enclii.dev`,
 	rootCmd.AddCommand(NewLocalCommand(cfg))
 	rootCmd.AddCommand(NewServicesSyncCommand(cfg))
 	rootCmd.AddCommand(NewSecretsCommand(cfg))
+	rootCmd.AddCommand(NewDomainsCommand(cfg))
 
 	// Authentication commands
 	rootCmd.AddCommand(NewLoginCommand(cfg))

@@ -575,3 +575,103 @@ func (c *APIClient) ListEnvironments(ctx context.Context, projectSlug string) ([
 
 	return response.Environments, nil
 }
+
+// Custom Domains
+
+// CustomDomainRequest represents a request to add a custom domain
+type CustomDomainRequest struct {
+	Domain        string `json:"domain"`
+	Environment   string `json:"environment,omitempty"`
+	EnvironmentID string `json:"environment_id,omitempty"`
+	TLSEnabled    bool   `json:"tls_enabled"`
+	TLSIssuer     string `json:"tls_issuer,omitempty"`
+}
+
+// CustomDomainResponse represents a custom domain in API responses
+type CustomDomainResponse struct {
+	ID               uuid.UUID  `json:"id"`
+	ServiceID        uuid.UUID  `json:"service_id"`
+	EnvironmentID    *uuid.UUID `json:"environment_id,omitempty"`
+	Domain           string     `json:"domain"`
+	Verified         bool       `json:"verified"`
+	TLSEnabled       bool       `json:"tls_enabled"`
+	TLSIssuer        string     `json:"tls_issuer,omitempty"`
+	TLSProvider      string     `json:"tls_provider,omitempty"`
+	Status           string     `json:"status"`
+	DNSCNAME         string     `json:"dns_cname,omitempty"`
+	IsPlatformDomain bool       `json:"is_platform_domain"`
+	ZeroTrustEnabled bool       `json:"zero_trust_enabled"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	VerifiedAt       *time.Time `json:"verified_at,omitempty"`
+}
+
+// DomainVerifyResponse represents the verification response
+type DomainVerifyResponse struct {
+	Message           string                `json:"message"`
+	Domain            *CustomDomainResponse `json:"domain,omitempty"`
+	VerificationValue string                `json:"verification_value,omitempty"`
+	Error             string                `json:"error,omitempty"`
+}
+
+// ListCustomDomains returns all custom domains for a service
+func (c *APIClient) ListCustomDomains(ctx context.Context, serviceID string) ([]CustomDomainResponse, error) {
+	var response struct {
+		Domains []CustomDomainResponse `json:"domains"`
+	}
+
+	if err := c.get(ctx, fmt.Sprintf("/v1/services/%s/domains", serviceID), &response); err != nil {
+		return nil, fmt.Errorf("failed to list domains: %w", err)
+	}
+
+	return response.Domains, nil
+}
+
+// AddCustomDomain adds a custom domain to a service
+func (c *APIClient) AddCustomDomain(ctx context.Context, serviceID string, req CustomDomainRequest) (*CustomDomainResponse, error) {
+	var domain CustomDomainResponse
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/domains", serviceID), req, &domain); err != nil {
+		return nil, fmt.Errorf("failed to add domain: %w", err)
+	}
+
+	return &domain, nil
+}
+
+// GetCustomDomain gets a specific custom domain
+func (c *APIClient) GetCustomDomain(ctx context.Context, serviceID, domainID string) (*CustomDomainResponse, error) {
+	var domain CustomDomainResponse
+	if err := c.get(ctx, fmt.Sprintf("/v1/services/%s/domains/%s", serviceID, domainID), &domain); err != nil {
+		return nil, fmt.Errorf("failed to get domain: %w", err)
+	}
+
+	return &domain, nil
+}
+
+// DeleteCustomDomain removes a custom domain from a service
+func (c *APIClient) DeleteCustomDomain(ctx context.Context, serviceID, domainID string) error {
+	resp, err := c.makeRequest(ctx, "DELETE", fmt.Sprintf("/v1/services/%s/domains/%s", serviceID, domainID), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// VerifyCustomDomain verifies domain ownership via DNS TXT record
+func (c *APIClient) VerifyCustomDomain(ctx context.Context, serviceID, domainID string) (*DomainVerifyResponse, error) {
+	var response DomainVerifyResponse
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/domains/%s/verify", serviceID, domainID), nil, &response); err != nil {
+		return nil, fmt.Errorf("failed to verify domain: %w", err)
+	}
+
+	return &response, nil
+}
