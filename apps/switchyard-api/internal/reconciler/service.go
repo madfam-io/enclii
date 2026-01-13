@@ -25,15 +25,23 @@ type ServiceReconciler struct {
 	logger    *logrus.Logger
 }
 
+// EnvVarWithMeta represents an environment variable with metadata for K8s secret creation
+type EnvVarWithMeta struct {
+	Key      string
+	Value    string
+	IsSecret bool
+}
+
 type ReconcileRequest struct {
 	Service       *types.Service
 	Release       *types.Release
 	Deployment    *types.Deployment
-	Environment   *types.Environment // The target environment with kube_namespace
+	Environment   *types.Environment   // The target environment with kube_namespace
 	CustomDomains []types.CustomDomain
 	Routes        []types.Route
-	EnvVars       map[string]string // User-defined environment variables (decrypted)
-	AddonBindings []AddonBinding    // Database addon bindings for env var injection
+	EnvVars       map[string]string    // User-defined environment variables (decrypted) - DEPRECATED: use EnvVarsWithMeta
+	EnvVarsWithMeta []EnvVarWithMeta   // Environment variables with IsSecret metadata for proper K8s secret creation
+	AddonBindings []AddonBinding       // Database addon bindings for env var injection
 }
 
 // AddonBinding represents a database addon bound to this service
@@ -116,8 +124,18 @@ func (r *ServiceReconciler) Reconcile(ctx context.Context, req *ReconcileRequest
 		}
 	}
 
+	// Create K8s Secret for secret env vars (values not exposed in pod spec)
+	secretName := fmt.Sprintf("%s-secrets", req.Service.Name)
+	if err := r.ensureEnvSecret(ctx, req, namespace, secretName); err != nil {
+		return &ReconcileResult{
+			Success: false,
+			Message: "Failed to create environment secrets",
+			Error:   err,
+		}
+	}
+
 	// Generate Kubernetes manifests
-	deployment, service, err := r.generateManifests(req, namespace)
+	deployment, service, err := r.generateManifests(req, namespace, secretName)
 	if err != nil {
 		return &ReconcileResult{
 			Success: false,
@@ -218,7 +236,7 @@ func (r *ServiceReconciler) ensureNamespace(ctx context.Context, namespace strin
 	return nil
 }
 
-func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace string) (*appsv1.Deployment, *corev1.Service, error) {
+func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace, secretName string) (*appsv1.Deployment, *corev1.Service, error) {
 	labels := map[string]string{
 		"app":                   req.Service.Name,
 		"version":               req.Release.Version,
@@ -267,11 +285,49 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace s
 	}...)
 
 	// Add user-defined environment variables (from database)
-	for key, value := range req.EnvVars {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  key,
-			Value: value,
-		})
+	// Secrets are referenced via K8s Secret, non-secrets are inline values
+	hasSecrets := false
+	if len(req.EnvVarsWithMeta) > 0 {
+		// New path: use metadata-aware env vars
+		for _, ev := range req.EnvVarsWithMeta {
+			if ev.IsSecret {
+				// Secret values are stored in K8s Secret, reference via secretKeyRef
+				envVars = append(envVars, corev1.EnvVar{
+					Name: ev.Key,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: secretName,
+							},
+							Key: ev.Key,
+						},
+					},
+				})
+				hasSecrets = true
+			} else {
+				// Non-secret values are inline
+				envVars = append(envVars, corev1.EnvVar{
+					Name:  ev.Key,
+					Value: ev.Value,
+				})
+			}
+		}
+	} else {
+		// Legacy path: all values inline (backwards compatibility)
+		for key, value := range req.EnvVars {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  key,
+				Value: value,
+			})
+		}
+	}
+
+	// Log secret injection status
+	if hasSecrets {
+		logrus.WithFields(logrus.Fields{
+			"service":     req.Service.Name,
+			"secret_name": secretName,
+		}).Info("Injecting secrets via K8s Secret reference")
 	}
 
 	// Add database addon environment variables (injected from bindings)
@@ -436,6 +492,82 @@ func (r *ServiceReconciler) applyService(ctx context.Context, service *corev1.Se
 		return fmt.Errorf("failed to update service: %w", err)
 	}
 	r.logger.WithField("service", service.Name).Info("Updated existing service")
+	return nil
+}
+
+// ensureEnvSecret creates or updates a K8s Secret containing secret env vars
+// This ensures sensitive values are not exposed in Pod specs and are stored encrypted in etcd
+func (r *ServiceReconciler) ensureEnvSecret(ctx context.Context, req *ReconcileRequest, namespace, secretName string) error {
+	// Collect secret values
+	secretData := make(map[string][]byte)
+
+	if len(req.EnvVarsWithMeta) > 0 {
+		for _, ev := range req.EnvVarsWithMeta {
+			if ev.IsSecret {
+				secretData[ev.Key] = []byte(ev.Value)
+			}
+		}
+	}
+
+	// If no secrets, skip creating the secret
+	if len(secretData) == 0 {
+		r.logger.WithField("service", req.Service.Name).Debug("No secrets to inject, skipping K8s Secret creation")
+		return nil
+	}
+
+	// Create K8s Secret resource
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app":                   req.Service.Name,
+				"enclii.dev/service":    req.Service.Name,
+				"enclii.dev/project":    req.Service.ProjectID.String(),
+				"enclii.dev/managed-by": "switchyard",
+			},
+			Annotations: map[string]string{
+				"enclii.dev/deployment-id": req.Deployment.ID.String(),
+				"enclii.dev/updated":       time.Now().Format(time.RFC3339),
+			},
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: secretData,
+	}
+
+	// Apply the secret (create or update)
+	secretClient := r.k8sClient.Clientset.CoreV1().Secrets(namespace)
+
+	existing, err := secretClient.Get(ctx, secretName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Create new secret
+			_, err = secretClient.Create(ctx, secret, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create secret: %w", err)
+			}
+			r.logger.WithFields(logrus.Fields{
+				"service":     req.Service.Name,
+				"secret":      secretName,
+				"keys_count":  len(secretData),
+			}).Info("Created K8s Secret for env vars")
+			return nil
+		}
+		return fmt.Errorf("failed to get existing secret: %w", err)
+	}
+
+	// Update existing secret
+	secret.ResourceVersion = existing.ResourceVersion
+	_, err = secretClient.Update(ctx, secret, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update secret: %w", err)
+	}
+	r.logger.WithFields(logrus.Fields{
+		"service":     req.Service.Name,
+		"secret":      secretName,
+		"keys_count":  len(secretData),
+	}).Info("Updated K8s Secret for env vars")
+
 	return nil
 }
 

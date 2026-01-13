@@ -409,6 +409,68 @@ func (r *EnvVarRepository) BulkUpsert(ctx context.Context, serviceID uuid.UUID, 
 	return nil
 }
 
+// EnvVarWithMeta represents an environment variable with metadata for K8s secret creation
+type EnvVarWithMeta struct {
+	Key      string
+	Value    string
+	IsSecret bool
+}
+
+// GetDecryptedWithMeta retrieves all environment variables with IsSecret metadata for proper K8s secret creation
+// Secrets will be stored in K8s Secrets, non-secrets as plain env vars
+func (r *EnvVarRepository) GetDecryptedWithMeta(ctx context.Context, serviceID, environmentID uuid.UUID) ([]EnvVarWithMeta, error) {
+	// Get vars for specific environment + vars that apply to all environments
+	// Environment-specific vars override global vars
+	query := `
+		SELECT key, value_encrypted, is_secret, environment_id
+		FROM environment_variables
+		WHERE service_id = $1 AND (environment_id = $2 OR environment_id IS NULL)
+		ORDER BY
+			CASE WHEN environment_id IS NULL THEN 1 ELSE 0 END, -- Global vars first
+			key
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, serviceID, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Use a map to handle overrides, then convert to slice
+	resultMap := make(map[string]EnvVarWithMeta)
+	for rows.Next() {
+		var key, valueEncrypted string
+		var isSecret bool
+		var envID sql.NullString
+
+		err := rows.Scan(&key, &valueEncrypted, &isSecret, &envID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Decrypt the value
+		decrypted, err := r.decrypt(valueEncrypted)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt value for key %s: %w", key, err)
+		}
+
+		// Environment-specific vars override global vars (they come later in the query)
+		resultMap[key] = EnvVarWithMeta{
+			Key:      key,
+			Value:    decrypted,
+			IsSecret: isSecret,
+		}
+	}
+
+	// Convert map to slice
+	result := make([]EnvVarWithMeta, 0, len(resultMap))
+	for _, v := range resultMap {
+		result = append(result, v)
+	}
+
+	return result, nil
+}
+
 // GetDecrypted retrieves all environment variables as a key-value map for deployment injection
 func (r *EnvVarRepository) GetDecrypted(ctx context.Context, serviceID, environmentID uuid.UUID) (map[string]string, error) {
 	// Get vars for specific environment + vars that apply to all environments

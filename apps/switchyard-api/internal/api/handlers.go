@@ -36,6 +36,7 @@ type Handler struct {
 	deploymentService      *services.DeploymentService
 	deploymentGroupService *services.DeploymentGroupService
 	domainSyncService      *services.DomainSyncService
+	tunnelRoutesService    *services.TunnelRoutesService
 	addonService           *addons.AddonService
 	notificationService    *notifications.Service
 
@@ -140,6 +141,12 @@ func (h *Handler) SetAddonService(svc *addons.AddonService) {
 // This is optional - if not set, notification test endpoints will return 503 Service Unavailable
 func (h *Handler) SetNotificationService(svc *notifications.Service) {
 	h.notificationService = svc
+}
+
+// SetTunnelRoutesService sets the tunnel routes service for automatic cloudflared route management
+// This is optional - if not set, domain additions will not automatically update tunnel routes
+func (h *Handler) SetTunnelRoutesService(svc *services.TunnelRoutesService) {
+	h.tunnelRoutesService = svc
 }
 
 // SetupRoutes configures all API routes
