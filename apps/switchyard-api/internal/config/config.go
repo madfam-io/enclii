@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -96,7 +97,10 @@ func Load() (*Config, error) {
 	// Port 4200 per PORT_ALLOCATION.md in solarpunk-foundry (Enclii block: 4200-4299)
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("port", "4200")
-	viper.SetDefault("database-url", "postgres://janua:janua_dev@localhost:5432/enclii_dev?sslmode=disable")
+	// SEC-001: No hardcoded credentials - DATABASE_URL must be provided via environment
+	// For development, set: ENCLII_DATABASE_URL=postgres://user:pass@localhost:5432/enclii_dev?sslmode=disable
+	// For production, use: ENCLII_DATABASE_URL=postgres://user:pass@host:5432/enclii?sslmode=require
+	viper.SetDefault("database-url", "")
 	viper.SetDefault("log-level", "info")
 	viper.SetDefault("registry", "ghcr.io/madfam-org")
 	viper.SetDefault("registry-username", "")
@@ -189,6 +193,19 @@ func Load() (*Config, error) {
 		CloudflareAccountID:       viper.GetString("cloudflare-account-id"),
 		CloudflareZoneID:          viper.GetString("cloudflare-zone-id"),
 		CloudflareTunnelID:        viper.GetString("cloudflare-tunnel-id"),
+	}
+
+	// SEC-001: Validate required configuration
+	if config.DatabaseURL == "" {
+		return nil, fmt.Errorf("ENCLII_DATABASE_URL is required. Set it in your environment:\n" +
+			"  Development: export ENCLII_DATABASE_URL='postgres://user:pass@localhost:5432/enclii_dev?sslmode=disable'\n" +
+			"  Production:  export ENCLII_DATABASE_URL='postgres://user:pass@host:5432/enclii?sslmode=require'")
+	}
+
+	// SEC-002: Warn about insecure SSL mode in production
+	if config.Environment == "production" && strings.Contains(config.DatabaseURL, "sslmode=disable") {
+		logrus.Warn("SEC-002: Database SSL is disabled in production. This is a security risk. " +
+			"Update DATABASE_URL to use sslmode=require or sslmode=verify-full")
 	}
 
 	return config, nil
