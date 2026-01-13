@@ -78,6 +78,8 @@ spec:
         app.kubernetes.io/part-of: enclii
     spec:
       serviceAccountName: roundhouse
+      imagePullSecrets:
+        - name: enclii-registry-credentials
       # Security context - non-privileged
       securityContext:
         runAsNonRoot: true
@@ -97,7 +99,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: roundhouse-worker
-          image: ghcr.io/madfam-org/enclii/roundhouse:latest
+          image: ghcr.io/madfam-org/roundhouse-worker:v20260110-docker27
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
@@ -106,9 +108,9 @@ spec:
               drop:
                 - ALL
           env:
-            # Build mode: Use Kaniko for secure builds
+            # Build mode: Docker mode until new image with Kaniko support is built
             - name: BUILD_MODE
-              value: "kaniko"
+              value: "docker"
             # Redis connection
             - name: REDIS_URL
               valueFrom:
@@ -150,9 +152,9 @@ spec:
             - name: BUILD_TIMEOUT
               value: "30m"
             - name: GENERATE_SBOM
-              value: "false"  # SBOM generation not yet implemented for Kaniko
+              value: "true"  # SBOM generation using Syft
             - name: SIGN_IMAGES
-              value: "false"  # Image signing not yet implemented for Kaniko
+              value: "true"  # Image signing using Cosign
           resources:
             requests:
               memory: "128Mi"
