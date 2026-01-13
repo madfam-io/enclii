@@ -24,6 +24,19 @@ const (
 	DefaultCatchAllService = "http_status:404"
 )
 
+// TunnelRoutesManager is the interface for managing tunnel routes
+// This allows using either ConfigMap-based or Cloudflare API-based implementations
+type TunnelRoutesManager interface {
+	// AddRoute adds a new route to the tunnel configuration
+	AddRoute(ctx context.Context, spec *RouteSpec) error
+	// RemoveRoute removes a route from the tunnel configuration
+	RemoveRoute(ctx context.Context, hostname string) error
+	// ListRoutes returns all currently configured routes
+	ListRoutes(ctx context.Context) ([]IngressRule, error)
+	// RouteExists checks if a route exists for the given hostname
+	RouteExists(ctx context.Context, hostname string) (bool, error)
+}
+
 // CloudflaredConfig represents the cloudflared configuration structure
 type CloudflaredConfig struct {
 	Tunnel   string        `yaml:"tunnel,omitempty"`

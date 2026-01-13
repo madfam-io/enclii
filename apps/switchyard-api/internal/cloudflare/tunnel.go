@@ -1,7 +1,9 @@
 package cloudflare
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -148,4 +150,74 @@ func (c *Client) ListTunnels(ctx context.Context) ([]Tunnel, error) {
 	}
 
 	return resp.Result, nil
+}
+
+// GetTunnelConfiguration retrieves the configuration for a remotely-managed tunnel
+func (c *Client) GetTunnelConfiguration(ctx context.Context, tunnelID string) (*TunnelConfiguration, error) {
+	if tunnelID == "" {
+		tunnelID = c.tunnelID
+	}
+
+	if tunnelID == "" {
+		return nil, fmt.Errorf("cloudflare: tunnel ID is required")
+	}
+
+	var resp APIResponse[TunnelConfiguration]
+	path := fmt.Sprintf("/accounts/%s/cfd_tunnel/%s/configurations", c.accountID, tunnelID)
+
+	if err := c.get(ctx, path, nil, &resp); err != nil {
+		return nil, fmt.Errorf("failed to get tunnel configuration: %w", err)
+	}
+
+	if !resp.Success {
+		if len(resp.Errors) > 0 {
+			return nil, fmt.Errorf("API error: %s", resp.Errors[0].Message)
+		}
+		return nil, fmt.Errorf("unknown API error")
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"tunnel_id":     tunnelID,
+		"ingress_count": len(resp.Result.Config.Ingress),
+	}).Debug("Retrieved tunnel configuration from Cloudflare")
+
+	return &resp.Result, nil
+}
+
+// UpdateTunnelConfiguration updates the configuration for a remotely-managed tunnel
+func (c *Client) UpdateTunnelConfiguration(ctx context.Context, tunnelID string, config *TunnelConfiguration) error {
+	if tunnelID == "" {
+		tunnelID = c.tunnelID
+	}
+
+	if tunnelID == "" {
+		return fmt.Errorf("cloudflare: tunnel ID is required")
+	}
+
+	path := fmt.Sprintf("/accounts/%s/cfd_tunnel/%s/configurations", c.accountID, tunnelID)
+
+	// Serialize configuration to JSON
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to serialize tunnel configuration: %w", err)
+	}
+
+	var resp APIResponse[struct{}]
+	if err := c.put(ctx, path, bytes.NewReader(configJSON), &resp); err != nil {
+		return fmt.Errorf("failed to update tunnel configuration: %w", err)
+	}
+
+	if !resp.Success {
+		if len(resp.Errors) > 0 {
+			return fmt.Errorf("API error: %s", resp.Errors[0].Message)
+		}
+		return fmt.Errorf("unknown API error")
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"tunnel_id":     tunnelID,
+		"ingress_count": len(config.Config.Ingress),
+	}).Info("Updated tunnel configuration via Cloudflare API")
+
+	return nil
 }

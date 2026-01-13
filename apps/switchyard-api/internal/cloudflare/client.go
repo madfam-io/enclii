@@ -94,6 +94,17 @@ func (c *Client) get(ctx context.Context, path string, query url.Values, result 
 	return c.handleResponse(resp, result)
 }
 
+// put performs a PUT request and decodes the response
+func (c *Client) put(ctx context.Context, path string, body io.Reader, result interface{}) error {
+	resp, err := c.doRequest(ctx, http.MethodPut, path, nil, body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return c.handleResponse(resp, result)
+}
+
 // handleResponse processes the API response
 func (c *Client) handleResponse(resp *http.Response, result interface{}) error {
 	body, err := io.ReadAll(resp.Body)

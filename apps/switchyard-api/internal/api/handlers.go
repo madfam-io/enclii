@@ -36,7 +36,7 @@ type Handler struct {
 	deploymentService      *services.DeploymentService
 	deploymentGroupService *services.DeploymentGroupService
 	domainSyncService      *services.DomainSyncService
-	tunnelRoutesService    *services.TunnelRoutesService
+	tunnelRoutesService    services.TunnelRoutesManager
 	addonService           *addons.AddonService
 	notificationService    *notifications.Service
 
@@ -145,7 +145,8 @@ func (h *Handler) SetNotificationService(svc *notifications.Service) {
 
 // SetTunnelRoutesService sets the tunnel routes service for automatic cloudflared route management
 // This is optional - if not set, domain additions will not automatically update tunnel routes
-func (h *Handler) SetTunnelRoutesService(svc *services.TunnelRoutesService) {
+// Accepts either TunnelRoutesService (ConfigMap-based) or TunnelRoutesServiceCloudflare (API-based)
+func (h *Handler) SetTunnelRoutesService(svc services.TunnelRoutesManager) {
 	h.tunnelRoutesService = svc
 }
 

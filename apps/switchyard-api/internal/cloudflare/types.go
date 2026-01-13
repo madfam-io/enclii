@@ -164,3 +164,35 @@ type DomainSyncResult struct {
 	Status      string               `json:"status"` // verified, pending, misconfigured, error
 	ErrorMessage string              `json:"error_message,omitempty"`
 }
+
+// TunnelConfiguration represents a remotely-managed tunnel configuration
+type TunnelConfiguration struct {
+	Config TunnelConfigData `json:"config"`
+}
+
+// TunnelConfigData contains the actual tunnel configuration data
+type TunnelConfigData struct {
+	Ingress     []TunnelIngressRule `json:"ingress"`
+	WarpRouting *WarpRoutingConfig  `json:"warp-routing,omitempty"`
+}
+
+// TunnelIngressRule represents an ingress rule in the tunnel configuration
+type TunnelIngressRule struct {
+	Hostname      string                    `json:"hostname,omitempty"`
+	Path          string                    `json:"path,omitempty"`
+	Service       string                    `json:"service"`
+	OriginRequest *TunnelOriginRequest      `json:"originRequest,omitempty"`
+}
+
+// TunnelOriginRequest contains origin-specific configuration
+type TunnelOriginRequest struct {
+	ConnectTimeout   string `json:"connectTimeout,omitempty"`
+	KeepAliveTimeout string `json:"keepAliveTimeout,omitempty"`
+	NoTLSVerify      bool   `json:"noTLSVerify,omitempty"`
+	HTTPHostHeader   string `json:"httpHostHeader,omitempty"`
+}
+
+// WarpRoutingConfig contains WARP routing configuration
+type WarpRoutingConfig struct {
+	Enabled bool `json:"enabled"`
+}

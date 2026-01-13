@@ -300,6 +300,17 @@ func main() {
 		logrus.Info("   Set ENCLII_CLOUDFLARE_API_TOKEN, ENCLII_CLOUDFLARE_ACCOUNT_ID, ENCLII_CLOUDFLARE_ZONE_ID to enable")
 	}
 
+	// Initialize tunnel routes service (Cloudflare API-based for remotely-managed tunnels)
+	var tunnelRoutesService services.TunnelRoutesManager
+	if cfClient != nil && cfg.CloudflareTunnelID != "" {
+		tunnelRoutesService = services.NewTunnelRoutesServiceCloudflare(cfClient, logrus.StandardLogger())
+		logrus.WithField("tunnel_id", cfg.CloudflareTunnelID).Info("✓ Tunnel routes service initialized (Cloudflare API)")
+	} else if cfClient == nil {
+		logrus.Info("ℹ Tunnel routes service not configured (Cloudflare client required)")
+	} else {
+		logrus.Info("ℹ Tunnel routes service not configured (ENCLII_CLOUDFLARE_TUNNEL_ID required)")
+	}
+
 	// Setup HTTP server
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -343,6 +354,12 @@ func main() {
 	if domainSyncService != nil {
 		apiHandler.SetDomainSyncService(domainSyncService)
 		logrus.Info("✓ Domain sync service wired to API handler")
+	}
+
+	// Wire up tunnel routes service (Cloudflare API-based route management)
+	if tunnelRoutesService != nil {
+		apiHandler.SetTunnelRoutesService(tunnelRoutesService)
+		logrus.Info("✓ Tunnel routes service wired to API handler (automatic route management enabled)")
 	}
 
 	// Wire up addon service (database add-ons)
