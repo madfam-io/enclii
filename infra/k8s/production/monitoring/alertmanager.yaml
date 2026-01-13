@@ -99,7 +99,7 @@ spec:
   resources:
     requests:
       storage: 2Gi
-  storageClassName: hcloud-volumes
+  storageClassName: longhorn
 ---
 # AlertManager Deployment
 apiVersion: apps/v1

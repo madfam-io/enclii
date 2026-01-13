@@ -644,7 +644,7 @@ spec:
   resources:
     requests:
       storage: 20Gi
-  storageClassName: hcloud-volumes
+  storageClassName: longhorn
 ---
 # Prometheus Deployment
 apiVersion: apps/v1

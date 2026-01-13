@@ -31,8 +31,8 @@ data:
     check_for_updates = false
 
     [alerting]
-    enabled = true
-    execute_alerts = true
+    enabled = false
+    execute_alerts = false
 
     [unified_alerting]
     enabled = true
@@ -308,7 +308,7 @@ spec:
   resources:
     requests:
       storage: 5Gi
-  storageClassName: hcloud-volumes
+  storageClassName: longhorn
 ---
 # Grafana Secret (admin password)
 apiVersion: v1
