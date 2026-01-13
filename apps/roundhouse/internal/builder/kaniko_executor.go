@@ -324,8 +324,12 @@ func (e *KanikoExecutor) buildKanikoArgs(job *queue.BuildJob, imageTag string) [
 	}
 
 	// Git context URL format: git://[repository]#[ref]#[commit-sha]
+	// Strip https:// or http:// prefix from repo URL if present
+	repoURL := job.GitRepo
+	repoURL = strings.TrimPrefix(repoURL, "https://")
+	repoURL = strings.TrimPrefix(repoURL, "http://")
 	gitContext := fmt.Sprintf("git://%s#refs/heads/%s#%s",
-		job.GitRepo, job.GitBranch, job.GitSHA)
+		repoURL, job.GitBranch, job.GitSHA)
 
 	// If context is a subdirectory, append to git context
 	if contextPath != "." {
