@@ -166,13 +166,20 @@ Enclii runs on cost-optimized infrastructure validated through independent resea
 
 **Ingress Architecture (Cloudflare Tunnel):**
 ```
-Internet → Cloudflare Edge → cloudflared pods → ClusterIP Services
-           (TLS, DDoS)        (2 replicas)       (internal routing)
+Internet → Cloudflare Edge → cloudflared pods → K8s Service:80 → Container:4xxx
+           (TLS, DDoS)        (2 replicas)       (ClusterIP)      (targetPort)
 ```
 - Zero exposed node ports (all traffic through tunnel)
 - Zero-downtime RollingUpdate deployments
 - NetworkPolicy isolation per namespace
 - Configuration: `infra/k8s/production/cloudflared-unified.yaml`
+
+**Port Mapping Hierarchy** (Critical for tunnel configuration):
+1. **Container Port**: What the app listens on (e.g., 4200, 4201, 4204)
+2. **K8s Service Port**: What the service exposes (port 80)
+3. **Cloudflare Route**: Must point to K8s Service port (80), NOT container port
+
+> See `infra/DEPLOYMENT.md` for complete Service Routing table.
 
 **Database & Caching:**
 - **Ubicloud PostgreSQL** - Managed DB on Hetzner infrastructure - $50/month
