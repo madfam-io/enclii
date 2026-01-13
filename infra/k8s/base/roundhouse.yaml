@@ -99,7 +99,7 @@ spec:
                     operator: DoesNotExist
       containers:
         - name: roundhouse-worker
-          image: ghcr.io/madfam-org/roundhouse-worker:v20260113-kaniko
+          image: ghcr.io/madfam-org/roundhouse-worker:v20260113-bindenv
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false
