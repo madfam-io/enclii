@@ -7,8 +7,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { CommandPalette } from '@/components/command/command-palette';
+import { SystemHealthBadge } from '@/components/dashboard/system-health';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, X } from 'lucide-react';
+import { Menu } from 'lucide-react';
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
@@ -123,9 +124,8 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
               </div>
 
               {/* System Health - Hidden on mobile */}
-              <div className="hidden md:flex items-center text-sm text-muted-foreground">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                <span>System Healthy</span>
+              <div className="hidden md:block">
+                <SystemHealthBadge />
               </div>
 
               {/* Notifications - Always visible */}
