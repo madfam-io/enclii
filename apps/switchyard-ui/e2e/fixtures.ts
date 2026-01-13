@@ -1,4 +1,4 @@
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect, Page } from '@playwright/test';
 
 /**
  * Enclii E2E Test Fixtures
@@ -89,14 +89,14 @@ export const viewports = {
 /**
  * Wait for page to be fully loaded (no network activity)
  */
-export async function waitForPageLoad(page: typeof base extends { page: infer P } ? P : never) {
+export async function waitForPageLoad(page: Page) {
   await page.waitForLoadState('networkidle');
 }
 
 /**
  * Check for console errors during test
  */
-export function setupConsoleErrorCapture(page: typeof base extends { page: infer P } ? P : never) {
+export function setupConsoleErrorCapture(page: Page) {
   const errors: string[] = [];
 
   page.on('console', (msg) => {

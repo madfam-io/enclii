@@ -27,11 +27,16 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
 
   // Reporter configuration
-  reporter: [
-    ['html', { outputFolder: 'playwright-report' }],
-    ['list'],
-    ...(process.env.CI ? [['github' as const]] : []),
-  ],
+  reporter: process.env.CI
+    ? [
+        ['html', { outputFolder: 'playwright-report' }],
+        ['list'],
+        ['github'],
+      ]
+    : [
+        ['html', { outputFolder: 'playwright-report' }],
+        ['list'],
+      ],
 
   // Shared settings for all projects
   use: {
