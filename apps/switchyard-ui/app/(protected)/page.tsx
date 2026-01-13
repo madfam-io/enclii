@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { CheckCircle2, AlertTriangle, BarChart3, Clock, RefreshCw } from "lucide-react";
+import { StatCard, StatCardSkeleton } from "@/components/dashboard/stat-card";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4200";
 
@@ -104,16 +105,16 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="animate-pulse">
-          <div className="h-8 bg-muted rounded w-1/4 mb-8"></div>
+        <div className="px-4 py-6 sm:px-0">
+          <div className="h-8 bg-muted rounded w-1/4 mb-8 animate-pulse"></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 bg-muted rounded"></div>
+              <StatCardSkeleton key={i} />
             ))}
           </div>
           <div className="space-y-6">
-            <div className="h-64 bg-muted rounded"></div>
-            <div className="h-64 bg-muted rounded"></div>
+            <div className="h-64 bg-muted rounded animate-pulse"></div>
+            <div className="h-64 bg-muted rounded animate-pulse"></div>
           </div>
         </div>
       </div>
@@ -155,93 +156,30 @@ export default function Dashboard() {
 
         {/* Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                    <CheckCircle2 className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-muted-foreground truncate">
-                      Healthy Services
-                    </dt>
-                    <dd className="text-lg font-medium text-foreground">
-                      {stats.healthy_services}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-                    <AlertTriangle className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-muted-foreground truncate">
-                      Deployments Today
-                    </dt>
-                    <dd className="text-lg font-medium text-foreground">
-                      {stats.deployments_today}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                    <BarChart3 className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-muted-foreground truncate">
-                      Active Projects
-                    </dt>
-                    <dd className="text-lg font-medium text-foreground">
-                      {stats.active_projects}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-card overflow-hidden shadow rounded-lg border border-border">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-muted-foreground rounded-full flex items-center justify-center">
-                    <Clock className="w-4 h-4 text-white" />
-                  </div>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-muted-foreground truncate">
-                      Avg Deploy Time
-                    </dt>
-                    <dd className="text-lg font-medium text-foreground">
-                      {stats.avg_deploy_time}
-                    </dd>
-                  </dl>
-                </div>
-              </div>
-            </div>
-          </div>
+          <StatCard
+            title="Healthy Services"
+            value={stats.healthy_services}
+            icon={CheckCircle2}
+            variant="success"
+          />
+          <StatCard
+            title="Deployments Today"
+            value={stats.deployments_today}
+            icon={AlertTriangle}
+            variant="warning"
+          />
+          <StatCard
+            title="Active Projects"
+            value={stats.active_projects}
+            icon={BarChart3}
+            variant="info"
+          />
+          <StatCard
+            title="Avg Deploy Time"
+            value={stats.avg_deploy_time}
+            icon={Clock}
+            variant="neutral"
+          />
         </div>
 
         {/* Recent Activity */}
