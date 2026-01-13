@@ -124,7 +124,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("build-work-dir", "/tmp/enclii-builds")
 	viper.SetDefault("build-cache-dir", "/var/cache/enclii-buildpacks")
 	viper.SetDefault("build-mode", "in-process")                 // "in-process" or "roundhouse"
-	viper.SetDefault("roundhouse-url", "http://roundhouse:8080") // Roundhouse worker URL
+	viper.SetDefault("roundhouse-url", "http://roundhouse") // Roundhouse worker URL (K8s service on port 80)
 	viper.SetDefault("roundhouse-api-key", "")                   // API key for roundhouse
 	viper.SetDefault("self-url", "http://switchyard-api:4200")   // This service's URL for callbacks
 	viper.SetDefault("github-webhook-secret", "")                // Webhook disabled until secret configured
