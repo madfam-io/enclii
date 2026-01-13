@@ -61,6 +61,26 @@ func Load() (*Config, error) {
 	viper.SetDefault("REGISTRY", "ghcr.io")
 	viper.SetDefault("KANIKO_GIT_CREDENTIALS", "git-credentials")
 
+	// Bind environment variables explicitly for reliable reading
+	viper.BindEnv("REDIS_URL")
+	viper.BindEnv("DATABASE_URL")
+	viper.BindEnv("REGISTRY")
+	viper.BindEnv("REGISTRY_USER")
+	viper.BindEnv("REGISTRY_PASSWORD")
+	viper.BindEnv("BUILD_MODE")
+	viper.BindEnv("BUILD_WORK_DIR")
+	viper.BindEnv("BUILD_TIMEOUT")
+	viper.BindEnv("KANIKO_CACHE_REPO")
+	viper.BindEnv("KANIKO_GIT_CREDENTIALS")
+	viper.BindEnv("KUBECONFIG")
+	viper.BindEnv("GENERATE_SBOM")
+	viper.BindEnv("SIGN_IMAGES")
+	viper.BindEnv("COSIGN_KEY")
+	viper.BindEnv("SWITCHYARD_INTERNAL_URL")
+	viper.BindEnv("SWITCHYARD_API_KEY")
+	viper.BindEnv("MAX_CONCURRENT_BUILDS")
+	viper.BindEnv("POLL_INTERVAL")
+
 	viper.AutomaticEnv()
 
 	var cfg Config
