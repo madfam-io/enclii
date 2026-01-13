@@ -6,11 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
-**Current Status:** 🟢 v0.1.0 - Production Beta (85% ready) ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
+**Current Status:** 🟢 v0.1.0 - Production Beta (90% ready) ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
 **Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud (~$100/month) - **Running**
 **Authentication:** OIDC via Janua SSO (RS256 JWT) - **Integrated**
 **Dogfooding:** Core services deployed ([api.enclii.dev](https://api.enclii.dev), [app.enclii.dev](https://app.enclii.dev))
 **Build Pipeline:** GitHub webhook CI/CD with Buildpacks - **Operational**
+**GitOps:** ArgoCD App-of-Apps with self-heal - **Operational** (Jan 2026)
+**Storage:** Longhorn CSI for multi-node HA - **Operational** (Jan 2026)
 
 ### Port Allocation
 
@@ -180,6 +182,27 @@ Internet → Cloudflare Edge → cloudflared pods → ClusterIP Services
 - **Cloudflare R2** - Zero-egress object storage (SBOMs, artifacts) - $5/month
 - **Cloudflare for SaaS** - First 100 custom domains FREE - $0
 
+**GitOps & Orchestration (Deployed Jan 2026):**
+- **ArgoCD** - GitOps engine with App-of-Apps pattern
+- **Pull-based sync** with automatic drift correction (self-heal)
+- Configuration: `infra/argocd/` (root-application.yaml, apps/*.yaml)
+- Access: `kubectl port-forward svc/argocd-server -n argocd 8080:443`
+
+**Cluster Storage (Deployed Jan 2026):**
+- **Longhorn CSI** - Replicated storage for multi-node HA
+- StorageClasses: `longhorn-replicated` (2 replicas), `longhorn-fast` (1 replica)
+- Configuration: `infra/helm/longhorn/`
+
+**GPU Node Preparation (Ready to Deploy):**
+- **NVIDIA Device Plugin** - DaemonSet for GPU discovery
+- **Tolerations/Affinity** - Web workloads avoid GPU nodes
+- Configuration: `infra/k8s/base/gpu/`
+
+**Secure Build Pipeline (Ready to Deploy):**
+- **Kaniko** - Rootless container builds (replaces Docker-in-Docker)
+- Pod Security `restricted`, NetworkPolicy isolation
+- Configuration: `apps/roundhouse/k8s/kaniko-job-template.yaml`
+
 **vs Traditional SaaS Stack:** $2,220/month (Railway $2,000 + Auth0 $220)
 **5-Year Savings:** $127,200
 
@@ -342,6 +365,45 @@ enclii auth verify
 kubectl logs -n janua -l app=janua-api -f
 ```
 
+### GitOps/ArgoCD Issues
+
+```bash
+# Check ArgoCD sync status
+kubectl get applications -n argocd
+
+# View application details
+kubectl describe application core-services -n argocd
+
+# Check ArgoCD controller logs
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller -f
+
+# Access ArgoCD UI (port-forward)
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+# Login: admin / (kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+
+# Force sync an application
+kubectl patch application core-services -n argocd --type merge -p '{"operation":{"sync":{}}}'
+```
+
+### Storage/Longhorn Issues
+
+```bash
+# Check Longhorn pods
+kubectl get pods -n longhorn-system
+
+# View volume status
+kubectl get volumes.longhorn.io -n longhorn-system
+
+# Check PVC status
+kubectl get pvc -A
+
+# Access Longhorn UI (port-forward)
+kubectl port-forward svc/longhorn-frontend -n longhorn-system 8081:80
+
+# Check replica health
+kubectl get replicas.longhorn.io -n longhorn-system
+```
+
 ---
 
 ## Key File Locations
@@ -386,6 +448,11 @@ kubectl logs -n janua -l app=janua-api -f
 | K8s manifests | `infra/k8s/production/` |
 | Cloudflare tunnel | `infra/k8s/production/cloudflared-unified.yaml` |
 | Deploy scripts | `scripts/` |
+| ArgoCD config | `infra/argocd/` |
+| ArgoCD apps | `infra/argocd/apps/*.yaml` |
+| Longhorn values | `infra/helm/longhorn/` |
+| GPU setup | `infra/k8s/base/gpu/` |
+| Kaniko builds | `apps/roundhouse/k8s/kaniko-job-template.yaml` |
 
 ### Documentation
 
