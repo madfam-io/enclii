@@ -14,6 +14,9 @@ export default defineConfig({
   // Directory containing test files
   testDir: './e2e',
 
+  // Global setup
+  globalSetup: './e2e/global-setup.ts',
+
   // Run tests in parallel
   fullyParallel: true,
 
@@ -85,7 +88,7 @@ export default defineConfig({
 
   // Local dev server configuration
   webServer: {
-    command: 'pnpm dev',
+    command: 'NEXT_PUBLIC_SKIP_SILENT_AUTH=true NEXT_PUBLIC_AUTH_MODE=oidc pnpm dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
