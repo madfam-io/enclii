@@ -55,12 +55,11 @@ spec:
             memory: 128Mi
             cpu: 50m
 
-        # ServiceMonitor for Prometheus
+        # ServiceMonitor disabled - requires Prometheus Operator
         metrics:
           enabled: true
           serviceMonitor:
-            enabled: true
-            namespace: argocd
+            enabled: false
 
         # Pod disruption budget
         podDisruptionBudget:
