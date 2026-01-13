@@ -75,14 +75,8 @@ spec:
             operator: "Exists"
             effect: "NoSchedule"
 
-        # Additional environment variables
-        extraEnv:
-          - name: ARGOCD_GRPC_WEB
-            value: "true"
-          - name: ARGOCD_SERVER
-            value: "argocd-server.argocd.svc.cluster.local"
-          - name: ARGOCD_INSECURE
-            value: "true"
+        # ArgoCD connection configured via chart defaults
+        # extraEnv removed - duplicates chart's built-in env vars
 
         # Mount git credentials for write-back
         authScripts:
