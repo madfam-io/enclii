@@ -84,3 +84,9 @@ terraform.tfvars
 
 # CLI binary artifacts
 packages/cli/enclii
+
+# Playwright
+playwright-report/
+playwright/.cache/
+test-results/
+.playwright/

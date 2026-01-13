@@ -1,0 +1,108 @@
+name: E2E Tests
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/switchyard-ui/**'
+      - '.github/workflows/e2e-tests.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'apps/switchyard-ui/**'
+      - '.github/workflows/e2e-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  e2e-tests:
+    name: Playwright E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        working-directory: apps/switchyard-ui
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build application
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_API_URL: https://api.enclii.dev
+          NEXT_PUBLIC_OIDC_ISSUER: https://auth.madfam.io
+
+      - name: Run E2E tests
+        run: pnpm test:e2e
+        env:
+          BASE_URL: http://localhost:3000
+          CI: true
+          # TEST_USER_EMAIL and TEST_USER_PASSWORD would be set from secrets
+          # for authenticated tests in staging/production
+          # TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          # TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/switchyard-ui/playwright-report/
+          retention-days: 7
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: apps/switchyard-ui/test-results/
+          retention-days: 7
+
+  e2e-summary:
+    name: E2E Test Summary
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    if: always()
+
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.e2e-tests.result }}" == "success" ]; then
+            echo "✅ All E2E tests passed!"
+            exit 0
+          else
+            echo "❌ E2E tests failed or were cancelled"
+            exit 1
+          fi
