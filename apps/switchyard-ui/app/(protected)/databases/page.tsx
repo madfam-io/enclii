@@ -54,16 +54,19 @@ export default function DatabasesPage() {
   const fetchDatabases = async () => {
     try {
       setError(null);
-      // Fetch all projects first
-      const projectsData = await apiGet<Project[]>('/v1/projects');
-      setProjects(projectsData || []);
+      // Fetch all projects first - API returns {projects: Project[]}
+      const projectsResponse = await apiGet<{projects: Project[]}>('/v1/projects');
+      const projectsData = projectsResponse?.projects || [];
+      setProjects(projectsData);
 
       // Fetch databases for each project
       const allDatabases: DatabaseAddon[] = [];
-      for (const project of projectsData || []) {
+      for (const project of projectsData) {
         try {
-          const dbs = await apiGet<DatabaseAddon[]>(`/v1/projects/${project.slug}/addons`);
-          if (dbs && dbs.length > 0) {
+          // API returns {addons: DatabaseAddon[], count: number}
+          const addonsResponse = await apiGet<{addons: DatabaseAddon[], count: number}>(`/v1/projects/${project.slug}/addons`);
+          const dbs = addonsResponse?.addons || [];
+          if (dbs.length > 0) {
             allDatabases.push(...dbs.map(db => ({ ...db, project_name: project.name, project_slug: project.slug })));
           }
         } catch {

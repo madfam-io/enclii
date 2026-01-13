@@ -13,6 +13,17 @@ import (
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
+// isTableNotExistError checks if an error is due to a missing database table
+// This allows graceful degradation when migrations haven't been applied
+func isTableNotExistError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "does not exist") ||
+		strings.Contains(errStr, "relation") && strings.Contains(errStr, "does not exist")
+}
+
 // CreatePreviewRequest defines the request body for creating a preview environment
 type CreatePreviewRequest struct {
 	ServiceID    string `json:"service_id" binding:"required"`
@@ -52,6 +63,16 @@ func (h *Handler) ListPreviews(c *gin.Context) {
 
 	previews, err := h.repos.PreviewEnvironments.ListByService(ctx, serviceUUID)
 	if err != nil {
+		// Gracefully handle missing table (migrations not applied)
+		if isTableNotExistError(err) {
+			h.logger.Warn(ctx, "Preview environments table not found, returning empty list",
+				logging.String("service_id", serviceID))
+			c.JSON(http.StatusOK, gin.H{
+				"previews": []*types.PreviewEnvironment{},
+				"count":    0,
+			})
+			return
+		}
 		h.logger.Error(ctx, "Failed to list preview environments",
 			logging.String("service_id", serviceID),
 			logging.Error("error", err))
@@ -85,6 +106,16 @@ func (h *Handler) ListProjectPreviews(c *gin.Context) {
 
 	previews, err := h.repos.PreviewEnvironments.ListByProject(ctx, project.ID)
 	if err != nil {
+		// Gracefully handle missing table (migrations not applied)
+		if isTableNotExistError(err) {
+			h.logger.Warn(ctx, "Preview environments table not found, returning empty list",
+				logging.String("project_slug", slug))
+			c.JSON(http.StatusOK, gin.H{
+				"previews": []*types.PreviewEnvironment{},
+				"count":    0,
+			})
+			return
+		}
 		h.logger.Error(ctx, "Failed to list project preview environments",
 			logging.String("project_slug", slug),
 			logging.Error("error", err))
