@@ -18,11 +18,17 @@ type Config struct {
 	RedisURL string `mapstructure:"REDIS_URL"`
 
 	// Build settings
+	BuildMode        string        `mapstructure:"BUILD_MODE"` // "docker" or "kaniko"
 	BuildWorkDir     string        `mapstructure:"BUILD_WORK_DIR"`
 	BuildTimeout     time.Duration `mapstructure:"BUILD_TIMEOUT"`
 	Registry         string        `mapstructure:"REGISTRY"`
 	RegistryUser     string        `mapstructure:"REGISTRY_USER"`
 	RegistryPassword string        `mapstructure:"REGISTRY_PASSWORD"`
+
+	// Kaniko-specific settings (when BUILD_MODE=kaniko)
+	KanikoCacheRepo      string `mapstructure:"KANIKO_CACHE_REPO"`      // Registry path for layer cache
+	KanikoGitCredentials string `mapstructure:"KANIKO_GIT_CREDENTIALS"` // K8s secret name with git token
+	KubeConfig           string `mapstructure:"KUBECONFIG"`             // Path to kubeconfig (empty = in-cluster)
 
 	// Security
 	GenerateSBOM bool   `mapstructure:"GENERATE_SBOM"`
@@ -45,6 +51,7 @@ type Config struct {
 
 func Load() (*Config, error) {
 	viper.SetDefault("API_PORT", "8081")
+	viper.SetDefault("BUILD_MODE", "docker") // Use "kaniko" in production for security
 	viper.SetDefault("BUILD_WORK_DIR", "/tmp/roundhouse-builds")
 	viper.SetDefault("BUILD_TIMEOUT", 30*time.Minute)
 	viper.SetDefault("GENERATE_SBOM", true)
@@ -52,6 +59,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("MAX_CONCURRENT_BUILDS", 3)
 	viper.SetDefault("POLL_INTERVAL", 5*time.Second)
 	viper.SetDefault("REGISTRY", "ghcr.io")
+	viper.SetDefault("KANIKO_GIT_CREDENTIALS", "git-credentials")
 
 	viper.AutomaticEnv()
 

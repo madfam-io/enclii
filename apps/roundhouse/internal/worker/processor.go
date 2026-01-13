@@ -17,13 +17,16 @@ import (
 	"github.com/madfam-org/enclii/apps/roundhouse/internal/config"
 	"github.com/madfam-org/enclii/apps/roundhouse/internal/queue"
 	"go.uber.org/zap"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // Processor handles build job processing
 type Processor struct {
 	workerID   string
 	queue      *queue.RedisQueue
-	executor   *builder.Executor
+	builder    builder.Builder // Use interface for both Docker and Kaniko
 	cfg        *config.Config
 	logger     *zap.Logger
 	httpClient *http.Client
@@ -38,16 +41,75 @@ type Processor struct {
 }
 
 // NewProcessor creates a new job processor
-func NewProcessor(cfg *config.Config, q *queue.RedisQueue, logger *zap.Logger) *Processor {
+func NewProcessor(cfg *config.Config, q *queue.RedisQueue, logger *zap.Logger) (*Processor, error) {
 	workerID := cfg.WorkerID
 	if workerID == "" {
 		hostname, _ := os.Hostname()
 		workerID = fmt.Sprintf("%s-%s", hostname, uuid.New().String()[:8])
 	}
 
+	// Log callback for streaming build logs to Redis
+	logFunc := func(jobID uuid.UUID, line string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		q.AppendLog(ctx, jobID, line)
+	}
+
+	// Initialize the appropriate builder based on build mode
+	var b builder.Builder
+	var err error
+
+	switch builder.BuildMode(cfg.BuildMode) {
+	case builder.BuildModeKaniko:
+		logger.Info("initializing Kaniko builder (secure, rootless)",
+			zap.String("registry", cfg.Registry))
+
+		// Create Kubernetes client
+		k8sClient, err := createK8sClient(cfg.KubeConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+		}
+
+		b = builder.NewKanikoExecutor(&builder.KanikoExecutorConfig{
+			K8sClient:      k8sClient,
+			Registry:       cfg.Registry,
+			RegistryUser:   cfg.RegistryUser,
+			RegistryPass:   cfg.RegistryPassword,
+			GenerateSBOM:   cfg.GenerateSBOM,
+			SignImages:     cfg.SignImages,
+			CosignKey:      cfg.CosignKey,
+			Timeout:        cfg.BuildTimeout,
+			CacheRepo:      cfg.KanikoCacheRepo,
+			GitCredentials: cfg.KanikoGitCredentials,
+		}, logger, logFunc)
+
+	case builder.BuildModeDocker:
+		logger.Warn("initializing Docker builder (requires Docker socket - NOT recommended for production)",
+			zap.String("registry", cfg.Registry))
+
+		b = builder.NewExecutor(&builder.ExecutorConfig{
+			WorkDir:      cfg.BuildWorkDir,
+			Registry:     cfg.Registry,
+			RegistryUser: cfg.RegistryUser,
+			RegistryPass: cfg.RegistryPassword,
+			GenerateSBOM: cfg.GenerateSBOM,
+			SignImages:   cfg.SignImages,
+			CosignKey:    cfg.CosignKey,
+			Timeout:      cfg.BuildTimeout,
+		}, logger, logFunc)
+
+	default:
+		return nil, fmt.Errorf("unsupported build mode: %s (use 'docker' or 'kaniko')", cfg.BuildMode)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize builder: %w", err)
+	}
+
 	p := &Processor{
 		workerID:   workerID,
 		queue:      q,
+		builder:    b,
 		cfg:        cfg,
 		logger:     logger,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
@@ -61,24 +123,32 @@ func NewProcessor(cfg *config.Config, q *queue.RedisQueue, logger *zap.Logger) *
 		},
 	}
 
-	// Create executor with log callback
-	p.executor = builder.NewExecutor(&builder.ExecutorConfig{
-		WorkDir:      cfg.BuildWorkDir,
-		Registry:     cfg.Registry,
-		RegistryUser: cfg.RegistryUser,
-		RegistryPass: cfg.RegistryPassword,
-		GenerateSBOM: cfg.GenerateSBOM,
-		SignImages:   cfg.SignImages,
-		CosignKey:    cfg.CosignKey,
-		Timeout:      cfg.BuildTimeout,
-	}, logger, func(jobID uuid.UUID, line string) {
-		// Append log to Redis stream
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		q.AppendLog(ctx, jobID, line)
-	})
+	return p, nil
+}
 
-	return p
+// createK8sClient creates a Kubernetes client
+func createK8sClient(kubeconfig string) (kubernetes.Interface, error) {
+	var config *rest.Config
+	var err error
+
+	if kubeconfig != "" {
+		// Use provided kubeconfig file
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+	} else {
+		// Use in-cluster config (when running in Kubernetes)
+		config, err = rest.InClusterConfig()
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build kubernetes config: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes clientset: %w", err)
+	}
+
+	return clientset, nil
 }
 
 // Start begins processing jobs
@@ -165,8 +235,8 @@ func (p *Processor) processJob(ctx context.Context, job *queue.BuildJob) {
 	buildCtx, cancel := context.WithTimeout(ctx, p.cfg.BuildTimeout)
 	defer cancel()
 
-	// Execute build
-	result, err := p.executor.Execute(buildCtx, job)
+	// Execute build using configured builder (Docker or Kaniko)
+	result, err := p.builder.Execute(buildCtx, job)
 
 	// Update final status
 	var finalStatus queue.JobStatus

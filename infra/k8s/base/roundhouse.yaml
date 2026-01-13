@@ -1,8 +1,64 @@
 ---
+# Roundhouse Build Pipeline
+# Secure container builds using Kaniko (no Docker socket)
+#
+# Security features:
+# - BUILD_MODE=kaniko uses Kubernetes Jobs instead of Docker-in-Docker
+# - No privileged containers
+# - No Docker socket access
+# - Pod Security Standards compliant (restricted)
+# - RBAC scoped to enclii-builds namespace only
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: roundhouse
+  namespace: enclii
+  labels:
+    app.kubernetes.io/name: roundhouse
+    app.kubernetes.io/part-of: enclii
+---
+# RBAC: Allow Roundhouse to create Jobs in the builds namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: roundhouse-builder
+  namespace: enclii-builds
+  labels:
+    app.kubernetes.io/name: roundhouse
+    app.kubernetes.io/part-of: enclii
+rules:
+  # Create and monitor build Jobs
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  # Get logs from build pods
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: roundhouse-builder
+  namespace: enclii-builds
+  labels:
+    app.kubernetes.io/name: roundhouse
+    app.kubernetes.io/part-of: enclii
+subjects:
+  - kind: ServiceAccount
+    name: roundhouse
+    namespace: enclii
+roleRef:
+  kind: Role
+  name: roundhouse-builder
+  apiGroup: rbac.authorization.k8s.io
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: roundhouse
+  namespace: enclii
   labels:
     app: roundhouse
     app.kubernetes.io/name: roundhouse
@@ -21,32 +77,92 @@ spec:
         app.kubernetes.io/component: build-pipeline
         app.kubernetes.io/part-of: enclii
     spec:
+      serviceAccountName: roundhouse
+      imagePullSecrets:
+        - name: enclii-registry-credentials
+      # Security context - non-privileged
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # Avoid GPU nodes
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: DoesNotExist
       containers:
         - name: roundhouse-worker
-          image: ghcr.io/madfam-org/enclii/roundhouse:1ead1b30fdb4732051596d2d2ca7726dde4acf7c
+          image: ghcr.io/madfam-org/roundhouse-worker:v20260110-docker27
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           env:
+            # Build mode: Docker mode until new image with Kaniko support is built
+            - name: BUILD_MODE
+              value: "docker"
+            # Redis connection
             - name: REDIS_URL
               valueFrom:
                 secretKeyRef:
                   name: enclii-secrets
                   key: redis-url
+            # Container registry
             - name: REGISTRY
               value: "ghcr.io/madfam-org"
-            - name: CALLBACK_URL
+            - name: REGISTRY_USER
+              valueFrom:
+                secretKeyRef:
+                  name: registry-credentials
+                  key: username
+                  optional: true
+            - name: REGISTRY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: registry-credentials
+                  key: password
+                  optional: true
+            # Kaniko-specific settings
+            - name: KANIKO_CACHE_REPO
+              value: "ghcr.io/madfam-org/cache"
+            - name: KANIKO_GIT_CREDENTIALS
+              value: "git-credentials"
+            # Callback to Switchyard API
+            - name: SWITCHYARD_INTERNAL_URL
               value: "http://switchyard-api:4200"
-            - name: BUILD_WORK_DIR
-              value: "/var/lib/roundhouse/builds"
+            - name: SWITCHYARD_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: enclii-secrets
+                  key: internal-api-key
+                  optional: true
+            # Build settings
+            - name: MAX_CONCURRENT_BUILDS
+              value: "3"
+            - name: BUILD_TIMEOUT
+              value: "30m"
+            - name: GENERATE_SBOM
+              value: "true"  # SBOM generation using Syft
+            - name: SIGN_IMAGES
+              value: "true"  # Image signing using Cosign
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "200m"
+              memory: "128Mi"
+              cpu: "100m"
             limits:
-              memory: "1Gi"
-              cpu: "1000m"
-          volumeMounts:
-            - name: build-work
-              mountPath: /var/lib/roundhouse/builds
-      volumes:
-        - name: build-work
-          emptyDir: {}
+              memory: "512Mi"
+              cpu: "500m"
+          # No volume mounts needed for Kaniko mode
+          # Builds happen in separate Jobs, not in this pod
+      # No volumes needed for Kaniko mode
+      volumes: []
