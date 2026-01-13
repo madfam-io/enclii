@@ -253,12 +253,12 @@ func (e *KanikoExecutor) createBuildJob(ctx context.Context, job *queue.BuildJob
 							Args:  args,
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("500m"),
-									corev1.ResourceMemory: resource.MustParse("1Gi"),
+									corev1.ResourceCPU:    resource.MustParse("1"),
+									corev1.ResourceMemory: resource.MustParse("2Gi"),
 								},
 								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("2"),
-									corev1.ResourceMemory: resource.MustParse("4Gi"),
+									corev1.ResourceCPU:    resource.MustParse("4"),
+									corev1.ResourceMemory: resource.MustParse("8Gi"),
 								},
 							},
 							SecurityContext: &corev1.SecurityContext{
