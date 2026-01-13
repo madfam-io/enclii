@@ -13,10 +13,12 @@ data:
   grafana.ini: |
     [server]
     root_url = https://grafana.enclii.dev
+    domain = grafana.enclii.dev
 
     [security]
     admin_user = admin
     disable_gravatar = true
+    cookie_secure = true
 
     [users]
     allow_sign_up = false
@@ -387,6 +389,8 @@ spec:
               mountPath: /etc/grafana/provisioning/dashboards
             - name: dashboards
               mountPath: /var/lib/grafana/dashboards
+            - name: dashboard-roundhouse
+              mountPath: /var/lib/grafana/dashboards/roundhouse
             - name: data
               mountPath: /var/lib/grafana
           readinessProbe:
@@ -414,6 +418,9 @@ spec:
         - name: dashboards
           configMap:
             name: grafana-dashboards
+        - name: dashboard-roundhouse
+          configMap:
+            name: grafana-dashboard-roundhouse
         - name: data
           persistentVolumeClaim:
             claimName: grafana-data

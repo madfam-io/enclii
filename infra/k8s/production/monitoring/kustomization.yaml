@@ -8,6 +8,7 @@ resources:
   - prometheus.yaml
   - grafana.yaml
   - alertmanager.yaml
+  - dashboards/
 
 commonLabels:
   app.kubernetes.io/part-of: enclii

@@ -108,6 +108,31 @@ data:
           noTLSVerify: true  # ArgoCD uses self-signed cert internally
 
       # ============================================
+      # Monitoring Services (namespace: monitoring)
+      # ============================================
+
+      # Grafana (Dashboards)
+      - hostname: grafana.enclii.dev
+        service: http://grafana.monitoring.svc.cluster.local:3000
+        originRequest:
+          connectTimeout: 10s
+          httpHostHeader: grafana.enclii.dev
+
+      # Prometheus (Metrics - restrict access in production)
+      - hostname: prometheus.enclii.dev
+        service: http://prometheus.monitoring.svc.cluster.local:9090
+        originRequest:
+          connectTimeout: 10s
+          httpHostHeader: prometheus.enclii.dev
+
+      # AlertManager (Alerts - restrict access in production)
+      - hostname: alertmanager.enclii.dev
+        service: http://alertmanager.monitoring.svc.cluster.local:9093
+        originRequest:
+          connectTimeout: 10s
+          httpHostHeader: alertmanager.enclii.dev
+
+      # ============================================
       # Janua Identity Services (namespace: janua)
       # ============================================
 
