@@ -38,14 +38,16 @@ spec:
         # Admission controller configuration
         admissionController:
           replicas: 1
+          # ServiceMonitor disabled - requires Prometheus Operator
           serviceMonitor:
-            enabled: true
+            enabled: false
 
         # Background controller for policy reports
         backgroundController:
           enabled: true
+          # ServiceMonitor disabled - requires Prometheus Operator
           serviceMonitor:
-            enabled: true
+            enabled: false
           resources:
             limits:
               memory: 256Mi
