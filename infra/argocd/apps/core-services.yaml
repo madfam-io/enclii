@@ -9,6 +9,27 @@ metadata:
   labels:
     app.kubernetes.io/name: core-services
     app.kubernetes.io/part-of: enclii
+  annotations:
+    # ArgoCD Image Updater Configuration
+    # Watches ghcr.io for new image versions and auto-updates deployments
+    argocd-image-updater.argoproj.io/image-list: |
+      switchyard-api=ghcr.io/madfam-org/switchyard-api,
+      switchyard-ui=ghcr.io/madfam-org/switchyard-ui,
+      roundhouse=ghcr.io/madfam-org/roundhouse-worker
+
+    # Update strategies per image
+    argocd-image-updater.argoproj.io/switchyard-api.update-strategy: semver
+    argocd-image-updater.argoproj.io/switchyard-ui.update-strategy: semver
+    argocd-image-updater.argoproj.io/roundhouse.update-strategy: semver
+
+    # Git write-back (commits updated tags to Git for GitOps audit trail)
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/write-back-target: kustomization
+
+    # Kustomize image path mappings
+    argocd-image-updater.argoproj.io/switchyard-api.kustomize.image-name: ghcr.io/madfam-org/switchyard-api
+    argocd-image-updater.argoproj.io/switchyard-ui.kustomize.image-name: ghcr.io/madfam-org/switchyard-ui
+    argocd-image-updater.argoproj.io/roundhouse.kustomize.image-name: ghcr.io/madfam-org/roundhouse-worker
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
