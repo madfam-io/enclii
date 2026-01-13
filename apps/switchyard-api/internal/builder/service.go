@@ -165,7 +165,9 @@ func (s *Service) BuildFromGit(ctx context.Context, service *types.Service, gitS
 
 	if err != nil {
 		result.Error = fmt.Errorf("build failed: %w", err)
-		result.Logs = append(result.Logs, buildResult.Logs...)
+		if buildResult != nil {
+			result.Logs = append(result.Logs, buildResult.Logs...)
+		}
 		result.Logs = append(result.Logs, fmt.Sprintf("ERROR: %v", err))
 		return result
 	}
