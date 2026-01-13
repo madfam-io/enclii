@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
@@ -414,4 +415,163 @@ type HealthResponse struct {
 	Status  string `json:"status"`
 	Service string `json:"service"`
 	Version string `json:"version"`
+}
+
+// Environment Variables / Secrets
+
+// EnvVarRequest represents a request to create or update an environment variable
+type EnvVarRequest struct {
+	Key      string `json:"key"`
+	Value    string `json:"value"`
+	IsSecret bool   `json:"is_secret"`
+}
+
+// EnvVarResponse represents an environment variable in API responses
+type EnvVarResponse struct {
+	ID            uuid.UUID  `json:"id"`
+	ServiceID     uuid.UUID  `json:"service_id"`
+	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
+	Key           string     `json:"key"`
+	Value         string     `json:"value"` // Masked as "••••••" if is_secret=true
+	IsSecret      bool       `json:"is_secret"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// ServiceInfo represents basic service information for CLI use
+type ServiceInfo struct {
+	ID        uuid.UUID `json:"id"`
+	ProjectID uuid.UUID `json:"project_id"`
+	Name      string    `json:"name"`
+}
+
+// EnvironmentInfo represents basic environment information for CLI use
+type EnvironmentInfo struct {
+	ID            uuid.UUID `json:"id"`
+	ProjectID     uuid.UUID `json:"project_id"`
+	Name          string    `json:"name"`
+	KubeNamespace string    `json:"kube_namespace"`
+}
+
+// ListEnvVars returns all environment variables for a service
+func (c *APIClient) ListEnvVars(ctx context.Context, serviceID string, environmentID *string) ([]EnvVarResponse, error) {
+	endpoint := fmt.Sprintf("/v1/services/%s/env-vars", serviceID)
+	if environmentID != nil && *environmentID != "" {
+		endpoint += "?environment_id=" + url.QueryEscape(*environmentID)
+	}
+
+	var response struct {
+		EnvVars []EnvVarResponse `json:"environment_variables"`
+	}
+
+	if err := c.get(ctx, endpoint, &response); err != nil {
+		return nil, fmt.Errorf("failed to list env vars: %w", err)
+	}
+
+	return response.EnvVars, nil
+}
+
+// CreateEnvVar creates a new environment variable
+func (c *APIClient) CreateEnvVar(ctx context.Context, serviceID string, req EnvVarRequest, environmentID *string) (*EnvVarResponse, error) {
+	payload := map[string]interface{}{
+		"key":       req.Key,
+		"value":     req.Value,
+		"is_secret": req.IsSecret,
+	}
+
+	if environmentID != nil && *environmentID != "" {
+		payload["environment_id"] = *environmentID
+	}
+
+	var result EnvVarResponse
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/env-vars", serviceID), payload, &result); err != nil {
+		return nil, fmt.Errorf("failed to create env var: %w", err)
+	}
+
+	return &result, nil
+}
+
+// BulkCreateEnvVars creates multiple environment variables at once
+func (c *APIClient) BulkCreateEnvVars(ctx context.Context, serviceID string, vars []EnvVarRequest, environmentID *string) ([]EnvVarResponse, error) {
+	payload := map[string]interface{}{
+		"variables": vars,
+	}
+
+	if environmentID != nil && *environmentID != "" {
+		payload["environment_id"] = *environmentID
+	}
+
+	var response struct {
+		EnvVars []EnvVarResponse `json:"environment_variables"`
+	}
+
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/env-vars/bulk", serviceID), payload, &response); err != nil {
+		return nil, fmt.Errorf("failed to bulk create env vars: %w", err)
+	}
+
+	return response.EnvVars, nil
+}
+
+// DeleteEnvVar deletes an environment variable
+func (c *APIClient) DeleteEnvVar(ctx context.Context, serviceID, envVarID string) error {
+	resp, err := c.makeRequest(ctx, "DELETE", fmt.Sprintf("/v1/services/%s/env-vars/%s", serviceID, envVarID), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// RevealEnvVar reveals the actual value of a secret (logged for audit)
+func (c *APIClient) RevealEnvVar(ctx context.Context, serviceID, envVarID string) (string, error) {
+	var response struct {
+		Value string `json:"value"`
+	}
+
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/env-vars/%s/reveal", serviceID, envVarID), nil, &response); err != nil {
+		return "", fmt.Errorf("failed to reveal env var: %w", err)
+	}
+
+	return response.Value, nil
+}
+
+// ListServicesWithInfo returns all services for a project with basic info
+func (c *APIClient) ListServicesWithInfo(ctx context.Context, projectSlug string) ([]*ServiceInfo, error) {
+	services, err := c.ListServices(ctx, projectSlug)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*ServiceInfo, len(services))
+	for i, svc := range services {
+		result[i] = &ServiceInfo{
+			ID:        svc.ID,
+			ProjectID: svc.ProjectID,
+			Name:      svc.Name,
+		}
+	}
+
+	return result, nil
+}
+
+// ListEnvironments returns all environments for a project
+func (c *APIClient) ListEnvironments(ctx context.Context, projectSlug string) ([]*EnvironmentInfo, error) {
+	var response struct {
+		Environments []*EnvironmentInfo `json:"environments"`
+	}
+
+	if err := c.get(ctx, fmt.Sprintf("/v1/projects/%s/environments", projectSlug), &response); err != nil {
+		return nil, fmt.Errorf("failed to list environments: %w", err)
+	}
+
+	return response.Environments, nil
 }

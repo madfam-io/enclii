@@ -268,12 +268,27 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 	}
 
 	// Get environment variables (decrypted) for this service and environment
+	// Use GetDecryptedWithMeta to properly separate secrets from regular env vars
 	var envVars map[string]string
+	var envVarsWithMeta []EnvVarWithMeta
 	if c.repositories.EnvVars != nil {
-		envVars, err = c.repositories.EnvVars.GetDecrypted(ctx, service.ID, deployment.EnvironmentID)
+		// Try the new metadata-aware method first
+		dbEnvVars, err := c.repositories.EnvVars.GetDecryptedWithMeta(ctx, service.ID, deployment.EnvironmentID)
 		if err != nil {
-			logger.WithError(err).Warn("Failed to get environment variables, continuing without them")
-			envVars = make(map[string]string)
+			logger.WithError(err).Warn("Failed to get environment variables with metadata, falling back to legacy")
+			envVars, _ = c.repositories.EnvVars.GetDecrypted(ctx, service.ID, deployment.EnvironmentID)
+		} else {
+			// Convert db.EnvVarWithMeta to reconciler.EnvVarWithMeta
+			envVarsWithMeta = make([]EnvVarWithMeta, len(dbEnvVars))
+			envVars = make(map[string]string) // Also populate legacy map for backwards compatibility
+			for i, ev := range dbEnvVars {
+				envVarsWithMeta[i] = EnvVarWithMeta{
+					Key:      ev.Key,
+					Value:    ev.Value,
+					IsSecret: ev.IsSecret,
+				}
+				envVars[ev.Key] = ev.Value
+			}
 		}
 	} else {
 		envVars = make(map[string]string)
@@ -314,12 +329,13 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 
 	// Create reconcile request
 	req := &ReconcileRequest{
-		Service:       service,
-		Release:       release,
-		Deployment:    deployment,
-		Environment:   environment,
-		EnvVars:       envVars,
-		AddonBindings: addonBindings,
+		Service:         service,
+		Release:         release,
+		Deployment:      deployment,
+		Environment:     environment,
+		EnvVars:         envVars,
+		EnvVarsWithMeta: envVarsWithMeta,
+		AddonBindings:   addonBindings,
 	}
 
 	// Perform reconciliation
