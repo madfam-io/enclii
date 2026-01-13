@@ -12,6 +12,43 @@ import (
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
+// ListAllAddons lists all database addons the user has access to
+// GET /v1/addons or /v1/databases
+func (h *Handler) ListAllAddons(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Get user ID from context
+	userIDStr, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user ID"})
+		return
+	}
+
+	// Check if addon service is available
+	if h.addonService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "addon service not available"})
+		return
+	}
+
+	addons, err := h.addonService.ListAllAddonsForUser(ctx, userID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list all addons", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list addons"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"addons": addons,
+		"count":  len(addons),
+	})
+}
+
 // CreateAddonRequest defines the request body for creating a database addon
 type CreateAddonRequest struct {
 	Name          string                     `json:"name" binding:"required"`

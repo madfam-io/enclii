@@ -251,6 +251,33 @@ func (r *DatabaseAddonRepository) ListByProject(ctx context.Context, projectID u
 	return r.scanAddons(rows)
 }
 
+// ListByProjects retrieves all database addons for multiple projects
+func (r *DatabaseAddonRepository) ListByProjects(ctx context.Context, projectIDs []uuid.UUID) ([]*types.DatabaseAddon, error) {
+	if len(projectIDs) == 0 {
+		return []*types.DatabaseAddon{}, nil
+	}
+
+	// Build query with IN clause
+	query := `
+		SELECT id, project_id, environment_id, type, name, status, status_message,
+		       config, k8s_namespace, k8s_resource_name, connection_secret,
+		       host, port, database_name, username,
+		       storage_used_bytes, connections_active, last_backup_at,
+		       created_by, created_by_email, created_at, updated_at, provisioned_at, deleted_at
+		FROM database_addons
+		WHERE project_id = ANY($1) AND deleted_at IS NULL
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, projectIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanAddons(rows)
+}
+
 // ListByType retrieves all database addons of a specific type for a project
 func (r *DatabaseAddonRepository) ListByType(ctx context.Context, projectID uuid.UUID, addonType types.DatabaseAddonType) ([]*types.DatabaseAddon, error) {
 	query := `

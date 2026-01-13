@@ -183,6 +183,28 @@ func (s *AddonService) ListAddons(ctx context.Context, projectID uuid.UUID) ([]*
 	return s.repos.DatabaseAddons.ListByProject(ctx, projectID)
 }
 
+// ListAllAddonsForUser lists all database addons the user has access to
+func (s *AddonService) ListAllAddonsForUser(ctx context.Context, userID uuid.UUID) ([]*types.DatabaseAddon, error) {
+	// Get all projects the user has access to
+	projectAccess, err := s.repos.ProjectAccess.ListByUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user projects: %w", err)
+	}
+
+	if len(projectAccess) == 0 {
+		return []*types.DatabaseAddon{}, nil
+	}
+
+	// Extract project IDs
+	projectIDs := make([]uuid.UUID, len(projectAccess))
+	for i, pa := range projectAccess {
+		projectIDs[i] = pa.ProjectID
+	}
+
+	// Fetch all addons for these projects in a single query
+	return s.repos.DatabaseAddons.ListByProjects(ctx, projectIDs)
+}
+
 // DeleteAddon deletes a database addon
 func (s *AddonService) DeleteAddon(ctx context.Context, addonID uuid.UUID) error {
 	logger := s.logger.WithField("addon_id", addonID)

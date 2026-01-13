@@ -385,6 +385,10 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.DELETE("/user/tokens/:token_id", h.RevokeAPIToken)
 
 			// Database Add-ons (PostgreSQL, Redis, MySQL)
+			// Global addon listing (all addons user has access to)
+			protected.GET("/addons", h.ListAllAddons)
+			protected.GET("/databases", h.ListAllAddons) // Alias for better UX
+			// Project-specific addon operations
 			protected.POST("/projects/:slug/addons", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateAddon)
 			protected.GET("/projects/:slug/addons", h.ListAddons)
 			protected.GET("/addons/:id", h.GetAddon)
