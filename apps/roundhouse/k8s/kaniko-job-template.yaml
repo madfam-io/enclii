@@ -1,0 +1,252 @@
+# Kaniko Build Job Template
+# Secure container image builds without Docker socket
+#
+# This template replaces Docker-in-Docker builds with Kaniko:
+# - No privileged mode required
+# - No Docker socket access
+# - Runs as non-root
+# - Layer caching via registry
+#
+# Usage: Roundhouse worker creates Jobs from this template
+# Variables replaced at runtime: ${BUILD_ID}, ${GIT_REPO}, ${GIT_BRANCH}, ${REGISTRY}, ${IMAGE}, ${TAG}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: enclii-builds
+  labels:
+    app.kubernetes.io/name: enclii-builds
+    app.kubernetes.io/part-of: enclii
+    # Pod Security Standard - restrict privileged operations
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Registry credentials for pushing images
+apiVersion: v1
+kind: Secret
+metadata:
+  name: regcred
+  namespace: enclii-builds
+type: kubernetes.io/dockerconfigjson
+data:
+  # Base64 encoded Docker config JSON
+  # Generate with: kubectl create secret docker-registry regcred --docker-server=ghcr.io --docker-username=<user> --docker-password=<token> --dry-run=client -o yaml
+  .dockerconfigjson: ""  # REPLACE with actual credentials
+---
+# Build concurrency limiter (ResourceQuota)
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: build-limits
+  namespace: enclii-builds
+spec:
+  hard:
+    # Maximum 3 concurrent builds (matches Ryzen 3600 capacity)
+    count/jobs.batch: "6"  # 3 active + 3 queued
+    pods: "6"
+    requests.cpu: "6"
+    requests.memory: "12Gi"
+    limits.cpu: "12"
+    limits.memory: "24Gi"
+---
+# LimitRange for individual builds
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: build-limits
+  namespace: enclii-builds
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: "2"
+        memory: "4Gi"
+      defaultRequest:
+        cpu: "500m"
+        memory: "1Gi"
+      max:
+        cpu: "4"
+        memory: "8Gi"
+---
+# NetworkPolicy - Restrict build pod network access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: build-network-policy
+  namespace: enclii-builds
+spec:
+  podSelector: {}  # Apply to all pods in namespace
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []  # No inbound traffic allowed
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Allow HTTPS to registries and git repos
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8      # Block internal network
+              - 172.16.0.0/12   # Block internal network
+              - 192.168.0.0/16  # Block internal network
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80  # Some registries use HTTP
+---
+# Kaniko Build Job Template
+# This is a template - Roundhouse replaces ${VARIABLES} at runtime
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: build-${BUILD_ID}
+  namespace: enclii-builds
+  labels:
+    app.kubernetes.io/name: kaniko-build
+    app.kubernetes.io/part-of: enclii
+    enclii.dev/build-id: "${BUILD_ID}"
+    enclii.dev/service-id: "${SERVICE_ID}"
+  annotations:
+    # Link back to source for provenance
+    enclii.dev/git-repo: "${GIT_REPO}"
+    enclii.dev/git-sha: "${GIT_SHA}"
+    enclii.dev/git-branch: "${GIT_BRANCH}"
+spec:
+  # Don't retry failed builds automatically
+  backoffLimit: 0
+
+  # 30 minute timeout (same as current Roundhouse)
+  activeDeadlineSeconds: 1800
+
+  # Clean up completed jobs after 1 hour
+  ttlSecondsAfterFinished: 3600
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kaniko-build
+        enclii.dev/build-id: "${BUILD_ID}"
+    spec:
+      restartPolicy: Never
+
+      # Security context - non-root, restricted
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Avoid GPU nodes for builds (unless GPU build requested)
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: DoesNotExist
+
+      containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:v1.19.0
+          args:
+            - "--dockerfile=${DOCKERFILE_PATH:-Dockerfile}"
+            - "--context=git://${GIT_REPO}#refs/heads/${GIT_BRANCH}#${GIT_SHA}"
+            - "--destination=${REGISTRY}/${IMAGE}:${TAG}"
+            - "--destination=${REGISTRY}/${IMAGE}:latest"
+            # Layer caching
+            - "--cache=true"
+            - "--cache-repo=${REGISTRY}/${IMAGE}/cache"
+            - "--cache-ttl=168h"  # 7 days
+            # Build metadata
+            - "--label=org.opencontainers.image.source=${GIT_REPO}"
+            - "--label=org.opencontainers.image.revision=${GIT_SHA}"
+            - "--label=org.opencontainers.image.created=${BUILD_TIMESTAMP}"
+            # Reproducibility
+            - "--reproducible"
+            - "--snapshot-mode=redo"
+            # Verbosity
+            - "--verbosity=info"
+
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # Kaniko needs writable /kaniko
+            capabilities:
+              drop:
+                - ALL
+
+          volumeMounts:
+            - name: docker-config
+              mountPath: /kaniko/.docker
+              readOnly: true
+
+          env:
+            # Git credentials for private repos
+            - name: GIT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: git-credentials
+                  key: token
+                  optional: true
+
+      volumes:
+        - name: docker-config
+          secret:
+            secretName: regcred
+            items:
+              - key: .dockerconfigjson
+                path: config.json
+---
+# Service Account for build jobs
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kaniko-builder
+  namespace: enclii-builds
+---
+# RBAC - Minimal permissions for build jobs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kaniko-builder
+  namespace: enclii-builds
+rules:
+  # No cluster access - builds are isolated
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]  # Only view own pod status
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kaniko-builder
+  namespace: enclii-builds
+subjects:
+  - kind: ServiceAccount
+    name: kaniko-builder
+    namespace: enclii-builds
+roleRef:
+  kind: Role
+  name: kaniko-builder
+  apiGroup: rbac.authorization.k8s.io

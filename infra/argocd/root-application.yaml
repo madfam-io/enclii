@@ -1,0 +1,61 @@
+# ArgoCD Root Application - App-of-Apps Pattern
+# This is the "recursive self-deployment" entry point
+#
+# Install ArgoCD first:
+#   kubectl create namespace argocd
+#   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+#
+# Then apply this root application:
+#   kubectl apply -f infra/argocd/root-application.yaml
+#
+# ArgoCD will then:
+# 1. Read this application
+# 2. Deploy all child applications in infra/argocd/apps/
+# 3. Each child deploys its Kubernetes resources
+# 4. Changes to Git automatically sync to cluster (pull-based GitOps)
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: enclii-infrastructure
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: enclii-infrastructure
+    app.kubernetes.io/part-of: enclii
+  # Prevent accidental deletion of root app
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/madfam-org/enclii.git
+    targetRevision: main
+    path: infra/argocd/apps
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      # Auto-delete resources removed from Git
+      prune: true
+      # Auto-fix drift (cluster state != Git state)
+      selfHeal: true
+      # Don't sync if validation fails
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Health check configuration
+  revisionHistoryLimit: 10
