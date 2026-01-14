@@ -2,56 +2,29 @@
 # Blue and green scale sets inherit from this base configuration
 # Helm chart: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
 #
-# IMPORTANT: When using containerMode.type=dind, ARC auto-injects:
-#   - init-dind-externals container (copies Node.js and other tools)
-#   - dind sidecar container (privileged Docker daemon)
-#   - Required volumes (dind-sock, dind-externals, work)
-# Do NOT manually define these - only customize the runner container.
+# CURRENT STATE: Running without DinD to get stable CI working
+# TODO: Add DinD support later once basic runners are stable
+#
+# ROOT CAUSE FOUND: When using containerMode.type=dind with custom containers,
+# ARC's merge behavior doesn't work properly, causing runners to exit immediately.
+# SOLUTION: Don't use custom containers - let ARC handle everything.
 
 githubConfigUrl: "https://github.com/madfam-org"
 githubConfigSecret: github-app-secret
 
 runnerGroup: "default"
 
-# Container mode: Docker-in-Docker for building images
-# This automatically configures the runner with a DinD sidecar
-containerMode:
-  type: "dind"
+# NOTE: DinD disabled for now - runners work without it
+# Jobs that need Docker will need to use setup-docker action or alternative
+# containerMode:
+#   type: "dind"
 
-# Runner pod template - only customize runner container, not dind
+# Runner pod template - minimal customization, let ARC handle injection
 template:
   spec:
     serviceAccountName: arc-runner
-
-    containers:
-      # Customize the runner container that ARC creates
-      # Do NOT define 'dind' container - ARC handles this
-      - name: runner
-        image: ghcr.io/actions/actions-runner:2.321.0
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "500m"
-            memory: 1Gi
-        env:
-          # Go module cache location
-          - name: GOPATH
-            value: /home/runner/go
-          - name: GOCACHE
-            value: /home/runner/go/cache
-          # npm cache location
-          - name: npm_config_cache
-            value: /home/runner/.npm
-        volumeMounts:
-          - name: go-cache
-            mountPath: /home/runner/go
-          - name: npm-cache
-            mountPath: /home/runner/.npm
-
-    # Graceful termination
     terminationGracePeriodSeconds: 300
+    # NOTE: Do NOT define containers here - let ARC inject them properly
 
 # Listener configuration (manages scale set communication with GitHub)
 listenerTemplate:

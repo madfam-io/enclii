@@ -21,18 +21,8 @@ template:
       arc.enclii.dev/active: "false"
     annotations:
       arc.enclii.dev/deployed-at: ""  # Will be set by Helm
-  spec:
-    # Note: Do NOT define 'work' volume - ARC auto-injects it with containerMode.type=dind
-    # Only define additional cache volumes here
-    volumes:
-      # Shared caches across blue/green
-      - name: go-cache
-        persistentVolumeClaim:
-          claimName: arc-go-cache
-      - name: npm-cache
-        persistentVolumeClaim:
-          claimName: arc-npm-cache
-      # Green-specific Docker cache (isolated for clean rebuilds)
-      - name: docker-cache
-        persistentVolumeClaim:
-          claimName: arc-docker-cache-green
+
+# NOTE: Custom PVC volumes removed for now
+# ARC's container merge doesn't work properly with custom containers
+# Caching will use GitHub Actions cache instead of PVC-based caching
+# TODO: Revisit PVC caching when ARC Helm chart improves merge behavior

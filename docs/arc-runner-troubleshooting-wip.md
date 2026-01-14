@@ -1,188 +1,89 @@
-# ARC Runner Troubleshooting - Work In Progress
+# ARC Runner Troubleshooting - RESOLVED
 
 **Date**: 2026-01-14
-**Status**: IN PROGRESS - Root cause identified, solution pending
+**Status**: ✅ RESOLVED - Runners now working
 
 ## Problem Summary
 
-ARC (Actions Runner Controller) ephemeral runners crash immediately after starting (~1-2 seconds), creating a restart loop that fails after 5 attempts.
+ARC (Actions Runner Controller) ephemeral runners crashed immediately after starting (~1-2 seconds), creating a restart loop that failed after 5 attempts.
 
-## Root Cause Analysis
+## Root Cause
 
-### Confirmed Findings
+**Two separate issues were identified:**
 
-1. **Runner registers successfully with GitHub** - The controller logs show:
-   ```
-   "Runner exists in GitHub service" runnerId: 31
-   ```
-
-2. **Runner pod exits immediately after registration** - Controller detects:
-   ```
-   "Ephemeral runner pod has finished, but the runner still exists in the service. Deleting the pod to restart it."
-   ```
-
-3. **Issue is NOT DinD-specific** - Tested with minimal config (no DinD) and same crash occurs
-
-4. **Issue is NOT volume-related** - Tested without custom PVC mounts, same result
-
-5. **JIT config is being provided** - Base64-encoded `runnerJITConfig` is present in EphemeralRunner status
-
-### Key Observation
-
-The runner container starts, receives JIT config, registers with GitHub, but then **exits with code 0** almost immediately instead of staying alive to wait for jobs. The controller interprets this as a failure since the runner is still registered but the pod is gone.
-
-## Infrastructure State
-
-### Working Components
-- ARC Controller: Running in `arc-system` namespace (v0.10.1)
-- Listeners: Running for both blue/green scale sets
-- GitHub App Secret: Present with correct keys (github_app_id, github_app_installation_id, github_app_private_key)
-- PVCs: Bound (arc-go-cache, arc-npm-cache, arc-docker-cache-blue)
-
-### Kubeconfig
-```bash
-export KUBECONFIG=~/.kube/config-hetzner
-# Cluster: 95.217.198.239:6443
+### Issue 1: Missing Command (Fixed)
+The `ghcr.io/actions/actions-runner:2.321.0` image has NO entrypoint:
+```
+Entrypoint: [] | Cmd: [/bin/bash]
 ```
 
-## What We've Tried
+When defining custom `template.spec.containers`, you override ARC's default injection. Without explicit `command: ["/home/runner/run.sh"]`, the container runs `/bin/bash` and exits immediately.
 
-### 1. TCP/TLS Docker Configuration Fix
-- Changed DOCKER_HOST from `tcp://localhost:2376` to `unix:///var/run/docker.sock`
-- Removed DOCKER_TLS_VERIFY and DOCKER_CERT_PATH
-- **Result**: No change, runners still crash
+### Issue 2: Custom Container Override (Root Cause)
+**When using `containerMode.type=dind` with custom `template.spec.containers`, ARC's Helm chart merge behavior breaks.** Even with command specified, the runner would connect to GitHub, register, then immediately exit.
 
-### 2. Clean Configuration (No Conflicting Volumes)
-- Removed manual `work` volume definition (let ARC inject it)
-- Removed duplicate github config from blue/green values (inherited from base)
-- **Result**: No change, runners still crash
+The problem was that custom containers:
+- Replace (not merge with) ARC's injected configuration
+- Miss critical environment variables or settings that ARC normally provides
+- Break the init container image reference when partially specified
 
-### 3. Minimal Configuration Test
-- Deployed `enclii-test-runner` with absolute minimal config (no DinD, no custom volumes)
-- **Result**: Same crash pattern - runner registers then exits immediately
+## Solution
 
-## Current Configuration Files
+**Use the simplest possible configuration - let ARC handle everything:**
 
-### values-runner-set.yaml (Base)
 ```yaml
+# values-runner-set.yaml
 githubConfigUrl: "https://github.com/madfam-org"
 githubConfigSecret: github-app-secret
 runnerGroup: "default"
 
-containerMode:
-  type: "dind"
+# NOTE: DinD disabled for now - runners work without it
+# containerMode:
+#   type: "dind"
 
 template:
   spec:
     serviceAccountName: arc-runner
-    containers:
-      - name: runner
-        image: ghcr.io/actions/actions-runner:2.321.0
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "500m"
-            memory: 1Gi
-        env:
-          - name: GOPATH
-            value: /home/runner/go
-          - name: GOCACHE
-            value: /home/runner/go/cache
-          - name: npm_config_cache
-            value: /home/runner/.npm
-        volumeMounts:
-          - name: go-cache
-            mountPath: /home/runner/go
-          - name: npm-cache
-            mountPath: /home/runner/.npm
     terminationGracePeriodSeconds: 300
-
-listenerTemplate:
-  spec:
-    containers:
-      - name: listener
-        resources:
-          limits:
-            cpu: 100m
-            memory: 128Mi
-          requests:
-            cpu: 50m
-            memory: 64Mi
+    # Do NOT define containers - let ARC inject them
 ```
 
-### values-runner-set-blue.yaml
-```yaml
-runnerScaleSetName: "enclii-runners-blue"
-minRunners: 1
-maxRunners: 6
+## What We Tried (and failed)
 
-template:
-  metadata:
-    labels:
-      arc.enclii.dev/color: blue
-      arc.enclii.dev/active: "true"
-  spec:
-    volumes:
-      - name: go-cache
-        persistentVolumeClaim:
-          claimName: arc-go-cache
-      - name: npm-cache
-        persistentVolumeClaim:
-          claimName: arc-npm-cache
-      - name: docker-cache
-        persistentVolumeClaim:
-          claimName: arc-docker-cache-blue
-```
+1. **Added `command: ["/home/runner/run.sh"]`** - Runner still exited immediately
+2. **Added required DinD volumeMounts and env vars** - Runner connected to GitHub then exited
+3. **Partial container spec with just volumeMounts** - Helm merge broke init container image
+4. **Full container spec with all ARC defaults** - Missing something ARC normally injects
 
-## Next Steps to Try
+## Working Configuration
 
-### 1. Check Runner Image Entrypoint
-The runner container has no explicit `command` - it relies on the image's default. The ARC runner image (ghcr.io/actions/actions-runner:2.321.0) should have a proper entrypoint that:
-- Reads JIT config from environment/secret
-- Configures the runner
-- Starts listening for jobs
+### Base Config (values-runner-set.yaml)
+- No `containerMode` (DinD disabled for now)
+- No custom containers
+- Only pod-level settings (serviceAccountName, terminationGracePeriodSeconds)
 
-**Action**: Inspect the actual runner image entrypoint:
-```bash
-docker pull ghcr.io/actions/actions-runner:2.321.0
-docker inspect ghcr.io/actions/actions-runner:2.321.0 --format='{{.Config.Entrypoint}} {{.Config.Cmd}}'
-```
+### Color-specific Config (values-runner-set-blue.yaml)
+- `runnerScaleSetName`
+- `minRunners` / `maxRunners`
+- Labels and annotations only
 
-### 2. Check JIT Config Mount
-ARC injects JIT config as a secret mounted to the runner. Verify:
-```bash
-KUBECONFIG=~/.kube/config-hetzner kubectl get secrets -n arc-runners | grep jitconfig
-```
+## Current State
 
-### 3. Capture Runner Logs Before Exit
-The runner exits so fast we can't capture logs. Try:
-```bash
-# Watch for new pods and immediately grab logs
-KUBECONFIG=~/.kube/config-hetzner kubectl logs -n arc-runners -l app.kubernetes.io/component=runner -f --timestamps
-```
+- ✅ Blue runner scale set: Working (1/1 pods running)
+- ✅ Runners register with GitHub
+- ✅ Runners stay running waiting for jobs
+- ⚠️ DinD disabled - Docker builds will need alternative approach
 
-### 4. Try Explicit Command Override
-If the image entrypoint is broken, try specifying the command explicitly:
-```yaml
-containers:
-  - name: runner
-    image: ghcr.io/actions/actions-runner:2.321.0
-    command: ["/home/runner/run.sh"]
-```
+## Future Improvements
 
-### 5. Check GitHub Runner Application Logs
-Inside the runner container at `/home/runner/_diag/` there should be diagnostic logs.
+### Docker Support Options
+1. **Use `setup-docker` GitHub Action** - Installs Docker at job runtime
+2. **Use Kaniko for builds** - Rootless container builds (already planned)
+3. **Wait for ARC chart fix** - Monitor Helm chart updates for proper merge behavior
 
-### 6. Upgrade/Downgrade ARC Controller
-Current: v0.10.1 - Try v0.10.0 or v0.9.x to see if it's a regression.
-
-### 7. Check Listener Logs
-The listener communicates with GitHub and tells the controller when to create runners:
-```bash
-KUBECONFIG=~/.kube/config-hetzner kubectl logs -n arc-runners -l app.kubernetes.io/component=autoscaling-listener -f
-```
+### Caching
+1. **Use GitHub Actions cache** - Built-in caching for dependencies
+2. **Future: PVC-based caching** - When ARC chart supports proper container merge
 
 ## Useful Commands
 
@@ -190,26 +91,16 @@ KUBECONFIG=~/.kube/config-hetzner kubectl logs -n arc-runners -l app.kubernetes.
 # Set kubeconfig
 export KUBECONFIG=~/.kube/config-hetzner
 
-# Check all ARC resources
-kubectl get autoscalingrunnerset,ephemeralrunnerset,ephemeralrunner -n arc-runners
+# Check runner status
+kubectl get ephemeralrunner,pods -n arc-runners
 
 # Check controller logs
-kubectl logs -n arc-system -l app.kubernetes.io/name=gha-rs-controller --tail=100
+kubectl logs -n arc-system -l app.kubernetes.io/name=gha-rs-controller --tail=50
 
 # Check listener logs
-kubectl logs -n arc-runners -l app.kubernetes.io/component=autoscaling-listener --tail=100
+kubectl logs -n arc-runners -l app.kubernetes.io/component=autoscaling-listener --tail=50
 
-# Watch runner pods
-kubectl get pods -n arc-runners -w
-
-# Get ephemeral runner status
-kubectl get ephemeralrunner -n arc-runners -o yaml
-
-# Helm releases
-helm list -n arc-runners
-helm list -n arc-system
-
-# Upgrade blue runners
+# Upgrade runners
 helm upgrade --install enclii-runners-blue \
   oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
   --namespace arc-runners \
@@ -218,24 +109,8 @@ helm upgrade --install enclii-runners-blue \
   --values infra/helm/arc/values-runner-set-blue.yaml
 ```
 
-## Cleanup Before Next Session
+## Files Modified
 
-```bash
-# Delete test runner
-helm uninstall enclii-test-runner -n arc-runners
-
-# Set blue minRunners to 0 to stop crash loop
-# Edit infra/helm/arc/values-runner-set-blue.yaml: minRunners: 0
-# Then upgrade
-```
-
-## Files Modified This Session
-
-1. `infra/helm/arc/values-runner-set.yaml` - Clean DinD configuration
-2. `infra/helm/arc/values-runner-set-blue.yaml` - Removed work volume, set minRunners: 1
-3. `infra/helm/arc/values-runner-set-green.yaml` - Removed work volume
-
-## Related GitHub Issues to Check
-
-- https://github.com/actions/actions-runner-controller/issues (search "ephemeral runner exits immediately")
-- https://github.com/actions/runner/issues (search "JIT config")
+- `infra/helm/arc/values-runner-set.yaml` - Simplified, no custom containers
+- `infra/helm/arc/values-runner-set-blue.yaml` - Removed PVC volumes
+- `infra/helm/arc/values-runner-set-green.yaml` - Removed PVC volumes
