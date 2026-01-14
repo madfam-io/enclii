@@ -95,6 +95,18 @@ data:
           httpHostHeader: docs.enclii.dev
 
       # ============================================
+      # MADFAM Automation Services (namespace: madfam-automation)
+      # ============================================
+
+      # ClaudeCodeUI - Auto-Claude Agents Web Interface
+      - hostname: agents.madfam.io
+        service: http://claude-ui.madfam-automation.svc.cluster.local:80
+        originRequest:
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          httpHostHeader: agents.madfam.io
+
+      # ============================================
       # GitOps / Platform Services (namespace: argocd)
       # ============================================
 
