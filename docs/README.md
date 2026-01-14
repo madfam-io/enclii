@@ -4,7 +4,7 @@
 
 ## Current Status
 
-**Production:** 90% Ready (Beta) | **Live at:** [app.enclii.dev](https://app.enclii.dev)
+**Production:** 95% Ready (Beta) | **Live at:** [app.enclii.dev](https://app.enclii.dev)
 
 | Component | Status | Details |
 |-----------|--------|---------|
@@ -14,7 +14,7 @@
 | Build Pipeline | ✅ Operational | GitHub webhooks + Buildpacks |
 | Docs | ✅ Running | docs.enclii.dev |
 | GitOps | ✅ ArgoCD | App-of-Apps pattern, auto-sync |
-| Storage | ✅ Longhorn | Replicated CSI for multi-node |
+| Storage | ✅ Longhorn | CSI storage (single-node; ready for scaling) |
 | GPU Prep | ✅ Ready | Manifests staged, pending nodes |
 
 ## Quick Start
@@ -61,13 +61,20 @@ Production deployment, readiness, and operational guides.
 - [Gap Analysis](./production/GAP_ANALYSIS.md) - Feature comparison with Vercel and Railway
 
 ### ☸️ Infrastructure
-GitOps, storage, compute, and Kubernetes infrastructure.
+GitOps, storage, compute, and Kubernetes infrastructure. **[Infrastructure Index →](./infrastructure/README.md)**
 
-- [ArgoCD Configuration](../infra/argocd/README.md) - GitOps App-of-Apps setup and deployment
-- [Longhorn Storage](../infra/helm/longhorn/) - CSI driver for replicated multi-node storage
-- [GPU Node Setup](../infra/k8s/base/gpu/README.md) - NVIDIA device plugin and GPU tolerations
+**Core Infrastructure (Jan 2026):**
+- [GitOps with ArgoCD](./infrastructure/GITOPS.md) - App-of-Apps pattern, self-heal, sync operations
+- [Storage with Longhorn](./infrastructure/STORAGE.md) - Replicated CSI, StorageClasses, backup/recovery
+- [Cloudflare Integration](./infrastructure/CLOUDFLARE.md) - Zero-trust ingress, tunnel route automation
+- [External Secrets](./infrastructure/EXTERNAL_SECRETS.md) - Secret sync from external providers
+
+**Configuration Files:**
+- [ArgoCD Apps](../infra/argocd/README.md) - GitOps App-of-Apps configuration
+- [Longhorn Values](../infra/helm/longhorn/) - Helm values for storage
+- [GPU Node Setup](../infra/k8s/base/gpu/README.md) - NVIDIA device plugin and tolerations
 - [Kaniko Builds](../apps/roundhouse/k8s/kaniko-job-template.yaml) - Secure rootless container builds
-- [Cloudflare Tunnel](../infra/k8s/production/cloudflared-unified.yaml) - Zero-trust ingress configuration
+- [Cloudflare Tunnel](../infra/k8s/production/cloudflared-unified.yaml) - Tunnel manifest
 - [ARC Runners](../infra/argocd/apps/arc-runners.yaml) - GitHub Actions self-hosted runners
 
 ### 🔍 Audits
@@ -240,5 +247,5 @@ When adding new documentation:
 
 ---
 
-**Last Updated:** 2026-01-12
-**Documentation Version:** 2.2 (GitOps Foundation)
+**Last Updated:** 2026-01-14
+**Documentation Version:** 2.3 (Infrastructure Documentation Complete)

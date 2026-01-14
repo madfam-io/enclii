@@ -75,7 +75,7 @@ These service specs will demonstrate:
 
 ### Prerequisites
 
-1. **Bootstrap infrastructure** (Hetzner + Cloudflare + Ubicloud)
+1. **Bootstrap infrastructure** (Hetzner dedicated server + Cloudflare)
 2. **Deploy Enclii control plane manually** (one time)
 3. **Configure secrets** in Kubernetes
 
@@ -167,14 +167,16 @@ Switchyard validates JWT via Janua JWKS
 
 ### Infrastructure
 
-- **Kubernetes:** Hetzner Cloud (3x CPX31 nodes)
+- **Kubernetes:** Hetzner AX41-NVME dedicated server (single-node k3s)
 - **Ingress:** Cloudflare Tunnel (replaces LoadBalancer)
-- **Database:** Ubicloud PostgreSQL (managed, HA)
-- **Cache:** Redis Sentinel (self-hosted, 3 nodes)
+- **Database:** Self-hosted PostgreSQL in-cluster (daily backups to R2)
+- **Cache:** Single Redis instance (Sentinel config staged for multi-node)
 - **Storage:** Cloudflare R2 (SBOMs, artifacts)
 - **DNS:** Cloudflare for SaaS (100 free domains)
 
-**Cost:** ~$100/month (vs $2,220 for Railway + Auth0)
+> **Note:** Currently single-node. Longhorn CSI and Redis Sentinel configs are ready for multi-node scaling when needed.
+
+**Cost:** ~$55/month (vs $2,220 for Railway + Auth0)
 
 ## Secrets Required
 

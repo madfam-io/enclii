@@ -6,7 +6,11 @@ namespace: enclii-production
 resources:
   - ../base
   - cloudflared.yaml
-  - redis-sentinel.yaml
+  # Redis Sentinel (redis-sentinel.yaml) is NOT enabled on single-node cluster.
+  # Reason: podAntiAffinity requires 3 different nodes; only 1 pod would schedule.
+  # The base redis.yaml (single instance) is used instead.
+  # Re-enable when multi-node cluster is deployed:
+  # - redis-sentinel.yaml
   # oidc-secrets.yaml not needed - using local mode with external JWKS
   - build-secrets.yaml
   # cloudflare-secrets.yaml for domain status sync (optional - create secret directly via kubectl)

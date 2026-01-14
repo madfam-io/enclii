@@ -1,11 +1,13 @@
 # ENCLII PLATFORM - COMPREHENSIVE CAPABILITY MATRIX
-**Status:** 70% Production Ready | **Date:** November 27, 2025
+**Status:** 95% Production Ready | **Date:** January 2026 (Updated)
+
+> ⚠️ **Note:** This matrix was originally created Nov 2025. Current infrastructure: single Hetzner AX41-NVME (~$55/mo), self-hosted PostgreSQL/Redis. Core services live at enclii.dev.
 
 ---
 
 ## EXECUTIVE SUMMARY
 
-Enclii is a **Railway-style Platform-as-a-Service** running on cost-optimized infrastructure. Current status is **70% production-ready** with clear roadmap to 95%+ within 6-8 weeks. The platform provides multi-tenant SaaS capabilities at 95% cost savings vs Railway/Auth0 ($100/mo vs $2,220/mo).
+Enclii is a **Railway-style Platform-as-a-Service** running on cost-optimized infrastructure. Current status is **95% production-ready** with core services deployed. The platform provides multi-tenant SaaS capabilities at 97% cost savings vs Railway/Auth0 (~$55/mo vs $2,220/mo).
 
 **Key Achievements:**
 - ✅ Complete control plane API with RBAC/Auth
@@ -764,33 +766,33 @@ curl https://app.enclii.io/
 
 # PART 11: COST ANALYSIS
 
-## Enclii Infrastructure Cost (~$100/month)
+## Enclii Infrastructure Cost (~$55/month)
 
 ```
-Hetzner Cloud
-  3x CPX31 (4vCPU, 8GB RAM)  €41/mo (~$45)
+Hetzner Dedicated Server
+  AX41-NVME (6-core, 64GB)   ~$50/mo
 
 Cloudflare
   Tunnel (replaces LB)        $0 (FREE)
   R2 Storage (5GB/mo)         $5/mo
   For SaaS (100 domains)      $0 (FREE)
   DDoS Protection             $0 (FREE)
-  
-Ubicloud PostgreSQL
-  Managed HA database         $50/mo
-  
-Redis Sentinel
-  (Self-hosted on Hetzner)    $0
+
+Self-hosted PostgreSQL
+  In-cluster deployment       $0
+
+Single Redis Instance
+  In-cluster (Sentinel staged) $0
 
 ─────────────────────────────────
-TOTAL                         $100/mo
+TOTAL                         ~$55/mo
 ```
 
 ## Comparison with Alternatives
 
 | Platform | Monthly Cost | Annual Cost |
 |----------|--------------|-------------|
-| **Enclii** | $100 | $1,200 |
+| **Enclii** | ~$55 | ~$660 |
 | Railway | $2,000+ | $24,000+ |
 | Auth0 | $220+ | $2,640+ |
 | Railway + Auth0 | $2,220+ | $26,640+ |

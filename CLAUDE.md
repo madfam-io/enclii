@@ -4,15 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
+Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure (~$55/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
-**Current Status:** 🟢 v0.1.0 - Production Beta (90% ready) ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
-**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud (~$100/month) - **Running**
+**Current Status:** 🟢 v0.1.0 - Production Beta (95% ready) ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
+**Infrastructure:** Hetzner Dedicated + Cloudflare (~$55/month) - **Running**
 **Authentication:** OIDC via Janua SSO (RS256 JWT) - **Integrated**
 **Dogfooding:** Core services deployed ([api.enclii.dev](https://api.enclii.dev), [app.enclii.dev](https://app.enclii.dev))
 **Build Pipeline:** GitHub webhook CI/CD with Buildpacks - **Operational**
 **GitOps:** ArgoCD App-of-Apps with self-heal - **Operational** (Jan 2026)
-**Storage:** Longhorn CSI for multi-node HA - **Operational** (Jan 2026)
+**Storage:** Longhorn CSI (single-node; ready for multi-node scaling) - **Operational** (Jan 2026)
 
 ### Port Allocation
 
@@ -155,14 +155,16 @@ Key vars for local development (set in `.env`):
 
 ## Production Infrastructure
 
-### Research-Validated Stack (~$100/month)
+### Current Production Stack (~$55/month)
 
-Enclii runs on cost-optimized infrastructure validated through independent research:
+Enclii runs on a single dedicated server with infrastructure prepared for scaling:
 
 **Compute & Kubernetes:**
-- **Hetzner Cloud** (3x CPX31) - AMD EPYC, NVMe SSD - $45/month
-- **k3s** - Lightweight Kubernetes distribution
+- **Hetzner AX41-NVME** - Dedicated server (AMD Ryzen 5 3600, 64GB RAM, 2x512GB NVMe) - ~$50/month
+- **k3s** - Lightweight Kubernetes distribution (single-node)
 - **Cloudflare Tunnel** - Zero-trust ingress (replaces LoadBalancer) - $0
+
+> **Note:** Currently single-node. Longhorn CSI and ArgoCD are deployed and ready for multi-node scaling when needed.
 
 **Ingress Architecture (Cloudflare Tunnel):**
 ```
@@ -182,8 +184,10 @@ Internet → Cloudflare Edge → cloudflared pods → K8s Service:80 → Contain
 > See `infra/DEPLOYMENT.md` for complete Service Routing table.
 
 **Database & Caching:**
-- **Ubicloud PostgreSQL** - Managed DB on Hetzner infrastructure - $50/month
-- **Redis Sentinel** - Self-hosted HA (3 nodes, automatic failover) - $0
+- **Self-hosted PostgreSQL** - In-cluster deployment with PVC storage, daily backups to R2 - $0
+- **Self-hosted Redis** - Single instance in-cluster (Sentinel config ready for multi-node) - $0
+
+> **Infrastructure Audit (Jan 2026)**: Evaluated Ubicloud managed PostgreSQL ($50/mo) and Redis Sentinel HA. Conclusion: **NOT NEEDED** for current 99.5% SLA / 24-hour RPO requirements. Self-hosted meets targets at $0 cost. Redis Sentinel manifests staged at `infra/k8s/production/redis-sentinel.yaml` for multi-node deployment.
 
 **Storage & Networking:**
 - **Cloudflare R2** - Zero-egress object storage (SBOMs, artifacts) - $5/month
@@ -196,8 +200,8 @@ Internet → Cloudflare Edge → cloudflared pods → K8s Service:80 → Contain
 - Access: `kubectl port-forward svc/argocd-server -n argocd 8080:443`
 
 **Cluster Storage (Deployed Jan 2026):**
-- **Longhorn CSI** - Replicated storage for multi-node HA
-- StorageClasses: `longhorn-replicated` (2 replicas), `longhorn-fast` (1 replica)
+- **Longhorn CSI** - Block storage (prepared for multi-node replication)
+- StorageClasses: `longhorn` (single replica on single-node; ready for HA when nodes added)
 - Configuration: `infra/helm/longhorn/`
 
 **GPU Node Preparation (Ready to Deploy):**
@@ -211,7 +215,7 @@ Internet → Cloudflare Edge → cloudflared pods → K8s Service:80 → Contain
 - Configuration: `apps/roundhouse/k8s/kaniko-job-template.yaml`
 
 **vs Traditional SaaS Stack:** $2,220/month (Railway $2,000 + Auth0 $220)
-**5-Year Savings:** $127,200
+**5-Year Savings:** $129,900
 
 See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md) for details.
 
@@ -470,6 +474,11 @@ kubectl get replicas.longhorn.io -n longhorn-system
 | Quickstart | `docs/quickstart/` |
 | Integrations | `docs/integrations/` |
 | Architecture | `docs/architecture/` |
+| **Infrastructure (Jan 2026)** | |
+| GitOps/ArgoCD | `docs/infrastructure/GITOPS.md` |
+| Storage/Longhorn | `docs/infrastructure/STORAGE.md` |
+| Cloudflare integration | `docs/infrastructure/CLOUDFLARE.md` |
+| External secrets | `docs/infrastructure/EXTERNAL_SECRETS.md` |
 
 ---
 

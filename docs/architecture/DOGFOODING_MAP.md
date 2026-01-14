@@ -147,10 +147,10 @@
 
 ```
 Week 1-2: Infrastructure Bootstrap
-├── Hetzner Server (K3s cluster)
+├── Hetzner AX41-NVME (single-node k3s)
 ├── Cloudflare Tunnel (ingress)
-├── PostgreSQL (Ubicloud managed)
-├── Redis Sentinel
+├── Self-hosted PostgreSQL (in-cluster)
+├── Single Redis instance (Sentinel staged)
 └── Container Registry (GHCR)
 
 Week 2-3: Platform Core
@@ -222,12 +222,12 @@ namespaces:
 | sim4d-api | 500m | 1Gi | CAD processing |
 | geom-core (WASM) | - | - | Client-side |
 
-### Cluster Resources (Hetzner CPX31 x3)
+### Cluster Resources (Hetzner AX41-NVME single-node)
 
 ```
-Total: 12 vCPU, 24GB RAM, 480GB SSD
+Total: 6 cores (12 threads), 64GB RAM, 2x512GB NVMe
 Platform overhead: ~30%
-Available for apps: ~8 vCPU, 17GB RAM
+Available for apps: ~8 vCPU, 45GB RAM
 ```
 
 ---
@@ -280,7 +280,7 @@ Available for apps: ~8 vCPU, 17GB RAM
 
 | App | Domain | What It Does |
 |-----|--------|--------------|
-| **enclii** | enclii.dev | Railway-style PaaS (~$100/mo) |
+| **enclii** | enclii.dev | Railway-style PaaS (~$55/mo) |
 | **janua** | janua.dev | Self-hosted Auth0 alternative |
 | **forgesight** | forgesight.quest | Fabrication pricing intelligence |
 | **dhanam** | dhanam.app | Budget/wealth tracking (LATAM) |

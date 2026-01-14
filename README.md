@@ -1,22 +1,22 @@
 # Enclii
 
-> **The Railway-style platform with $100/month production infrastructure.**
+> **The Railway-style platform with ~$55/month production infrastructure.**
 > *Production-grade Kubernetes orchestration on Hetzner + Cloudflare.*
 
-[![Production Readiness](https://img.shields.io/badge/production%20ready-85%25-brightgreen)](./docs/production/PRODUCTION_CHECKLIST.md)
+[![Production Readiness](https://img.shields.io/badge/production%20ready-95%25-brightgreen)](./docs/production/PRODUCTION_CHECKLIST.md)
 [![Infrastructure](https://img.shields.io/badge/infrastructure-Hetzner%20%2B%20Cloudflare-blue)](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 [![Auth](https://img.shields.io/badge/auth-OIDC%20%2F%20Janua%20SSO-success)](./docs/production/PRODUCTION_READINESS_AUDIT.md)
-[![Cost](https://img.shields.io/badge/monthly%20cost-%24100-success)](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
+[![Cost](https://img.shields.io/badge/monthly%20cost-%2455-success)](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
-**Status:** Beta (85% production-ready) | [Production Checklist →](./docs/production/PRODUCTION_CHECKLIST.md)
+**Status:** Beta (95% production-ready) | [Production Checklist →](./docs/production/PRODUCTION_CHECKLIST.md)
 **Authentication:** OIDC via Janua SSO (RS256 JWT) - **Integrated**
-**Infrastructure:** Hetzner + Cloudflare + Ubicloud (~$100/month) - **Running**
+**Infrastructure:** Hetzner Dedicated + Cloudflare (~$55/month) - **Running**
 
 ---
 
 ## What is Enclii?
 
-Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
+Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective infrastructure (~$55/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
 ### The Dogfooding Strategy (In Progress)
 
@@ -38,18 +38,22 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 
 ### 🏗️ Production-Ready Infrastructure
 
-**Cost-Optimized Stack** (~$100/month):
-- **Hetzner Cloud** (3x CPX31) - AMD EPYC, NVMe SSD - $45/mo
-- **Cloudflare Tunnel** - Replaces expensive load balancers - $0
+**Cost-Optimized Stack** (~$55/month):
+- **Hetzner AX41-NVME** - Dedicated server (AMD Ryzen, 64GB RAM, 2x512GB NVMe) - ~$50/mo
+- **Cloudflare Tunnel** - Zero-trust ingress (replaces load balancers) - $0
 - **Cloudflare for SaaS** - 100 custom domains FREE - $0
 - **Cloudflare R2** - Zero-egress object storage - $5/mo
-- **Ubicloud PostgreSQL** - Managed DB on Hetzner infra - $50/mo
-- **Redis Sentinel** - Self-hosted HA caching - $0
+- **Self-hosted PostgreSQL** - In-cluster with persistent storage - $0
+- **Self-hosted Redis** - In-cluster caching (Sentinel ready for multi-node) - $0
+
+> **Note:** Currently running on a single dedicated server. Infrastructure is prepared for multi-node scaling with Longhorn CSI when needed.
+
+> **Infrastructure Audit (Jan 2026)**: Evaluated Ubicloud managed PostgreSQL and Redis Sentinel. **Decision: NOT NEEDED** for 99.5% SLA / 24-hour RPO. Sentinel manifests staged for future multi-node deployment.
 
 **vs Traditional Stack** ($2,220/month):
 - Railway: $2,000+/month
 - Auth0: $220+/month
-- **5-Year Savings: $127,200** 💰
+- **5-Year Savings: $129,900** 💰
 
 [View infrastructure details →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
@@ -163,7 +167,7 @@ enclii/
 
 ## Production Readiness
 
-### Current Status: 85% Ready (Beta)
+### Current Status: 95% Ready (Beta)
 
 From [PRODUCTION_CHECKLIST.md](./docs/production/PRODUCTION_CHECKLIST.md):
 
@@ -186,11 +190,9 @@ From [PRODUCTION_CHECKLIST.md](./docs/production/PRODUCTION_CHECKLIST.md):
 - ✅ Container registry push (ghcr.io)
 - ✅ Real deployments (not simulated)
 
-**Remaining (15%):**
+**Remaining (5%):**
 - ⚠️ Load testing validation
-- ⚠️ Security hardening audit
-- ⚠️ Canary deployment strategy
-- ⚠️ Disaster recovery runbooks
+- ⚠️ Final security audit
 
 [View production checklist →](./docs/production/PRODUCTION_CHECKLIST.md)
 
@@ -338,6 +340,12 @@ enclii scale --min 5 --max 10 --service api --env prod
 - [API Documentation](./docs/architecture/API.md) - REST API reference
 - [Development Guide](./docs/getting-started/DEVELOPMENT.md) - Contributing guide
 
+**Infrastructure (Jan 2026):**
+- [GitOps with ArgoCD](./docs/infrastructure/GITOPS.md) - App-of-Apps pattern, self-heal
+- [Storage with Longhorn](./docs/infrastructure/STORAGE.md) - Replicated CSI storage
+- [Cloudflare Integration](./docs/infrastructure/CLOUDFLARE.md) - Zero-trust tunnel routing
+- [External Secrets](./docs/infrastructure/EXTERNAL_SECRETS.md) - Secret synchronization
+
 **Audits & Reports:**
 - [Audit Navigation](./docs/audits/README.md) - Browse all audit reports
 - [Master Audit Report](./docs/audits/MASTER_REPORT.md) - Comprehensive overview
@@ -354,7 +362,7 @@ enclii scale --min 5 --max 10 --service api --env prod
 
 | Feature | Railway | Enclii |
 |---------|---------|--------|
-| **Cost** | $2,000+/mo | **$100/mo** 💰 |
+| **Cost** | $2,000+/mo | **~$55/mo** 💰 |
 | **Custom Domains** | Limited, expensive | **100 FREE** (Cloudflare for SaaS) |
 | **Vendor Lock-In** | Full lock-in | **None** (portable Kubernetes) |
 | **Auth** | Bring your own ($220/mo for Auth0) | **Janua included** ($0) |
@@ -366,9 +374,9 @@ enclii scale --min 5 --max 10 --service api --env prod
 
 | Feature | Vercel + Clerk | Enclii |
 |---------|----------------|--------|
-| **Cost** | $2,500/mo | **$100/mo** 💰 |
+| **Cost** | $2,500/mo | **~$55/mo** 💰 |
 | **Backend Support** | Limited (Functions) | **Full container support** |
-| **Database** | Bring your own | **Managed PostgreSQL included** |
+| **Database** | Bring your own | **Self-hosted PostgreSQL included** |
 | **Auth** | Clerk ($300+/mo) | **Janua included** ($0) |
 | **Control** | SaaS (no control) | **Full control** (self-hosted) |
 
@@ -376,7 +384,7 @@ enclii scale --min 5 --max 10 --service api --env prod
 
 **Why self-hosted infrastructure matters:**
 
-1. **Cost Control** - $100/month vs $2,220 (95% savings)
+1. **Cost Control** - ~$55/month vs $2,220 (97% savings)
 2. **No Vendor Lock-In** - Portable Kubernetes, standard tools
 3. **Data Sovereignty** - Your infrastructure, your rules
 4. **Unlimited Scale** - No artificial SaaS limits
@@ -408,15 +416,17 @@ enclii scale --min 5 --max 10 --service api --env prod
 - ✅ Janua running at auth.madfam.io
 - ✅ GitHub OAuth linked accounts
 
-### Phase 3: Production (Current - 85%)
+### Phase 3: Production (Current - 95%)
 
 - ✅ Dogfooding (Enclii deploys itself)
 - ✅ Real build pipeline (Buildpacks/Dockerfile)
 - ✅ GitHub webhook CI/CD
 - ✅ Container registry push (ghcr.io)
+- ✅ ArgoCD GitOps deployment (Jan 2026)
+- ✅ Longhorn CSI storage (Jan 2026)
+- ✅ Cloudflare tunnel route automation (Jan 2026)
 - ⚠️ Load testing (1,000 RPS) - pending
-- ⚠️ Security audit - pending
-- ⚠️ Canary deployments with auto-rollback - pending
+- ⚠️ Final security audit - pending
 
 ### Phase 4: GA (Upcoming)
 

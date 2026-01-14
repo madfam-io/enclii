@@ -146,7 +146,7 @@ Create a new project.
 }
 ```
 
-#### GET /projects/{slug}
+#### GET /projects/`:slug`
 
 Get project details.
 
@@ -170,7 +170,7 @@ Get project details.
 }
 ```
 
-#### PUT /projects/{slug}
+#### PUT /projects/`:slug`
 
 Update project.
 
@@ -182,7 +182,7 @@ Update project.
 }
 ```
 
-#### DELETE /projects/{slug}
+#### DELETE /projects/`:slug`
 
 Delete project.
 
@@ -246,7 +246,7 @@ Create a new service.
 
 **Response:** `201 Created`
 
-#### GET /services/{id}
+#### GET /services/`:id`
 
 Get service details.
 
@@ -277,11 +277,11 @@ Get service details.
 }
 ```
 
-#### PUT /services/{id}
+#### PUT /services/`:id`
 
 Update service configuration.
 
-#### DELETE /services/{id}
+#### DELETE /services/`:id`
 
 Delete service.
 
@@ -289,7 +289,7 @@ Delete service.
 
 ### Builds
 
-#### POST /services/{id}/build
+#### POST /services/`:id`/build
 
 Trigger a new build.
 
@@ -316,7 +316,7 @@ Trigger a new build.
 }
 ```
 
-#### GET /builds/{id}
+#### GET /builds/`:id`
 
 Get build status.
 
@@ -335,7 +335,7 @@ Get build status.
 }
 ```
 
-#### GET /builds/{id}/logs
+#### GET /builds/`:id`/logs
 
 Stream build logs.
 
@@ -349,7 +349,7 @@ data: {"timestamp": "2024-01-01T00:00:01Z", "message": "Pushing to registry..."}
 
 ### Deployments
 
-#### POST /services/{id}/deploy
+#### POST /services/`:id`/deploy
 
 Deploy a service.
 
@@ -376,7 +376,7 @@ Deploy a service.
 }
 ```
 
-#### GET /deployments/{id}
+#### GET /deployments/`:id`
 
 Get deployment status.
 
@@ -398,7 +398,7 @@ Get deployment status.
 }
 ```
 
-#### POST /deployments/{id}/rollback
+#### POST /deployments/`:id`/rollback
 
 Rollback deployment.
 
@@ -408,7 +408,7 @@ Rollback deployment.
 
 ### Logs
 
-#### GET /services/{id}/logs
+#### GET /services/`:id`/logs
 
 Retrieve service logs.
 
@@ -448,7 +448,7 @@ Prometheus metrics endpoint.
 http_requests_total{method="GET",status="200"} 1234
 ```
 
-#### GET /services/{id}/metrics
+#### GET /services/`:id`/metrics
 
 Service-specific metrics.
 
@@ -481,7 +481,7 @@ Service-specific metrics.
 
 ### Secrets
 
-#### GET /projects/{slug}/secrets
+#### GET /projects/`:slug`/secrets
 
 List project secrets.
 
@@ -498,7 +498,7 @@ List project secrets.
 }
 ```
 
-#### POST /projects/{slug}/secrets
+#### POST /projects/`:slug`/secrets
 
 Create or update secret.
 
@@ -513,7 +513,7 @@ Create or update secret.
 
 **Response:** `201 Created`
 
-#### DELETE /projects/{slug}/secrets/{key}
+#### DELETE /projects/`:slug`/secrets/`:key`
 
 Delete secret.
 

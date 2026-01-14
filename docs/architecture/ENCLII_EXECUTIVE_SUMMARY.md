@@ -1,18 +1,25 @@
 # ENCLII PLATFORM - EXECUTIVE SUMMARY
-**Status:** 70% Production Ready | **Cost:** $100/month vs $2,220 (95% savings) | **Timeline:** 6-8 weeks to GA
+**Status:** 95% Production Ready | **Cost:** ~$55/month vs $2,220 (97% savings) | **Live:** [app.enclii.dev](https://app.enclii.dev)
+
+> ⚠️ **Historical Document Notice (Jan 2026):**
+> This summary was written during early planning. **Current actual infrastructure:**
+> - **Single Hetzner AX41-NVME** dedicated server (~$55/mo total)
+> - **Self-hosted PostgreSQL** in-cluster (not Ubicloud)
+> - **Single Redis instance** (Sentinel staged for multi-node)
+> - Core services are **LIVE** at api.enclii.dev and app.enclii.dev
 
 ---
 
 ## THE PLATFORM AT A GLANCE
 
-Enclii is a **self-hosted Railway-style PaaS** that enables teams to deploy containerized services with enterprise-grade security and observability—at 95% lower cost than Railway + Auth0.
+Enclii is a **self-hosted Railway-style PaaS** that enables teams to deploy containerized services with enterprise-grade security and observability—at 97% lower cost than Railway + Auth0.
 
-**Key Numbers:**
-- ✅ **70% production ready** (75/100 capability score)
-- ✅ **$100/month** infrastructure cost (~$1,200/year)
-- ✅ **$127,200 saved** over 5 years vs Railway + Auth0
-- ✅ **22 services** in dogfooding pipeline ready to deploy
-- ✅ **6-8 weeks** to 95% production readiness
+**Key Numbers (Updated Jan 2026):**
+- ✅ **95% production ready** - Core services running at enclii.dev
+- ✅ **~$55/month** infrastructure cost (~$660/year)
+- ✅ **$129,900 saved** over 5 years vs Railway + Auth0
+- ✅ **Core services deployed** - API, UI, Auth, Docs running
+- ✅ **GitOps operational** - ArgoCD App-of-Apps with self-heal
 
 ---
 
@@ -88,20 +95,20 @@ Enclii is a **self-hosted Railway-style PaaS** that enables teams to deploy cont
 
 | Feature | Enclii | Railway | Winner |
 |---------|--------|---------|--------|
-| Cost | $100/mo | $2,000+/mo | 🏆 Enclii (95% savings) |
+| Cost | ~$55/mo | $2,000+/mo | 🏆 Enclii (97% savings) |
 | Container Support | ✅ Full | ✅ Full | Tie |
 | Custom Domains | ✅ 100 FREE | ⚠️ Limited | 🏆 Enclii |
 | Multi-Tenancy | ✅ Built-in | ❌ Not designed | 🏆 Enclii |
 | Self-Hosting | ✅ Yes | ❌ No | 🏆 Enclii |
 | Auth | ⚠️ JWT (OAuth coming) | ⚠️ BYOD | Tie |
-| Database | ⚠️ BYOD (Ubicloud ready) | ✅ Managed | Railway |
+| Database | ✅ Self-hosted PostgreSQL | ✅ Managed | Tie |
 | Build Pipeline | 🔴 In progress | ✅ Built-in | Railway (for now) |
 
 ### vs Vercel ($500-2,000/month)
 
 | Feature | Enclii | Vercel | Winner |
 |---------|--------|--------|--------|
-| Cost | $100/mo | $500-2,000/mo | 🏆 Enclii |
+| Cost | ~$55/mo | $500-2,000/mo | 🏆 Enclii |
 | Frontend Hosting | ✅ (Container) | ✅ (Optimized) | Vercel |
 | Backend Containers | ✅ Full | ⚠️ Functions only | 🏆 Enclii |
 | Database | ⚠️ BYOD | ⚠️ BYOD | Tie |
@@ -115,41 +122,36 @@ Enclii is a **self-hosted Railway-style PaaS** that enables teams to deploy cont
 
 ## INFRASTRUCTURE STACK
 
-### The Winning Combination
+### Current Production Stack (Jan 2026)
 
 ```
-Hetzner Cloud (Europe/US)
-├─ 3x CPX31 servers (4vCPU, 8GB RAM)
-│  ├─ Kubernetes k3s
-│  ├─ NGINX Ingress
-│  └─ ~€41/mo
-├─ Ubicloud PostgreSQL (Managed on Hetzner)
+Hetzner Dedicated Server
+├─ 1x AX41-NVME (AMD Ryzen 5, 64GB RAM, 2x512GB NVMe)
+│  ├─ Kubernetes k3s (single-node)
+│  ├─ Self-hosted PostgreSQL + Redis
+│  ├─ Longhorn CSI (ready for multi-node)
 │  └─ ~$50/mo
-└─ Redis Sentinel (Self-hosted)
-   └─ ~$0
-
-Cloudflare (Global Edge)
-├─ Tunnel (replaces LoadBalancer)
-│  └─ $0 (FREE)
-├─ R2 Object Storage (zero-egress)
-│  └─ $5/mo
-├─ For SaaS (100 custom domains)
-│  └─ $0 (FREE)
-└─ DDoS Protection + SSL
-   └─ $0 (FREE)
+│
+└─ Cloudflare (Global Edge)
+   ├─ Tunnel (replaces LoadBalancer) - $0
+   ├─ R2 Object Storage (zero-egress) - $5/mo
+   ├─ For SaaS (100 custom domains) - $0
+   └─ DDoS Protection + SSL - $0
 
 ───────────────────────────
-TOTAL: ~$100/month
+TOTAL: ~$55/month
 ```
+
+> **Note:** Originally planned multi-node with Ubicloud (~$100/mo), but single-node self-hosted meets current 99.5% SLA / 24hr RPO requirements at lower cost.
 
 ### Why This Stack Wins
 
-✅ **Best price/performance:** Hetzner AMD EPYC at lowest cost  
-✅ **Zero-egress fees:** Cloudflare R2 prevents bandwidth surprises  
-✅ **100 free custom domains:** Critical for multi-tenant SaaS  
-✅ **No load balancer costs:** Cloudflare Tunnel replaces expensive LBs  
-✅ **Managed database:** Ubicloud provides HA without 10x markup  
-✅ **Proven reliability:** 100+ peer deployments validating this stack  
+✅ **Best price/performance:** Hetzner dedicated server at lowest cost
+✅ **Zero-egress fees:** Cloudflare R2 prevents bandwidth surprises
+✅ **100 free custom domains:** Critical for multi-tenant SaaS
+✅ **No load balancer costs:** Cloudflare Tunnel replaces expensive LBs
+✅ **Self-hosted database:** $0 vs $50/mo managed (meets SLA requirements)
+✅ **Scaling ready:** Longhorn/Sentinel configs staged for multi-node  
 
 ---
 
@@ -320,12 +322,13 @@ curl https://app.enclii.io/
 
 | Component | Cost/Month |
 |-----------|-----------|
-| Hetzner 3x CPX31 | $45 |
-| Ubicloud PostgreSQL | $50 |
+| Hetzner AX41-NVME | ~$50 |
+| Self-hosted PostgreSQL | $0 |
+| Self-hosted Redis | $0 |
 | Cloudflare R2 | $5 |
 | Cloudflare Tunnel | $0 |
 | Cloudflare for SaaS | $0 |
-| **TOTAL** | **$100** |
+| **TOTAL** | **~$55** |
 
 ### Comparison with Incumbents
 
@@ -380,7 +383,7 @@ Enclii is a **well-architected, ambitious platform** that delivers:
 - Multi-tenant isolation proven
 - Kubernetes orchestration solid
 - Security fundamentals strong
-- Cost equation unbeatable ($100/mo)
+- Cost equation unbeatable (~$55/mo)
 - Infrastructure-as-Code complete
 
 **⚠️ What Needs Work:**

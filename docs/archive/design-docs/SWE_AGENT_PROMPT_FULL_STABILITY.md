@@ -1,9 +1,11 @@
 # Enclii Full Stability & Vision Feature Parity: SWE Agent Prompt
 
+> ⚠️ **Archive Notice (Jan 2026):** This document was written during planning (Dec 2025). Current infrastructure is a single Hetzner AX41-NVME dedicated server (~$55/mo) with self-hosted PostgreSQL/Redis. Ubicloud was evaluated but not used.
+
 **Date:** December 2025
 **Target:** Complete Enclii from 70% to 100% production readiness
 **Timeline:** 4-6 weeks of focused development
-**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud (~$100/month)
+**Infrastructure:** Hetzner AX41-NVME + Cloudflare (~$55/month)
 
 ---
 

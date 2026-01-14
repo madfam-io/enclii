@@ -160,7 +160,7 @@ This document describes how Enclii deploys **itself** using its own platform, an
 │  └────────────────────────────────────────────────────┘        │
 │                                                                 │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │  Kubernetes Cluster (Hetzner 3x CPX31)                   │  │
+│  │  Kubernetes Cluster (Hetzner AX41-NVME single-node)      │  │
 │  │                                                           │  │
 │  │  Namespace: enclii-platform                              │  │
 │  │  ┌─────────────────────────────────────────────────┐    │  │
@@ -207,12 +207,12 @@ This document describes how Enclii deploys **itself** using its own platform, an
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │  Shared Infrastructure                                   │  │
 │  │  ┌────────────────────────────────────────────────┐     │  │
-│  │  │  Ubicloud PostgreSQL (managed, HA)            │     │  │
+│  │  │  Self-hosted PostgreSQL (in-cluster)          │     │  │
 │  │  │  └─> Used by: Enclii + Janua                 │     │  │
 │  │  └────────────────────────────────────────────────┘     │  │
 │  │                                                           │  │
 │  │  ┌────────────────────────────────────────────────┐     │  │
-│  │  │  Redis Sentinel (self-hosted, 3 nodes)        │     │  │
+│  │  │  Single Redis instance (Sentinel staged)      │     │  │
 │  │  │  └─> Used by: Enclii + Janua                 │     │  │
 │  │  └────────────────────────────────────────────────┘     │  │
 │  │                                                           │  │
@@ -262,7 +262,7 @@ The **first deployment** of Enclii must be manual (chicken-and-egg problem). Aft
 
 **Bootstrap Steps:**
 
-1. **Deploy Infrastructure** (Ubicloud PostgreSQL, Redis Sentinel, R2)
+1. **Deploy Infrastructure** (Self-hosted PostgreSQL, Redis, R2)
 2. **Deploy Enclii Control Plane Manually** (using `kubectl apply -k infra/k8s/base`)
 3. **Deploy Janua Manually** (using `kubectl apply -f dogfooding/janua.yaml`)
 4. **Configure Janua** (create OAuth clients for Enclii)
@@ -344,20 +344,20 @@ janua/
 
 ### Prerequisites
 
-- Hetzner account with 3x CPX31 nodes (Kubernetes cluster)
+- Hetzner AX41-NVME dedicated server (single-node k3s)
 - Cloudflare account with Tunnel configured
-- Ubicloud account with managed PostgreSQL
+- Self-hosted PostgreSQL in-cluster (or Ubicloud for HA)
 - GitHub accounts with access to `madfam-org/enclii` and `madfam-org/janua`
 
 ### Step 1: Bootstrap Infrastructure (Week 1)
 
 Follow the [PRODUCTION_DEPLOYMENT_ROADMAP.md](./PRODUCTION_DEPLOYMENT_ROADMAP.md) to set up:
 
-1. **Hetzner Kubernetes cluster** (3x CPX31 nodes)
+1. **Hetzner dedicated server** (AX41-NVME, single-node k3s)
 2. **Cloudflare Tunnel** (replaces LoadBalancer)
 3. **Cloudflare for SaaS** (100 free custom domains)
-4. **Ubicloud PostgreSQL** (managed, HA)
-5. **Redis Sentinel** (self-hosted, 3 nodes)
+4. **Self-hosted PostgreSQL** (in-cluster with daily backups)
+5. **Single Redis instance** (Sentinel staged for multi-node)
 6. **Cloudflare R2** (object storage)
 
 **Result:** Infrastructure ready, but Enclii not deployed yet.
@@ -703,10 +703,10 @@ kubectl exec -it -n enclii-platform deployment/janua -- date
 ## Progress Tracker
 
 ### Phase 1: Infrastructure Setup ✅ COMPLETE
-- [x] Provision Hetzner cluster (3x CPX31)
+- [x] Provision Hetzner dedicated server (AX41-NVME)
 - [x] Deploy Cloudflare Tunnel
-- [x] Set up Ubicloud PostgreSQL
-- [x] Deploy Redis Sentinel
+- [x] Set up self-hosted PostgreSQL (in-cluster)
+- [x] Deploy single Redis instance (Sentinel staged)
 - [x] Configure Cloudflare R2
 
 ### Phase 2: Bootstrap Enclii ✅ COMPLETE
