@@ -26,16 +26,9 @@ metadata:
     app.kubernetes.io/component: ingress
 
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cloudflared-token
-  namespace: cloudflare-tunnel
-type: Opaque
-stringData:
-  # Get this token from: cloudflared tunnel token <tunnel-name>
-  # Or from Cloudflare Zero Trust dashboard → Networks → Tunnels → Configure → Token
-  token: "${CLOUDFLARED_TUNNEL_TOKEN}"
+# Note: Secret 'cloudflared-enclii-token' managed separately (contains actual tunnel token)
+# The token is obtained from: cloudflared tunnel token <tunnel-name>
+# Or from Cloudflare Zero Trust dashboard → Networks → Tunnels → Configure → Token
 
 ---
 apiVersion: v1
@@ -95,12 +88,13 @@ data:
           httpHostHeader: docs.enclii.dev
 
       # ============================================
-      # MADFAM Automation Services (namespace: madfam-automation)
+      # MADFAM Automation Services (Enclii-managed)
       # ============================================
 
       # ClaudeCodeUI - Auto-Claude Agents Web Interface
+      # Deployed via Enclii platform (namespace: enclii-madfam-automation-production)
       - hostname: agents.madfam.io
-        service: http://claude-ui.madfam-automation.svc.cluster.local:80
+        service: http://claudecodeui.enclii-madfam-automation-production.svc.cluster.local:80
         originRequest:
           connectTimeout: 30s
           keepAliveTimeout: 90s
@@ -234,7 +228,7 @@ spec:
             - name: TUNNEL_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: cloudflared-token
+                  name: cloudflared-enclii-token
                   key: token
           ports:
             - containerPort: 2000
