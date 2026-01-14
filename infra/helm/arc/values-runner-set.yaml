@@ -33,6 +33,8 @@ template:
 
     containers:
       # Main runner container
+      # NOTE: When containerMode.type=dind, ARC auto-injects the dind sidecar
+      # We only customize the runner container here
       - name: runner
         image: ghcr.io/actions/actions-runner:2.321.0
         resources:
@@ -43,12 +45,9 @@ template:
             cpu: "500m"
             memory: 1Gi
         env:
+          # Use Unix socket to connect to ARC's injected dind sidecar
           - name: DOCKER_HOST
-            value: tcp://localhost:2376
-          - name: DOCKER_TLS_VERIFY
-            value: "1"
-          - name: DOCKER_CERT_PATH
-            value: /certs/client
+            value: unix:///var/run/docker.sock
           # Go module cache
           - name: GOPATH
             value: /home/runner/go
@@ -57,47 +56,25 @@ template:
           # npm cache
           - name: npm_config_cache
             value: /home/runner/.npm
+          # Wait for Docker daemon to be ready
+          - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
+            value: "120"
         volumeMounts:
-          - name: docker-certs
-            mountPath: /certs/client
-            readOnly: true
           - name: work
             mountPath: /home/runner/_work
           - name: go-cache
             mountPath: /home/runner/go
           - name: npm-cache
             mountPath: /home/runner/.npm
+          # Mount dind socket from ARC's injected sidecar
+          - name: dind-sock
+            mountPath: /var/run
 
-      # Docker-in-Docker sidecar
-      - name: dind
-        image: docker:26.1-dind
-        securityContext:
-          privileged: true
-        resources:
-          limits:
-            cpu: "2"
-            memory: 4Gi
-          requests:
-            cpu: "500m"
-            memory: 1Gi
-        env:
-          - name: DOCKER_TLS_CERTDIR
-            value: /certs
-        volumeMounts:
-          - name: docker-certs
-            mountPath: /certs
-          - name: work
-            mountPath: /home/runner/_work
-          - name: docker-cache
-            mountPath: /var/lib/docker
-        lifecycle:
-          preStop:
-            exec:
-              command: ["sh", "-c", "sleep 10"]
-
+    # Note: ARC's containerMode.type=dind auto-injects:
+    # - dind sidecar container
+    # - dind-sock and dind-externals volumes
+    # We only define our custom persistent volumes here
     volumes:
-      - name: docker-certs
-        emptyDir: {}
       - name: work
         emptyDir: {}
       # Cache volumes will be overridden by blue/green configs with PVCs

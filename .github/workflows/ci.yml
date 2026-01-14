@@ -11,12 +11,13 @@ env:
   NODE_VERSION: '20'
   # Runner selection: Use self-hosted if ARC bootstrap is complete, otherwise GitHub-hosted
   # Set ARC_BOOTSTRAP_COMPLETE=true in repository variables after ARC is installed
-  RUNNER_LABEL: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+  # Note: ARC runner scale set is named 'enclii-runners-blue' (blue/green deployment pattern)
+  RUNNER_LABEL: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
 
 jobs:
   lint:
     name: Lint & Format
-    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v6
 
@@ -56,7 +57,7 @@ jobs:
 
   unit-tests:
     name: Unit Tests
-    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
     needs: lint
 
     services:
@@ -132,7 +133,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
     needs: unit-tests
 
     steps:
@@ -177,7 +178,7 @@ jobs:
 
   ui-tests:
     name: UI Tests
-    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
 
     steps:
       - uses: actions/checkout@v6
@@ -207,7 +208,7 @@ jobs:
 
   security-scan:
     name: Security Scan
-    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
 
     steps:
       - uses: actions/checkout@v6
@@ -246,7 +247,7 @@ jobs:
   docker-build:
     name: Docker Build
     # Docker builds benefit most from self-hosted runners (DinD, build cache)
-    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
     needs: [build, ui-tests]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -319,7 +320,7 @@ jobs:
 
   test-summary:
     name: Test Summary
-    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
+    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
     needs: [lint, unit-tests, ui-tests, security-scan]
     if: always()
 

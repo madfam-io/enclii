@@ -29,8 +29,6 @@ template:
     #   node-role.kubernetes.io/runner: "true"
 
     volumes:
-      - name: docker-certs
-        emptyDir: {}
       - name: work
         emptyDir: {}
       # Shared caches across blue/green
