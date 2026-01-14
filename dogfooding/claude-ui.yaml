@@ -30,13 +30,13 @@ spec:
         cpu: "1000m"
         memory: "1Gi"
 
-    healthCheck: /api/health
+    healthCheck: /health
     readinessProbe:
-      path: /api/health
+      path: /health
       initialDelaySeconds: 15
       periodSeconds: 5
     livenessProbe:
-      path: /api/health
+      path: /health
       initialDelaySeconds: 30
       periodSeconds: 10
 
@@ -66,6 +66,11 @@ spec:
         secretKeyRef:
           name: auto-claude-secrets
           key: janua-client-secret
+    - name: SESSION_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: auto-claude-secrets
+          key: session-secret
 
     # Redis for session management
     - name: REDIS_URL
