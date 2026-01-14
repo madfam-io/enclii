@@ -1,0 +1,20 @@
+# Network policy to allow traffic from Cloudflare tunnel
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cloudflared-ingress
+  namespace: madfam-automation
+spec:
+  podSelector:
+    matchLabels:
+      app: claude-ui
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: cloudflare-tunnel
+      ports:
+        - protocol: TCP
+          port: 3001

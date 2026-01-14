@@ -1,0 +1,53 @@
+# AutoChess Application - ClaudeCodeUI for agents.madfam.io
+# Deploys: claude-ui (web interface for Auto-Claude agents)
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: autochess
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: autochess
+    app.kubernetes.io/part-of: madfam-automation
+  annotations:
+    # ArgoCD Image Updater Configuration
+    argocd-image-updater.argoproj.io/image-list: claude-ui=ghcr.io/madfam-org/claudecodeui
+
+    # Update strategy - use latest tag (semver when we have proper versioning)
+    argocd-image-updater.argoproj.io/claude-ui.update-strategy: latest
+
+    # Git write-back for audit trail
+    argocd-image-updater.argoproj.io/write-back-method: git
+    argocd-image-updater.argoproj.io/write-back-target: kustomization
+
+    # Kustomize image path mapping
+    argocd-image-updater.argoproj.io/claude-ui.kustomize.image-name: ghcr.io/madfam-org/claudecodeui
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/madfam-org/enclii.git
+    targetRevision: main
+    path: infra/k8s/production/autochess
+    kustomize:
+      images: []
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: madfam-automation
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # Allow HPA to manage replicas

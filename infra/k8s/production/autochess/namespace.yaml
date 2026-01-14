@@ -1,0 +1,29 @@
+# ClaudeCodeUI - Auto-Claude Agents Web Interface
+# Web UI for managing AI agent sessions with Janua SSO integration
+# Domain: agents.madfam.io
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: madfam-automation
+  labels:
+    name: madfam-automation
+    app.kubernetes.io/part-of: madfam
+---
+# NOTE: Create this secret manually with actual values:
+# kubectl create secret generic claude-ui-secrets \
+#   --namespace=madfam-automation \
+#   --from-literal=janua-client-secret=<your-secret> \
+#   --from-literal=session-secret=<random-32-chars>
+#
+# Or use ArgoCD external secrets / sealed secrets
+apiVersion: v1
+kind: Secret
+metadata:
+  name: claude-ui-secrets
+  namespace: madfam-automation
+  annotations:
+    # Placeholder - actual secrets managed externally
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+type: Opaque
+data: {}
