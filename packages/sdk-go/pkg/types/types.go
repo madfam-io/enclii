@@ -203,6 +203,7 @@ const (
 	RoleAdmin     Role = "admin"
 	RoleDeveloper Role = "developer"
 	RoleViewer    Role = "viewer"
+	RoleSystem    Role = "system" // For automated system actions (webhooks, auto-deploy)
 )
 
 // User represents a user account in the system

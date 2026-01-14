@@ -30,7 +30,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: arc-systems
+    namespace: arc-system
 
   syncPolicy:
     automated:

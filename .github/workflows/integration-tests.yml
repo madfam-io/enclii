@@ -101,8 +101,15 @@ jobs:
 
       - name: Install PostgreSQL and Redis
         run: |
+          # Create secrets first (required by postgres.yaml)
+          kubectl apply -f infra/k8s/base/secrets.dev.yaml
+          # Apply database manifests
           kubectl apply -f infra/k8s/base/postgres.yaml
           kubectl apply -f infra/k8s/base/redis.yaml
+          # Wait for PVCs to bind (may not have storage provisioner)
+          kubectl wait --for=condition=bound pvc -l app=postgres --timeout=60s || echo "PVC binding skipped"
+          kubectl wait --for=condition=bound pvc -l app=redis --timeout=60s || echo "PVC binding skipped"
+          # Wait for pods to be ready
           echo "Waiting for PostgreSQL and Redis to be ready..."
           kubectl wait --for=condition=ready pod -l app=postgres --timeout=300s
           kubectl wait --for=condition=ready pod -l app=redis --timeout=300s
