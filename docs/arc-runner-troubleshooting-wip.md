@@ -114,3 +114,46 @@ helm upgrade --install enclii-runners-blue \
 - `infra/helm/arc/values-runner-set.yaml` - Simplified, no custom containers
 - `infra/helm/arc/values-runner-set-blue.yaml` - Removed PVC volumes
 - `infra/helm/arc/values-runner-set-green.yaml` - Removed PVC volumes
+
+## Current Issue (In Progress)
+
+**Runner is stable but jobs not being assigned!**
+
+### Verified Working
+- Runner pod is Running (1/1) and stable for 5+ minutes
+- Runner registered with GitHub (runnerId: 43, ready: true)
+- Listener is running in arc-system namespace and polling for messages
+- Jobs are queued with correct label `enclii-runners-blue`
+- `ARC_BOOTSTRAP_COMPLETE=true` is set in GitHub repo variables
+
+### Still Investigating
+- Jobs remain "queued" with no runner assigned
+- Listener shows `"assigned job": 0` in logs
+- GitHub doesn't seem to be routing jobs to the runner
+
+### Next Steps to Try
+1. Check GitHub organization runner settings
+   - Verify runner group permissions
+   - Check if runner appears in org/repo settings
+2. Check if runner needs to be in a specific runner group
+   - Current: `runnerGroup: "default"`
+   - May need to match org-level config
+3. Try removing `runnerGroup` setting entirely
+4. Check GitHub Actions runner debug logs
+   ```bash
+   # Enable debug logging in workflow
+   ACTIONS_RUNNER_DEBUG: true
+   ```
+5. Check if there's a webhook issue between GitHub and ARC
+
+### Useful Debug Commands
+```bash
+# Check listener for job assignments
+kubectl logs -n arc-system enclii-runners-blue-754b578d-listener --tail=50
+
+# Check if runner appears in GitHub
+gh api repos/madfam-org/enclii/actions/runners
+
+# Check runner at org level
+gh api orgs/madfam-org/actions/runners
+```
