@@ -1,40 +1,31 @@
-# Shared configuration for runner scale sets
+# Shared configuration for ARC runner scale sets
 # Blue and green scale sets inherit from this base configuration
 # Helm chart: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
+#
+# IMPORTANT: When using containerMode.type=dind, ARC auto-injects:
+#   - init-dind-externals container (copies Node.js and other tools)
+#   - dind sidecar container (privileged Docker daemon)
+#   - Required volumes (dind-sock, dind-externals, work)
+# Do NOT manually define these - only customize the runner container.
 
 githubConfigUrl: "https://github.com/madfam-org"
 githubConfigSecret: github-app-secret
 
 runnerGroup: "default"
 
-# Auto-scaling configuration
-minRunners: 1
-maxRunners: 6
-
 # Container mode: Docker-in-Docker for building images
+# This automatically configures the runner with a DinD sidecar
 containerMode:
   type: "dind"
 
-# Runner pod template
+# Runner pod template - only customize runner container, not dind
 template:
   spec:
     serviceAccountName: arc-runner
-    securityContext:
-      fsGroup: 1000
-
-    # Init container to setup permissions
-    initContainers:
-      - name: init-permissions
-        image: busybox:1.36
-        command: ['sh', '-c', 'chown -R 1000:1000 /home/runner/_work || true']
-        volumeMounts:
-          - name: work
-            mountPath: /home/runner/_work
 
     containers:
-      # Main runner container
-      # NOTE: When containerMode.type=dind, ARC auto-injects the dind sidecar
-      # We only customize the runner container here
+      # Customize the runner container that ARC creates
+      # Do NOT define 'dind' container - ARC handles this
       - name: runner
         image: ghcr.io/actions/actions-runner:2.321.0
         resources:
@@ -45,44 +36,24 @@ template:
             cpu: "500m"
             memory: 1Gi
         env:
-          # Use Unix socket to connect to ARC's injected dind sidecar
-          - name: DOCKER_HOST
-            value: unix:///var/run/docker.sock
-          # Go module cache
+          # Go module cache location
           - name: GOPATH
             value: /home/runner/go
           - name: GOCACHE
             value: /home/runner/go/cache
-          # npm cache
+          # npm cache location
           - name: npm_config_cache
             value: /home/runner/.npm
-          # Wait for Docker daemon to be ready
-          - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
-            value: "120"
         volumeMounts:
-          - name: work
-            mountPath: /home/runner/_work
           - name: go-cache
             mountPath: /home/runner/go
           - name: npm-cache
             mountPath: /home/runner/.npm
-          # Mount dind socket from ARC's injected sidecar
-          - name: dind-sock
-            mountPath: /var/run
-
-    # Note: ARC's containerMode.type=dind auto-injects:
-    # - dind sidecar container
-    # - dind-sock and dind-externals volumes
-    # We only define our custom persistent volumes here
-    volumes:
-      - name: work
-        emptyDir: {}
-      # Cache volumes will be overridden by blue/green configs with PVCs
 
     # Graceful termination
     terminationGracePeriodSeconds: 300
 
-# Listener configuration
+# Listener configuration (manages scale set communication with GitHub)
 listenerTemplate:
   spec:
     containers:

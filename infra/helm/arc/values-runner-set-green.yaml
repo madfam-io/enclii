@@ -8,10 +8,6 @@
 
 runnerScaleSetName: "enclii-runners-green"
 
-# Inherit shared config
-githubConfigUrl: "https://github.com/madfam-org"
-githubConfigSecret: github-app-secret
-
 # Start with 0 runners (standby mode)
 # During blue-green switch, this will be scaled up before blue is drained
 minRunners: 0
@@ -26,13 +22,9 @@ template:
     annotations:
       arc.enclii.dev/deployed-at: ""  # Will be set by Helm
   spec:
-    # Node selector for future dedicated runner nodes
-    # nodeSelector:
-    #   node-role.kubernetes.io/runner: "true"
-
+    # Note: Do NOT define 'work' volume - ARC auto-injects it with containerMode.type=dind
+    # Only define additional cache volumes here
     volumes:
-      - name: work
-        emptyDir: {}
       # Shared caches across blue/green
       - name: go-cache
         persistentVolumeClaim:
