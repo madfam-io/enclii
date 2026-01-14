@@ -9,10 +9,38 @@ import { NotificationBell } from '@/components/notifications/notification-bell';
 import { CommandPalette } from '@/components/command/command-palette';
 import { SystemHealthBadge } from '@/components/dashboard/system-health';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Menu } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Menu, ChevronDown } from 'lucide-react';
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
+}
+
+interface NavItem {
+  name: string;
+  href: string;
+}
+
+// Helper component for nav links
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+  return (
+    <Link
+      href={item.href}
+      className={`px-3 py-2 text-sm font-medium transition-colors duration-150 whitespace-nowrap ${
+        isActive
+          ? 'text-enclii-blue border-b-2 border-enclii-blue'
+          : 'text-muted-foreground hover:text-enclii-blue hover:border-b-2 hover:border-border'
+      }`}
+    >
+      {item.name}
+    </Link>
+  );
 }
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
@@ -21,22 +49,35 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navigation = [
+  // Primary navigation - always visible at lg+ breakpoint
+  const primaryNav: NavItem[] = [
     { name: 'Dashboard', href: '/' },
     { name: 'Projects', href: '/projects' },
     { name: 'Services', href: '/services' },
+    { name: 'Deployments', href: '/deployments' },
+    { name: 'Observability', href: '/observability' },
+  ];
+
+  // Overflow navigation - in dropdown at lg, visible at xl+
+  const overflowNav: NavItem[] = [
     { name: 'Templates', href: '/templates' },
     { name: 'Databases', href: '/databases' },
-    { name: 'Deployments', href: '/deployments' },
     { name: 'Domains', href: '/domains' },
-    { name: 'Observability', href: '/observability' },
     { name: 'Activity', href: '/activity' },
   ];
 
-  const secondaryNav = [
+  // Combined navigation for mobile menu
+  const navigation = [...primaryNav, ...overflowNav];
+
+  const secondaryNav: NavItem[] = [
     { name: 'Usage', href: '/usage' },
     { name: 'Settings', href: '/settings' },
   ];
+
+  // Check if any overflow item is active (for "More" button highlighting)
+  const isOverflowActive = overflowNav.some(
+    (item) => pathname === item.href || pathname.startsWith(item.href)
+  );
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -68,7 +109,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   }
 
   return (
-    <>
+    <div className="min-h-screen flex flex-col">
       <nav className="bg-background shadow-sm border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -76,35 +117,63 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
               <div className="flex-shrink-0">
                 <Link href="/" className="flex items-center">
                   <span className="text-2xl font-bold text-enclii-blue">🚂 Enclii</span>
-                  <span className="ml-2 text-sm text-muted-foreground font-medium">Switchyard</span>
+                  <span className="ml-2 text-sm text-muted-foreground font-medium hidden sm:inline">Switchyard</span>
                 </Link>
               </div>
-              {/* Desktop Navigation - Hidden on mobile */}
-              <div className="hidden lg:flex ml-10 items-baseline space-x-4">
-                {navigation.map((item) => {
-                  const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className={`px-3 py-2 text-sm font-medium transition-colors duration-150 ${
-                        isActive
-                          ? 'text-enclii-blue border-b-2 border-enclii-blue'
-                          : 'text-muted-foreground hover:text-enclii-blue hover:border-b-2 hover:border-border'
-                      }`}
-                    >
-                      {item.name}
-                    </Link>
-                  );
-                })}
+              {/* Desktop Navigation - Hidden on mobile/tablet */}
+              <div className="hidden lg:flex ml-6 items-baseline space-x-1 xl:space-x-4">
+                {/* Primary nav items - always visible at lg+ */}
+                {primaryNav.map((item) => (
+                  <NavLink key={item.name} item={item} pathname={pathname} />
+                ))}
+
+                {/* More dropdown - visible at lg, hidden at xl */}
+                <div className="xl:hidden">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className={`px-3 py-2 text-sm font-medium transition-colors duration-150 flex items-center gap-1 ${
+                          isOverflowActive
+                            ? 'text-enclii-blue'
+                            : 'text-muted-foreground hover:text-enclii-blue'
+                        }`}
+                      >
+                        More
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-40">
+                      {overflowNav.map((item) => {
+                        const isActive = pathname === item.href || pathname.startsWith(item.href);
+                        return (
+                          <DropdownMenuItem key={item.name} asChild>
+                            <Link
+                              href={item.href}
+                              className={isActive ? 'text-enclii-blue bg-accent' : ''}
+                            >
+                              {item.name}
+                            </Link>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                {/* Overflow items - visible at xl+ */}
+                <div className="hidden xl:flex items-baseline space-x-4">
+                  {overflowNav.map((item) => (
+                    <NavLink key={item.name} item={item} pathname={pathname} />
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="flex items-center space-x-2 lg:space-x-4">
+            <div className="flex items-center space-x-1 lg:space-x-2">
               {/* Command Palette - Always visible */}
               <CommandPalette />
 
               {/* Secondary Navigation - Hidden on mobile */}
-              <div className="hidden md:flex items-center space-x-2 mr-4 border-r border-border pr-4">
+              <div className="hidden md:flex items-center space-x-1 mr-2 border-r border-border pr-2 lg:mr-4 lg:pr-4">
                 {secondaryNav.map((item) => {
                   const isActive = pathname === item.href || pathname.startsWith(item.href);
                   return (
@@ -123,8 +192,8 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                 })}
               </div>
 
-              {/* System Health - Hidden on mobile */}
-              <div className="hidden md:block">
+              {/* System Health - Hidden on mobile/tablet, visible at lg+ */}
+              <div className="hidden lg:block">
                 <SystemHealthBadge />
               </div>
 
@@ -134,23 +203,23 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
               {/* Theme Toggle - Always visible */}
               <ThemeToggle />
 
-              {/* User Menu - Hidden on mobile, shown in hamburger */}
-              <div className="hidden lg:flex relative items-center gap-3">
-                <span className="text-sm text-muted-foreground truncate max-w-[150px]">
+              {/* User Menu - Hidden until xl, shown in hamburger otherwise */}
+              <div className="hidden xl:flex relative items-center gap-2">
+                <span className="text-sm text-muted-foreground truncate max-w-[120px]">
                   {user?.name || user?.email}
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="text-sm text-muted-foreground hover:text-foreground px-3 py-1 rounded border border-border hover:bg-accent transition-colors"
+                  className="text-sm text-muted-foreground hover:text-foreground px-2 py-1 rounded border border-border hover:bg-accent transition-colors"
                 >
                   Sign out
                 </button>
               </div>
 
-              {/* Mobile Hamburger Menu */}
+              {/* Mobile/Tablet Hamburger Menu - visible below xl */}
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <SheetTrigger asChild>
-                  <button className="lg:hidden p-2 rounded-md hover:bg-accent">
+                  <button className="xl:hidden p-2 rounded-md hover:bg-accent">
                     <Menu className="h-6 w-6 text-foreground" />
                     <span className="sr-only">Open menu</span>
                   </button>
@@ -208,6 +277,16 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                       })}
                     </div>
 
+                    {/* System Status - visible in mobile menu */}
+                    <div className="border-t border-border pt-4">
+                      <div className="px-3 py-2 flex items-center gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          System Status
+                        </span>
+                        <SystemHealthBadge />
+                      </div>
+                    </div>
+
                     {/* User Section */}
                     <div className="border-t border-border pt-4 mt-auto">
                       <div className="px-3 py-2">
@@ -235,11 +314,11 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
           </div>
         </div>
       </nav>
-      <main className="min-h-screen">{children}</main>
-      <footer className="bg-background border-t border-border mt-12">
+      <main className="flex-grow">{children}</main>
+      <footer className="bg-background border-t border-border">
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-sm text-muted-foreground text-center sm:text-left">
               © {new Date().getFullYear()} Enclii Platform. Built with ❤️ for developers.
             </div>
             <div className="flex items-center space-x-4 text-sm text-muted-foreground">
@@ -250,6 +329,6 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
           </div>
         </div>
       </footer>
-    </>
+    </div>
   );
 }
