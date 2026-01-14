@@ -1,19 +1,21 @@
-# ARC Runner Troubleshooting - FULLY RESOLVED
+# CI/CD Pipeline Troubleshooting - FULLY RESOLVED
 
 **Date**: 2026-01-14
-**Status**: ✅ RESOLVED - Runners working and processing jobs
+**Status**: ✅ RESOLVED - ARC runners and webhooks working
 
 ## Executive Summary
 
-ARC runners are now **fully operational**. Two issues were resolved:
+CI/CD pipeline is now **fully operational**. Three issues were resolved:
 
 1. **Runner crashes** - Fixed by simplifying Helm values (no custom containers)
 2. **Jobs not assigned** - Fixed by enabling "Allow public repositories" in Default runner group
+3. **Webhook signature verification failing** - Fixed by recreating GitHub webhook with correct secret
 
 **Current State:**
-- 6 runners active and processing queued jobs
+- ARC runners active and processing GitHub Actions jobs
 - Auto-scaling working (1 → 6 based on demand)
-- Jobs being picked up from queue
+- GitHub webhook verified (200 status)
+- Builds being triggered and enqueued to Roundhouse
 
 ---
 
@@ -27,7 +29,7 @@ ARC runners are now **fully operational**. Two issues were resolved:
 
 **Solution**: Remove all custom container definitions from values files. Let ARC handle container injection.
 
-### Issue 2: Jobs Not Being Assigned (CURRENT)
+### Issue 2: Jobs Not Being Assigned (RESOLVED)
 
 **Problem**: Runner is stable, registered (runnerId: 44), and "Listening for Jobs", but GitHub jobs remain "queued" forever.
 
@@ -44,6 +46,48 @@ $ gh api repos/madfam-org/enclii/actions/runners
 
 # Listener shows repeated:
 # "assigned job": 0, "totalAvailableJobs": 0
+```
+
+### Issue 3: Webhook Signature Verification Failing (RESOLVED)
+
+**Problem**: After pushing commits to `main`, GitHub webhooks were rejected with 401 (signature verification failed). Builds weren't being triggered.
+
+**Root Cause**: The GitHub webhook was configured with a different secret than what switchyard-api was using. The GitHub API PATCH endpoint doesn't reliably update webhook secrets.
+
+**Evidence**:
+```bash
+# Webhook delivery showing 401
+gh api repos/madfam-org/enclii/hooks/585841923/deliveries --jq '.[0]'
+# {"status":"Invalid HTTP Response: 401","status_code":401}
+
+# API logs
+kubectl logs -n enclii deploy/switchyard-api | grep webhook
+# "message":"GitHub webhook signature verification failed"
+```
+
+**Solution**: Delete and recreate the webhook with the correct secret:
+```bash
+# Delete old webhook
+gh api repos/madfam-org/enclii/hooks/585841923 -X DELETE
+
+# Create new webhook with correct secret
+gh api repos/madfam-org/enclii/hooks -X POST \
+  -f 'name=web' \
+  -f 'config[url]=https://api.enclii.dev/v1/webhooks/github' \
+  -f 'config[content_type]=json' \
+  -f 'config[secret]=<WEBHOOK_SECRET_FROM_SWITCHYARD_ENV>' \
+  -f 'events[]=push' \
+  -F 'active=true'
+```
+
+**Verification**:
+```bash
+# Check switchyard-api secret
+kubectl exec -n enclii deploy/switchyard-api -- env | grep GITHUB_WEBHOOK_SECRET
+
+# After push, check for 200 response
+kubectl logs -n enclii deploy/switchyard-api | grep "webhooks/github"
+# Should show: 200 | POST "/v1/webhooks/github"
 ```
 
 ---
