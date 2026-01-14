@@ -318,13 +318,13 @@ func (h *Handler) GetTemplateDeployment(c *gin.Context) {
 
 // ImportTemplateRequest defines the request for importing a template from GitHub
 type ImportTemplateRequest struct {
-	RepoURL     string `json:"repo_url" binding:"required"`
-	Name        string `json:"name" binding:"required"`
-	Description string `json:"description"`
-	Category    string `json:"category" binding:"required"`
-	Framework   string `json:"framework" binding:"required"`
-	Language    string `json:"language" binding:"required"`
-	Branch      string `json:"branch"`
+	RepoURL     string   `json:"repo_url" binding:"required"`
+	Name        string   `json:"name" binding:"required"`
+	Description string   `json:"description"`
+	Category    string   `json:"category" binding:"required"`
+	Framework   string   `json:"framework" binding:"required"`
+	Language    string   `json:"language" binding:"required"`
+	Branch      string   `json:"branch"`
 	Tags        []string `json:"tags"`
 }
 

@@ -34,11 +34,11 @@ type Config struct {
 	RegistryPassword string
 	CacheDir         string
 	Timeout          time.Duration
-	GenerateSBOM     bool         // Enable SBOM generation (requires Syft)
-	SignImages       bool         // Enable image signing (requires Cosign)
-	UseCache         bool         // Enable build layer caching
-	CachePrefix      string       // Cache image prefix (e.g., "cache")
-	R2Client         R2Uploader   // R2 client for cache metadata storage
+	GenerateSBOM     bool       // Enable SBOM generation (requires Syft)
+	SignImages       bool       // Enable image signing (requires Cosign)
+	UseCache         bool       // Enable build layer caching
+	CachePrefix      string     // Cache image prefix (e.g., "cache")
+	R2Client         R2Uploader // R2 client for cache metadata storage
 }
 
 func NewService(cfg *Config, logger *logrus.Logger) *Service {

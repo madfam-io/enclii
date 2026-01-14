@@ -254,13 +254,13 @@ func (s *Service) RetryDelivery(ctx context.Context, webhook *types.WebhookDesti
 // Helper to convert event to generic payload map
 func eventToPayload(event *types.WebhookEvent) map[string]any {
 	return map[string]any{
-		"id":        event.ID,
-		"type":      event.Type,
-		"timestamp": event.Timestamp,
-		"project":   event.Project,
+		"id":         event.ID,
+		"type":       event.Type,
+		"timestamp":  event.Timestamp,
+		"project":    event.Project,
 		"deployment": event.Deployment,
-		"build":     event.Build,
-		"service":   event.Service,
-		"database":  event.Database,
+		"build":      event.Build,
+		"service":    event.Service,
+		"database":   event.Database,
 	}
 }

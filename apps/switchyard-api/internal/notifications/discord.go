@@ -30,22 +30,22 @@ func NewDiscordSender(logger *logrus.Logger) *DiscordSender {
 
 // DiscordMessage represents the Discord webhook payload
 type DiscordMessage struct {
-	Content   string          `json:"content,omitempty"`
-	Username  string          `json:"username,omitempty"`
-	AvatarURL string          `json:"avatar_url,omitempty"`
-	Embeds    []DiscordEmbed  `json:"embeds,omitempty"`
+	Content   string         `json:"content,omitempty"`
+	Username  string         `json:"username,omitempty"`
+	AvatarURL string         `json:"avatar_url,omitempty"`
+	Embeds    []DiscordEmbed `json:"embeds,omitempty"`
 }
 
 // DiscordEmbed represents a Discord embed
 type DiscordEmbed struct {
-	Title       string               `json:"title,omitempty"`
-	Description string               `json:"description,omitempty"`
-	URL         string               `json:"url,omitempty"`
-	Color       int                  `json:"color,omitempty"`
-	Timestamp   string               `json:"timestamp,omitempty"`
-	Footer      *DiscordEmbedFooter  `json:"footer,omitempty"`
-	Author      *DiscordEmbedAuthor  `json:"author,omitempty"`
-	Fields      []DiscordEmbedField  `json:"fields,omitempty"`
+	Title       string              `json:"title,omitempty"`
+	Description string              `json:"description,omitempty"`
+	URL         string              `json:"url,omitempty"`
+	Color       int                 `json:"color,omitempty"`
+	Timestamp   string              `json:"timestamp,omitempty"`
+	Footer      *DiscordEmbedFooter `json:"footer,omitempty"`
+	Author      *DiscordEmbedAuthor `json:"author,omitempty"`
+	Fields      []DiscordEmbedField `json:"fields,omitempty"`
 }
 
 // DiscordEmbedFooter represents the footer of a Discord embed

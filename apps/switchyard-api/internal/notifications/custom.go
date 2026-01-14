@@ -37,14 +37,14 @@ func NewCustomSender(logger *logrus.Logger, customHeaders map[string]string, sig
 
 // CustomWebhookPayload represents the payload sent to custom webhooks
 type CustomWebhookPayload struct {
-	ID        string                      `json:"id"`
-	Type      types.WebhookEventType      `json:"type"`
-	Timestamp time.Time                   `json:"timestamp"`
-	Project   types.WebhookProjectInfo    `json:"project"`
+	ID         string                       `json:"id"`
+	Type       types.WebhookEventType       `json:"type"`
+	Timestamp  time.Time                    `json:"timestamp"`
+	Project    types.WebhookProjectInfo     `json:"project"`
 	Deployment *types.WebhookDeploymentInfo `json:"deployment,omitempty"`
-	Build     *types.WebhookBuildInfo     `json:"build,omitempty"`
-	Service   *types.WebhookServiceInfo   `json:"service,omitempty"`
-	Database  *types.WebhookDatabaseInfo  `json:"database,omitempty"`
+	Build      *types.WebhookBuildInfo      `json:"build,omitempty"`
+	Service    *types.WebhookServiceInfo    `json:"service,omitempty"`
+	Database   *types.WebhookDatabaseInfo   `json:"database,omitempty"`
 }
 
 // Send sends an event to a custom webhook URL

@@ -13,26 +13,26 @@ import (
 
 // CreateWebhookRequest defines the request body for creating a webhook destination
 type CreateWebhookRequest struct {
-	Name             string                    `json:"name" binding:"required"`
-	Type             types.WebhookType         `json:"type" binding:"required"`
-	WebhookURL       string                    `json:"webhook_url,omitempty"`
-	TelegramBotToken string                    `json:"telegram_bot_token,omitempty"`
-	TelegramChatID   string                    `json:"telegram_chat_id,omitempty"`
-	Events           []types.WebhookEventType  `json:"events" binding:"required,min=1"`
-	CustomHeaders    map[string]string         `json:"custom_headers,omitempty"`
-	SigningSecret    string                    `json:"signing_secret,omitempty"`
+	Name             string                   `json:"name" binding:"required"`
+	Type             types.WebhookType        `json:"type" binding:"required"`
+	WebhookURL       string                   `json:"webhook_url,omitempty"`
+	TelegramBotToken string                   `json:"telegram_bot_token,omitempty"`
+	TelegramChatID   string                   `json:"telegram_chat_id,omitempty"`
+	Events           []types.WebhookEventType `json:"events" binding:"required,min=1"`
+	CustomHeaders    map[string]string        `json:"custom_headers,omitempty"`
+	SigningSecret    string                   `json:"signing_secret,omitempty"`
 }
 
 // UpdateWebhookRequest defines the request body for updating a webhook destination
 type UpdateWebhookRequest struct {
-	Name             *string                   `json:"name,omitempty"`
-	WebhookURL       *string                   `json:"webhook_url,omitempty"`
-	TelegramBotToken *string                   `json:"telegram_bot_token,omitempty"`
-	TelegramChatID   *string                   `json:"telegram_chat_id,omitempty"`
-	Events           []types.WebhookEventType  `json:"events,omitempty"`
-	Enabled          *bool                     `json:"enabled,omitempty"`
-	CustomHeaders    map[string]string         `json:"custom_headers,omitempty"`
-	SigningSecret    *string                   `json:"signing_secret,omitempty"`
+	Name             *string                  `json:"name,omitempty"`
+	WebhookURL       *string                  `json:"webhook_url,omitempty"`
+	TelegramBotToken *string                  `json:"telegram_bot_token,omitempty"`
+	TelegramChatID   *string                  `json:"telegram_chat_id,omitempty"`
+	Events           []types.WebhookEventType `json:"events,omitempty"`
+	Enabled          *bool                    `json:"enabled,omitempty"`
+	CustomHeaders    map[string]string        `json:"custom_headers,omitempty"`
+	SigningSecret    *string                  `json:"signing_secret,omitempty"`
 }
 
 // CreateWebhook creates a new webhook destination for a project

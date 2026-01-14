@@ -33,24 +33,24 @@ type EnvVarWithMeta struct {
 }
 
 type ReconcileRequest struct {
-	Service       *types.Service
-	Release       *types.Release
-	Deployment    *types.Deployment
-	Environment   *types.Environment   // The target environment with kube_namespace
-	CustomDomains []types.CustomDomain
-	Routes        []types.Route
-	EnvVars       map[string]string    // User-defined environment variables (decrypted) - DEPRECATED: use EnvVarsWithMeta
-	EnvVarsWithMeta []EnvVarWithMeta   // Environment variables with IsSecret metadata for proper K8s secret creation
-	AddonBindings []AddonBinding       // Database addon bindings for env var injection
+	Service         *types.Service
+	Release         *types.Release
+	Deployment      *types.Deployment
+	Environment     *types.Environment // The target environment with kube_namespace
+	CustomDomains   []types.CustomDomain
+	Routes          []types.Route
+	EnvVars         map[string]string // User-defined environment variables (decrypted) - DEPRECATED: use EnvVarsWithMeta
+	EnvVarsWithMeta []EnvVarWithMeta  // Environment variables with IsSecret metadata for proper K8s secret creation
+	AddonBindings   []AddonBinding    // Database addon bindings for env var injection
 }
 
 // AddonBinding represents a database addon bound to this service
 type AddonBinding struct {
-	EnvVarName       string                      // e.g., "DATABASE_URL", "REDIS_URL"
-	AddonType        types.DatabaseAddonType     // postgres, redis, mysql
-	K8sNamespace     string                      // Namespace where addon resources exist
-	K8sResourceName  string                      // Name of the addon K8s resource
-	ConnectionSecret string                      // K8s secret name with credentials (for postgres)
+	EnvVarName       string                  // e.g., "DATABASE_URL", "REDIS_URL"
+	AddonType        types.DatabaseAddonType // postgres, redis, mysql
+	K8sNamespace     string                  // Namespace where addon resources exist
+	K8sResourceName  string                  // Name of the addon K8s resource
+	ConnectionSecret string                  // K8s secret name with credentials (for postgres)
 }
 
 type ReconcileResult struct {
@@ -400,11 +400,11 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace, 
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
-							Env: envVars,
+							Env:            envVars,
 							Resources:      buildResourceRequirements(req.Service.Resources),
 							LivenessProbe:  buildLivenessProbe(req.Service.HealthCheck, containerPort),
 							ReadinessProbe: buildReadinessProbe(req.Service.HealthCheck, containerPort),
-							VolumeMounts: buildVolumeMountsWithKubeconfig(req.Service.Volumes, req.EnvVars),
+							VolumeMounts:   buildVolumeMountsWithKubeconfig(req.Service.Volumes, req.EnvVars),
 						},
 					},
 					Volumes:                       buildVolumesWithKubeconfig(req.Service.Volumes, req.Service.Name, req.EnvVars),
@@ -568,9 +568,9 @@ func (r *ServiceReconciler) ensureEnvSecret(ctx context.Context, req *ReconcileR
 				return fmt.Errorf("failed to create secret: %w", err)
 			}
 			r.logger.WithFields(logrus.Fields{
-				"service":     req.Service.Name,
-				"secret":      secretName,
-				"keys_count":  len(secretData),
+				"service":    req.Service.Name,
+				"secret":     secretName,
+				"keys_count": len(secretData),
 			}).Info("Created K8s Secret for env vars")
 			return nil
 		}
@@ -584,9 +584,9 @@ func (r *ServiceReconciler) ensureEnvSecret(ctx context.Context, req *ReconcileR
 		return fmt.Errorf("failed to update secret: %w", err)
 	}
 	r.logger.WithFields(logrus.Fields{
-		"service":     req.Service.Name,
-		"secret":      secretName,
-		"keys_count":  len(secretData),
+		"service":    req.Service.Name,
+		"secret":     secretName,
+		"keys_count": len(secretData),
 	}).Info("Updated K8s Secret for env vars")
 
 	return nil

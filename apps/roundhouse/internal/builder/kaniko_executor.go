@@ -37,7 +37,7 @@ const (
 	LabelAppName   = "app.kubernetes.io/name"
 
 	// Job types for post-build operations
-	JobTypeSBOM   = "sbom"
+	JobTypeSBOM    = "sbom"
 	JobTypeSigning = "signing"
 )
 
@@ -67,8 +67,8 @@ type KanikoExecutorConfig struct {
 	SignImages     bool
 	CosignKey      string
 	Timeout        time.Duration
-	CacheRepo      string        // Optional: registry path for layer caching
-	GitCredentials string        // Optional: secret name with git token
+	CacheRepo      string // Optional: registry path for layer caching
+	GitCredentials string // Optional: secret name with git token
 }
 
 // NewKanikoExecutor creates a new Kaniko-based build executor
@@ -178,8 +178,8 @@ func (e *KanikoExecutor) createBuildJob(ctx context.Context, job *queue.BuildJob
 	args := e.buildKanikoArgs(job, imageTag)
 
 	// Job configuration
-	backoffLimit := int32(0)            // Don't retry failed builds
-	ttlSeconds := int32(3600)           // Clean up after 1 hour
+	backoffLimit := int32(0)  // Don't retry failed builds
+	ttlSeconds := int32(3600) // Clean up after 1 hour
 	activeDeadlineSeconds := int64(e.timeout.Seconds())
 
 	// Security context - Kaniko MUST run as root (UID 0) to unpack container filesystem layers.
@@ -506,7 +506,7 @@ func (e *KanikoExecutor) runSBOMGeneration(ctx context.Context, buildID uuid.UUI
 
 	// Job configuration
 	backoffLimit := int32(0)
-	ttlSeconds := int32(1800) // Clean up after 30 minutes
+	ttlSeconds := int32(1800)           // Clean up after 30 minutes
 	activeDeadlineSeconds := int64(300) // 5 minute timeout for SBOM
 
 	k8sJob := &batchv1.Job{
@@ -646,7 +646,7 @@ func (e *KanikoExecutor) runImageSigning(ctx context.Context, buildID uuid.UUID,
 
 	// Job configuration
 	backoffLimit := int32(0)
-	ttlSeconds := int32(1800) // Clean up after 30 minutes
+	ttlSeconds := int32(1800)           // Clean up after 30 minutes
 	activeDeadlineSeconds := int64(180) // 3 minute timeout for signing
 
 	// Cosign supports keyless signing via Fulcio/Rekor or key-based signing

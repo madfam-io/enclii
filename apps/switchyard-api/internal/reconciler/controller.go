@@ -41,9 +41,9 @@ type Controller struct {
 	mu      sync.RWMutex
 
 	// Backpressure tracking
-	droppedWork  int64         // Atomic counter for dropped work items
-	retryQueue   []*ReconcileWork // Items that need to be retried when queue has space
-	retryMu      sync.Mutex       // Protects retryQueue
+	droppedWork int64            // Atomic counter for dropped work items
+	retryQueue  []*ReconcileWork // Items that need to be retried when queue has space
+	retryMu     sync.Mutex       // Protects retryQueue
 }
 
 type ReconcileWork struct {
@@ -604,13 +604,13 @@ func (c *Controller) GetStatus() map[string]interface{} {
 	c.retryMu.Unlock()
 
 	return map[string]interface{}{
-		"started":           c.started,
-		"workers":           c.workers,
-		"work_queue":        len(c.workCh),
-		"work_queue_cap":    cap(c.workCh),
-		"result_queue":      len(c.resultCh),
-		"result_queue_cap":  cap(c.resultCh),
-		"retry_queue":       retryQueueLen,
+		"started":            c.started,
+		"workers":            c.workers,
+		"work_queue":         len(c.workCh),
+		"work_queue_cap":     cap(c.workCh),
+		"result_queue":       len(c.resultCh),
+		"result_queue_cap":   cap(c.resultCh),
+		"retry_queue":        retryQueueLen,
 		"dropped_work_total": atomic.LoadInt64(&c.droppedWork),
 	}
 }

@@ -30,9 +30,9 @@ const (
 
 // DomainSyncService handles syncing domain status with Cloudflare
 type DomainSyncService struct {
-	cf         *cloudflare.Client
-	repos      *db.Repositories
-	logger     *logrus.Logger
+	cf          *cloudflare.Client
+	repos       *db.Repositories
+	logger      *logrus.Logger
 	tunnelCNAME string
 
 	// Background sync control
@@ -75,12 +75,12 @@ type SyncDomainResult struct {
 
 // SyncAllResult contains the result of syncing all domains
 type SyncAllResult struct {
-	TotalDomains   int                 `json:"total_domains"`
-	SyncedDomains  int                 `json:"synced_domains"`
-	FailedDomains  int                 `json:"failed_domains"`
-	Results        []SyncDomainResult  `json:"results"`
-	TunnelStatus   *cloudflare.TunnelStatus `json:"tunnel_status,omitempty"`
-	SyncedAt       time.Time           `json:"synced_at"`
+	TotalDomains  int                      `json:"total_domains"`
+	SyncedDomains int                      `json:"synced_domains"`
+	FailedDomains int                      `json:"failed_domains"`
+	Results       []SyncDomainResult       `json:"results"`
+	TunnelStatus  *cloudflare.TunnelStatus `json:"tunnel_status,omitempty"`
+	SyncedAt      time.Time                `json:"synced_at"`
 }
 
 // SyncDomain syncs a single domain's status with Cloudflare
@@ -138,11 +138,11 @@ func (s *DomainSyncService) SyncDomain(ctx context.Context, domainID uuid.UUID) 
 	}
 
 	s.logger.WithFields(logrus.Fields{
-		"domain":      domain.Domain,
-		"old_status":  result.OldStatus,
-		"new_status":  result.NewStatus,
+		"domain":       domain.Domain,
+		"old_status":   result.OldStatus,
+		"new_status":   result.NewStatus,
 		"dns_verified": result.DNSVerified,
-		"tls_enabled": result.TLSEnabled,
+		"tls_enabled":  result.TLSEnabled,
 	}).Info("Domain status synced")
 
 	return result, nil
@@ -189,9 +189,9 @@ func (s *DomainSyncService) SyncAllDomains(ctx context.Context) (*SyncAllResult,
 	}
 
 	s.logger.WithFields(logrus.Fields{
-		"total":   result.TotalDomains,
-		"synced":  result.SyncedDomains,
-		"failed":  result.FailedDomains,
+		"total":  result.TotalDomains,
+		"synced": result.SyncedDomains,
+		"failed": result.FailedDomains,
 	}).Info("Domain sync completed")
 
 	return result, nil

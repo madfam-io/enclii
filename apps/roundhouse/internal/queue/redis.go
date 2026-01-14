@@ -12,14 +12,14 @@ import (
 )
 
 const (
-	buildQueueKey       = "roundhouse:queue:builds"
-	priorityQueueKey    = "roundhouse:queue:priority"
-	callbackRetryKey    = "roundhouse:queue:callback_retry" // Sorted set by next_retry time
-	callbackHashPrefix  = "roundhouse:callback:"            // Hash for callback details
-	jobHashKeyPrefix    = "roundhouse:job:"
-	logsStreamPrefix    = "roundhouse:logs:"
-	statsKey            = "roundhouse:stats"
-	activeWorkersKey    = "roundhouse:workers:active"
+	buildQueueKey      = "roundhouse:queue:builds"
+	priorityQueueKey   = "roundhouse:queue:priority"
+	callbackRetryKey   = "roundhouse:queue:callback_retry" // Sorted set by next_retry time
+	callbackHashPrefix = "roundhouse:callback:"            // Hash for callback details
+	jobHashKeyPrefix   = "roundhouse:job:"
+	logsStreamPrefix   = "roundhouse:logs:"
+	statsKey           = "roundhouse:stats"
+	activeWorkersKey   = "roundhouse:workers:active"
 )
 
 // RedisQueue implements the build queue using Redis

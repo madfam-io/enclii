@@ -101,6 +101,8 @@ jobs:
 
       - name: Install PostgreSQL and Redis
         run: |
+          # Create required namespace first (secrets.dev.yaml targets enclii-system)
+          kubectl create namespace enclii-system --dry-run=client -o yaml | kubectl apply -f -
           # Create secrets first (required by postgres.yaml)
           kubectl apply -f infra/k8s/base/secrets.dev.yaml
           # Apply database manifests

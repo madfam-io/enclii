@@ -263,13 +263,13 @@ func (h *Handler) handleGitHubPush(c *gin.Context, ctx context.Context, body []b
 			ProjectID:    &service.ProjectID,
 			Outcome:      "success",
 			Context: map[string]interface{}{
-				"event_type":  "push",
-				"commit_sha":  gitSHA,
-				"branch":      branch,
-				"repository":  event.Repository.FullName,
-				"release_id":  release.ID.String(),
-				"pusher":      event.Pusher.Name,
-				"trigger":     "github_push",
+				"event_type": "push",
+				"commit_sha": gitSHA,
+				"branch":     branch,
+				"repository": event.Repository.FullName,
+				"release_id": release.ID.String(),
+				"pusher":     event.Pusher.Name,
+				"trigger":    "github_push",
 			},
 		})
 

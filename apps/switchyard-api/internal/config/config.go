@@ -123,11 +123,11 @@ func Load() (*Config, error) {
 	viper.SetDefault("build-timeout", 1800) // 30 minutes
 	viper.SetDefault("build-work-dir", "/tmp/enclii-builds")
 	viper.SetDefault("build-cache-dir", "/var/cache/enclii-buildpacks")
-	viper.SetDefault("build-mode", "in-process")                 // "in-process" or "roundhouse"
-	viper.SetDefault("roundhouse-url", "http://roundhouse") // Roundhouse worker URL (K8s service on port 80)
-	viper.SetDefault("roundhouse-api-key", "")                   // API key for roundhouse
-	viper.SetDefault("self-url", "http://switchyard-api:4200")   // This service's URL for callbacks
-	viper.SetDefault("github-webhook-secret", "")                // Webhook disabled until secret configured
+	viper.SetDefault("build-mode", "in-process")               // "in-process" or "roundhouse"
+	viper.SetDefault("roundhouse-url", "http://roundhouse")    // Roundhouse worker URL (K8s service on port 80)
+	viper.SetDefault("roundhouse-api-key", "")                 // API key for roundhouse
+	viper.SetDefault("self-url", "http://switchyard-api:4200") // This service's URL for callbacks
+	viper.SetDefault("github-webhook-secret", "")              // Webhook disabled until secret configured
 	viper.SetDefault("compliance-webhooks-enabled", false)
 	viper.SetDefault("secret-rotation-enabled", false)
 	viper.SetDefault("vault-poll-interval", 60) // Poll every 60 seconds

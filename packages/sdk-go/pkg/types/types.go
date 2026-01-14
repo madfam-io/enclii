@@ -31,8 +31,8 @@ type Service struct {
 	ProjectID   uuid.UUID   `json:"project_id" db:"project_id"`
 	Name        string      `json:"name" db:"name"`
 	GitRepo     string      `json:"git_repo" db:"git_repo"`
-	AppPath     string      `json:"app_path" db:"app_path"`           // Monorepo subdirectory path (e.g., "apps/api", "packages/web")
-	WatchPaths  []string    `json:"watch_paths" db:"watch_paths"`     // Paths that trigger rebuild (e.g., ["apps/api/", "packages/shared/"])
+	AppPath     string      `json:"app_path" db:"app_path"`       // Monorepo subdirectory path (e.g., "apps/api", "packages/web")
+	WatchPaths  []string    `json:"watch_paths" db:"watch_paths"` // Paths that trigger rebuild (e.g., ["apps/api/", "packages/shared/"])
 	BuildConfig BuildConfig `json:"build_config" db:"build_config"`
 	Volumes     []Volume    `json:"volumes,omitempty" db:"volumes"`
 	// HealthCheck configuration for Kubernetes probes
@@ -714,11 +714,11 @@ type DatabaseAddonBackup struct {
 // DatabaseAddonCredentials contains connection credentials for a database addon
 // Returned by the credentials API endpoint (requires authentication)
 type DatabaseAddonCredentials struct {
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
-	DatabaseName string `json:"database_name"`
-	Username     string `json:"username"`
-	Password     string `json:"password"`     // Only exposed via secure API
+	Host          string `json:"host"`
+	Port          int    `json:"port"`
+	DatabaseName  string `json:"database_name"`
+	Username      string `json:"username"`
+	Password      string `json:"password"`       // Only exposed via secure API
 	ConnectionURI string `json:"connection_uri"` // Full connection string (e.g., postgres://user:pass@host:port/db)
 }
 
@@ -780,12 +780,12 @@ type TemplateConfig struct {
 
 // TemplateServiceConfig defines a service to create from a template
 type TemplateServiceConfig struct {
-	Name      string            `json:"name"`
-	Type      string            `json:"type"` // web, worker, static
+	Name      string              `json:"name"`
+	Type      string              `json:"type"` // web, worker, static
 	Build     TemplateBuildConfig `json:"build"`
-	Port      int               `json:"port,omitempty"`
-	EnvVars   map[string]string `json:"env_vars,omitempty"`
-	Resources *ResourceConfig   `json:"resources,omitempty"`
+	Port      int                 `json:"port,omitempty"`
+	EnvVars   map[string]string   `json:"env_vars,omitempty"`
+	Resources *ResourceConfig     `json:"resources,omitempty"`
 }
 
 // TemplateBuildConfig defines build configuration for a template service
@@ -803,33 +803,33 @@ type TemplateDatabaseConfig struct {
 
 // Template represents a starter template or marketplace item
 type Template struct {
-	ID              uuid.UUID          `json:"id" db:"id"`
-	Slug            string             `json:"slug" db:"slug"`
-	Name            string             `json:"name" db:"name"`
-	Description     string             `json:"description" db:"description"`
-	LongDescription string             `json:"long_description,omitempty" db:"long_description"`
-	Category        TemplateCategory   `json:"category" db:"category"`
-	Framework       string             `json:"framework,omitempty" db:"framework"`
-	Language        string             `json:"language,omitempty" db:"language"`
-	Tags            []string           `json:"tags,omitempty" db:"tags"`
-	SourceType      TemplateSourceType `json:"source_type" db:"source_type"`
-	SourceRepo      string             `json:"source_repo,omitempty" db:"source_repo"`
-	SourceBranch    string             `json:"source_branch" db:"source_branch"`
-	SourcePath      string             `json:"source_path" db:"source_path"`
-	Config          TemplateConfig     `json:"config" db:"config"`
-	IconURL         string             `json:"icon_url,omitempty" db:"icon_url"`
-	PreviewURL      string             `json:"preview_url,omitempty" db:"preview_url"`
-	ScreenshotURLs  []string           `json:"screenshot_urls,omitempty" db:"screenshot_urls"`
-	Author          string             `json:"author,omitempty" db:"author"`
-	AuthorURL       string             `json:"author_url,omitempty" db:"author_url"`
-	DocumentationURL string            `json:"documentation_url,omitempty" db:"documentation_url"`
-	DeployCount     int                `json:"deploy_count" db:"deploy_count"`
-	StarCount       int                `json:"star_count" db:"star_count"`
-	IsOfficial      bool               `json:"is_official" db:"is_official"`
-	IsFeatured      bool               `json:"is_featured" db:"is_featured"`
-	IsPublic        bool               `json:"is_public" db:"is_public"`
-	CreatedAt       time.Time          `json:"created_at" db:"created_at"`
-	UpdatedAt       time.Time          `json:"updated_at" db:"updated_at"`
+	ID               uuid.UUID          `json:"id" db:"id"`
+	Slug             string             `json:"slug" db:"slug"`
+	Name             string             `json:"name" db:"name"`
+	Description      string             `json:"description" db:"description"`
+	LongDescription  string             `json:"long_description,omitempty" db:"long_description"`
+	Category         TemplateCategory   `json:"category" db:"category"`
+	Framework        string             `json:"framework,omitempty" db:"framework"`
+	Language         string             `json:"language,omitempty" db:"language"`
+	Tags             []string           `json:"tags,omitempty" db:"tags"`
+	SourceType       TemplateSourceType `json:"source_type" db:"source_type"`
+	SourceRepo       string             `json:"source_repo,omitempty" db:"source_repo"`
+	SourceBranch     string             `json:"source_branch" db:"source_branch"`
+	SourcePath       string             `json:"source_path" db:"source_path"`
+	Config           TemplateConfig     `json:"config" db:"config"`
+	IconURL          string             `json:"icon_url,omitempty" db:"icon_url"`
+	PreviewURL       string             `json:"preview_url,omitempty" db:"preview_url"`
+	ScreenshotURLs   []string           `json:"screenshot_urls,omitempty" db:"screenshot_urls"`
+	Author           string             `json:"author,omitempty" db:"author"`
+	AuthorURL        string             `json:"author_url,omitempty" db:"author_url"`
+	DocumentationURL string             `json:"documentation_url,omitempty" db:"documentation_url"`
+	DeployCount      int                `json:"deploy_count" db:"deploy_count"`
+	StarCount        int                `json:"star_count" db:"star_count"`
+	IsOfficial       bool               `json:"is_official" db:"is_official"`
+	IsFeatured       bool               `json:"is_featured" db:"is_featured"`
+	IsPublic         bool               `json:"is_public" db:"is_public"`
+	CreatedAt        time.Time          `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at" db:"updated_at"`
 }
 
 // TemplateDeployment tracks a deployment from a template
@@ -909,10 +909,10 @@ const (
 	WebhookEventBuildFailed    WebhookEventType = "build.failed"
 
 	// Service events
-	WebhookEventServiceCreated  WebhookEventType = "service.created"
-	WebhookEventServiceDeleted  WebhookEventType = "service.deleted"
-	WebhookEventServiceStarted  WebhookEventType = "service.started"
-	WebhookEventServiceStopped  WebhookEventType = "service.stopped"
+	WebhookEventServiceCreated   WebhookEventType = "service.created"
+	WebhookEventServiceDeleted   WebhookEventType = "service.deleted"
+	WebhookEventServiceStarted   WebhookEventType = "service.started"
+	WebhookEventServiceStopped   WebhookEventType = "service.stopped"
 	WebhookEventServiceUnhealthy WebhookEventType = "service.unhealthy"
 
 	// Database addon events
@@ -945,11 +945,11 @@ type WebhookDestination struct {
 	Enabled bool `json:"enabled" db:"enabled"`
 
 	// Delivery tracking
-	LastDeliveryAt     *time.Time `json:"last_delivery_at,omitempty" db:"last_delivery_at"`
-	LastDeliveryStatus string     `json:"last_delivery_status,omitempty" db:"last_delivery_status"`
-	LastDeliveryError  string     `json:"last_delivery_error,omitempty" db:"last_delivery_error"`
-	ConsecutiveFailures int       `json:"consecutive_failures" db:"consecutive_failures"`
-	AutoDisabledAt     *time.Time `json:"auto_disabled_at,omitempty" db:"auto_disabled_at"`
+	LastDeliveryAt      *time.Time `json:"last_delivery_at,omitempty" db:"last_delivery_at"`
+	LastDeliveryStatus  string     `json:"last_delivery_status,omitempty" db:"last_delivery_status"`
+	LastDeliveryError   string     `json:"last_delivery_error,omitempty" db:"last_delivery_error"`
+	ConsecutiveFailures int        `json:"consecutive_failures" db:"consecutive_failures"`
+	AutoDisabledAt      *time.Time `json:"auto_disabled_at,omitempty" db:"auto_disabled_at"`
 
 	// Audit fields
 	CreatedBy      *uuid.UUID `json:"created_by,omitempty" db:"created_by"`
@@ -962,40 +962,40 @@ type WebhookDestination struct {
 
 // WebhookDelivery represents a single webhook delivery attempt
 type WebhookDelivery struct {
-	ID        uuid.UUID             `json:"id" db:"id"`
-	WebhookID uuid.UUID             `json:"webhook_id" db:"webhook_id"`
-	EventType WebhookEventType      `json:"event_type" db:"event_type"`
-	EventID   *uuid.UUID            `json:"event_id,omitempty" db:"event_id"`
-	Payload   map[string]any        `json:"payload" db:"payload"`
-	Status    WebhookDeliveryStatus `json:"status" db:"status"`
-	StatusCode *int                 `json:"status_code,omitempty" db:"status_code"`
-	ResponseBody string             `json:"response_body,omitempty" db:"response_body"`
-	ErrorMessage string             `json:"error_message,omitempty" db:"error_message"`
-	AttemptedAt time.Time           `json:"attempted_at" db:"attempted_at"`
-	CompletedAt *time.Time          `json:"completed_at,omitempty" db:"completed_at"`
-	DurationMs  *int                `json:"duration_ms,omitempty" db:"duration_ms"`
-	AttemptNumber int               `json:"attempt_number" db:"attempt_number"`
+	ID            uuid.UUID             `json:"id" db:"id"`
+	WebhookID     uuid.UUID             `json:"webhook_id" db:"webhook_id"`
+	EventType     WebhookEventType      `json:"event_type" db:"event_type"`
+	EventID       *uuid.UUID            `json:"event_id,omitempty" db:"event_id"`
+	Payload       map[string]any        `json:"payload" db:"payload"`
+	Status        WebhookDeliveryStatus `json:"status" db:"status"`
+	StatusCode    *int                  `json:"status_code,omitempty" db:"status_code"`
+	ResponseBody  string                `json:"response_body,omitempty" db:"response_body"`
+	ErrorMessage  string                `json:"error_message,omitempty" db:"error_message"`
+	AttemptedAt   time.Time             `json:"attempted_at" db:"attempted_at"`
+	CompletedAt   *time.Time            `json:"completed_at,omitempty" db:"completed_at"`
+	DurationMs    *int                  `json:"duration_ms,omitempty" db:"duration_ms"`
+	AttemptNumber int                   `json:"attempt_number" db:"attempt_number"`
 }
 
 // WebhookCreateRequest is the API request for creating a webhook
 type WebhookCreateRequest struct {
-	Name      string             `json:"name" binding:"required"`
-	Type      WebhookType        `json:"type" binding:"required"`
-	WebhookURL string            `json:"webhook_url,omitempty"`
-	TelegramBotToken string      `json:"telegram_bot_token,omitempty"`
-	TelegramChatID   string      `json:"telegram_chat_id,omitempty"`
-	Events    []WebhookEventType `json:"events" binding:"required"`
-	Enabled   *bool              `json:"enabled,omitempty"` // Defaults to true
+	Name             string             `json:"name" binding:"required"`
+	Type             WebhookType        `json:"type" binding:"required"`
+	WebhookURL       string             `json:"webhook_url,omitempty"`
+	TelegramBotToken string             `json:"telegram_bot_token,omitempty"`
+	TelegramChatID   string             `json:"telegram_chat_id,omitempty"`
+	Events           []WebhookEventType `json:"events" binding:"required"`
+	Enabled          *bool              `json:"enabled,omitempty"` // Defaults to true
 }
 
 // WebhookUpdateRequest is the API request for updating a webhook
 type WebhookUpdateRequest struct {
-	Name      *string            `json:"name,omitempty"`
-	WebhookURL *string           `json:"webhook_url,omitempty"`
-	TelegramBotToken *string     `json:"telegram_bot_token,omitempty"`
-	TelegramChatID   *string     `json:"telegram_chat_id,omitempty"`
-	Events    []WebhookEventType `json:"events,omitempty"`
-	Enabled   *bool              `json:"enabled,omitempty"`
+	Name             *string            `json:"name,omitempty"`
+	WebhookURL       *string            `json:"webhook_url,omitempty"`
+	TelegramBotToken *string            `json:"telegram_bot_token,omitempty"`
+	TelegramChatID   *string            `json:"telegram_chat_id,omitempty"`
+	Events           []WebhookEventType `json:"events,omitempty"`
+	Enabled          *bool              `json:"enabled,omitempty"`
 }
 
 // WebhookTestRequest is the API request for testing a webhook
@@ -1005,10 +1005,10 @@ type WebhookTestRequest struct {
 
 // WebhookEvent represents an event payload sent to webhooks
 type WebhookEvent struct {
-	ID        uuid.UUID        `json:"id"`
-	Type      WebhookEventType `json:"type"`
-	Timestamp time.Time        `json:"timestamp"`
-	ProjectID uuid.UUID        `json:"project_id"`
+	ID        uuid.UUID          `json:"id"`
+	Type      WebhookEventType   `json:"type"`
+	Timestamp time.Time          `json:"timestamp"`
+	ProjectID uuid.UUID          `json:"project_id"`
 	Project   WebhookProjectInfo `json:"project"`
 
 	// Event-specific data (one of these will be populated)
@@ -1027,16 +1027,16 @@ type WebhookProjectInfo struct {
 
 // WebhookDeploymentInfo contains deployment info for webhook payloads
 type WebhookDeploymentInfo struct {
-	ID          uuid.UUID `json:"id"`
-	ServiceName string    `json:"service_name"`
-	Environment string    `json:"environment"`
-	Status      string    `json:"status"`
-	CommitSHA   string    `json:"commit_sha,omitempty"`
-	CommitMessage string  `json:"commit_message,omitempty"`
-	Branch      string    `json:"branch,omitempty"`
-	URL         string    `json:"url,omitempty"`
-	Duration    *int      `json:"duration_seconds,omitempty"`
-	Error       string    `json:"error,omitempty"`
+	ID            uuid.UUID `json:"id"`
+	ServiceName   string    `json:"service_name"`
+	Environment   string    `json:"environment"`
+	Status        string    `json:"status"`
+	CommitSHA     string    `json:"commit_sha,omitempty"`
+	CommitMessage string    `json:"commit_message,omitempty"`
+	Branch        string    `json:"branch,omitempty"`
+	URL           string    `json:"url,omitempty"`
+	Duration      *int      `json:"duration_seconds,omitempty"`
+	Error         string    `json:"error,omitempty"`
 }
 
 // WebhookBuildInfo contains build info for webhook payloads

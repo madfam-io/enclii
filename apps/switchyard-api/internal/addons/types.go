@@ -65,16 +65,16 @@ type CloudNativePGMetadata struct {
 }
 
 type CloudNativePGClusterSpec struct {
-	Instances             int                       `json:"instances"`
-	ImageName             string                    `json:"imageName,omitempty"`
-	PostgresVersion       int                       `json:"postgresVersion,omitempty"`
-	PrimaryUpdateStrategy string                    `json:"primaryUpdateStrategy,omitempty"`
-	Storage               CloudNativePGStorage      `json:"storage"`
-	Resources             CloudNativePGResources    `json:"resources,omitempty"`
-	Bootstrap             *CloudNativePGBootstrap   `json:"bootstrap,omitempty"`
-	Monitoring            *CloudNativePGMonitoring  `json:"monitoring,omitempty"`
-	Backup                *CloudNativePGBackupSpec  `json:"backup,omitempty"`
-	SuperuserSecret       *CloudNativePGSecretRef   `json:"superuserSecret,omitempty"`
+	Instances             int                      `json:"instances"`
+	ImageName             string                   `json:"imageName,omitempty"`
+	PostgresVersion       int                      `json:"postgresVersion,omitempty"`
+	PrimaryUpdateStrategy string                   `json:"primaryUpdateStrategy,omitempty"`
+	Storage               CloudNativePGStorage     `json:"storage"`
+	Resources             CloudNativePGResources   `json:"resources,omitempty"`
+	Bootstrap             *CloudNativePGBootstrap  `json:"bootstrap,omitempty"`
+	Monitoring            *CloudNativePGMonitoring `json:"monitoring,omitempty"`
+	Backup                *CloudNativePGBackupSpec `json:"backup,omitempty"`
+	SuperuserSecret       *CloudNativePGSecretRef  `json:"superuserSecret,omitempty"`
 }
 
 type CloudNativePGStorage struct {
@@ -97,8 +97,8 @@ type CloudNativePGBootstrap struct {
 }
 
 type CloudNativePGInitDB struct {
-	Database string `json:"database"`
-	Owner    string `json:"owner"`
+	Database string                  `json:"database"`
+	Owner    string                  `json:"owner"`
 	Secret   *CloudNativePGSecretRef `json:"secret,omitempty"`
 }
 
@@ -116,8 +116,8 @@ type CloudNativePGBackupSpec struct {
 }
 
 type CloudNativePGBarmanStore struct {
-	DestinationPath string                     `json:"destinationPath"`
-	EndpointURL     string                     `json:"endpointURL,omitempty"`
+	DestinationPath string                      `json:"destinationPath"`
+	EndpointURL     string                      `json:"endpointURL,omitempty"`
 	S3Credentials   *CloudNativePGS3Credentials `json:"s3Credentials,omitempty"`
 	Wal             *CloudNativePGWalConfig     `json:"wal,omitempty"`
 	Data            *CloudNativePGDataConfig    `json:"data,omitempty"`
@@ -143,13 +143,13 @@ type CloudNativePGDataConfig struct {
 
 // Default configuration values
 const (
-	DefaultPostgresVersion   = 16
-	DefaultStorageSize       = "10Gi"
-	DefaultCPU               = "100m"
-	DefaultMemory            = "256Mi"
-	DefaultInstances         = 1
-	DefaultDatabase          = "app"
-	DefaultUser              = "app"
+	DefaultPostgresVersion = 16
+	DefaultStorageSize     = "10Gi"
+	DefaultCPU             = "100m"
+	DefaultMemory          = "256Mi"
+	DefaultInstances       = 1
+	DefaultDatabase        = "app"
+	DefaultUser            = "app"
 
 	// CloudNativePG constants
 	CloudNativePGAPIVersion = "postgresql.cnpg.io/v1"

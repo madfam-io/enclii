@@ -140,8 +140,8 @@ func (h *Handler) AddCustomDomain(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"domain":            domain,
-		"message":           responseMessage,
+		"domain":             domain,
+		"message":            responseMessage,
 		"tunnel_route_added": tunnelRouteAdded,
 	})
 }

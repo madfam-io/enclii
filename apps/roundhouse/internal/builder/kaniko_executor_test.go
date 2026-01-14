@@ -136,13 +136,13 @@ func TestBuildKanikoArgs_Defaults(t *testing.T) {
 	}, logger, nil)
 
 	job := &queue.BuildJob{
-		ID:        uuid.New(),
-		ReleaseID: uuid.New(),
-		ServiceID: uuid.New(),
-		ProjectID: uuid.New(),
-		GitRepo:   "github.com/test/repo",
-		GitSHA:    "abc12345",
-		GitBranch: "main",
+		ID:          uuid.New(),
+		ReleaseID:   uuid.New(),
+		ServiceID:   uuid.New(),
+		ProjectID:   uuid.New(),
+		GitRepo:     "github.com/test/repo",
+		GitSHA:      "abc12345",
+		GitBranch:   "main",
 		BuildConfig: queue.BuildConfig{
 			// Empty - use defaults
 		},

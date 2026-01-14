@@ -33,12 +33,12 @@ func NewTelegramSender(logger *logrus.Logger) *TelegramSender {
 
 // TelegramMessage represents the Telegram sendMessage payload
 type TelegramMessage struct {
-	ChatID                string                   `json:"chat_id"`
-	Text                  string                   `json:"text"`
-	ParseMode             string                   `json:"parse_mode,omitempty"`
-	DisableWebPagePreview bool                     `json:"disable_web_page_preview,omitempty"`
-	DisableNotification   bool                     `json:"disable_notification,omitempty"`
-	ReplyMarkup           *TelegramInlineKeyboard  `json:"reply_markup,omitempty"`
+	ChatID                string                  `json:"chat_id"`
+	Text                  string                  `json:"text"`
+	ParseMode             string                  `json:"parse_mode,omitempty"`
+	DisableWebPagePreview bool                    `json:"disable_web_page_preview,omitempty"`
+	DisableNotification   bool                    `json:"disable_notification,omitempty"`
+	ReplyMarkup           *TelegramInlineKeyboard `json:"reply_markup,omitempty"`
 }
 
 // TelegramInlineKeyboard represents an inline keyboard

@@ -18,10 +18,10 @@ import (
 
 // BuildCache manages build layer caching for faster rebuilds
 type BuildCache struct {
-	registry     string // Container registry for cache images
-	cachePrefix  string // Prefix for cache image tags
-	r2Bucket     string // R2 bucket for cache metadata
-	r2Client     R2Uploader
+	registry      string // Container registry for cache images
+	cachePrefix   string // Prefix for cache image tags
+	r2Bucket      string // R2 bucket for cache metadata
+	r2Client      R2Uploader
 	localCacheDir string
 }
 
@@ -35,28 +35,28 @@ type R2Uploader interface {
 
 // CacheKey represents a unique build cache identifier
 type CacheKey struct {
-	ProjectID    string `json:"project_id"`
-	ServiceName  string `json:"service_name"`
-	DepsHash     string `json:"deps_hash"`      // Hash of dependency files
-	BuilderHash  string `json:"builder_hash"`   // Hash of builder configuration
-	GeneratedAt  time.Time `json:"generated_at"`
+	ProjectID   string    `json:"project_id"`
+	ServiceName string    `json:"service_name"`
+	DepsHash    string    `json:"deps_hash"`    // Hash of dependency files
+	BuilderHash string    `json:"builder_hash"` // Hash of builder configuration
+	GeneratedAt time.Time `json:"generated_at"`
 }
 
 // CacheMetadata stores cache hit information
 type CacheMetadata struct {
-	Key          CacheKey  `json:"key"`
-	CacheImage   string    `json:"cache_image"`
-	HitCount     int       `json:"hit_count"`
-	LastHit      time.Time `json:"last_hit"`
-	SizeBytes    int64     `json:"size_bytes"`
-	CreatedAt    time.Time `json:"created_at"`
+	Key        CacheKey  `json:"key"`
+	CacheImage string    `json:"cache_image"`
+	HitCount   int       `json:"hit_count"`
+	LastHit    time.Time `json:"last_hit"`
+	SizeBytes  int64     `json:"size_bytes"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // CacheStats tracks cache performance
 type CacheStats struct {
-	Hits       int     `json:"hits"`
-	Misses     int     `json:"misses"`
-	HitRate    float64 `json:"hit_rate"`
+	Hits       int           `json:"hits"`
+	Misses     int           `json:"misses"`
+	HitRate    float64       `json:"hit_rate"`
 	TotalSaved time.Duration `json:"total_time_saved"`
 }
 
@@ -353,7 +353,7 @@ type BuildCacheConfig struct {
 func DefaultBuildCacheConfig() BuildCacheConfig {
 	return BuildCacheConfig{
 		Enabled:       true,
-		MaxCacheAge:   7 * 24 * time.Hour, // 7 days
+		MaxCacheAge:   7 * 24 * time.Hour,  // 7 days
 		CacheImageTTL: 30 * 24 * time.Hour, // 30 days
 	}
 }

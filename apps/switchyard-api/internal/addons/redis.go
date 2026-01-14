@@ -264,11 +264,11 @@ func (p *RedisProvisioner) GetCredentials(ctx context.Context, addon *types.Data
 	host := fmt.Sprintf("%s.%s.svc.cluster.local", addon.K8sResourceName, addon.K8sNamespace)
 
 	return &types.DatabaseAddonCredentials{
-		Host:         host,
-		Port:         6379,
-		DatabaseName: "0",
-		Username:     "",
-		Password:     "", // Redis without auth by default (can be enhanced)
+		Host:          host,
+		Port:          6379,
+		DatabaseName:  "0",
+		Username:      "",
+		Password:      "", // Redis without auth by default (can be enhanced)
 		ConnectionURI: fmt.Sprintf("redis://%s:6379/0", host),
 	}, nil
 }
