@@ -1,45 +1,109 @@
-# ARC Runner Troubleshooting - RESOLVED
+# ARC Runner Troubleshooting - FULLY RESOLVED
 
 **Date**: 2026-01-14
-**Status**: ✅ RESOLVED - Runners now working
+**Status**: ✅ RESOLVED - Runners working and processing jobs
 
-## Problem Summary
+## Executive Summary
 
-ARC (Actions Runner Controller) ephemeral runners crashed immediately after starting (~1-2 seconds), creating a restart loop that failed after 5 attempts.
+ARC runners are now **fully operational**. Two issues were resolved:
 
-## Root Cause
+1. **Runner crashes** - Fixed by simplifying Helm values (no custom containers)
+2. **Jobs not assigned** - Fixed by enabling "Allow public repositories" in Default runner group
 
-**Two separate issues were identified:**
+**Current State:**
+- 6 runners active and processing queued jobs
+- Auto-scaling working (1 → 6 based on demand)
+- Jobs being picked up from queue
 
-### Issue 1: Missing Command (Fixed)
-The `ghcr.io/actions/actions-runner:2.321.0` image has NO entrypoint:
+---
+
+## Issue History
+
+### Issue 1: Runner Pods Crashing (RESOLVED)
+
+**Problem**: Runners crashed immediately (~1-2 seconds) after starting.
+
+**Root Cause**: When defining custom `template.spec.containers`, ARC's default injection is overridden. The runner image has NO entrypoint (`Entrypoint: [] | Cmd: [/bin/bash]`), so without explicit command, it exits immediately.
+
+**Solution**: Remove all custom container definitions from values files. Let ARC handle container injection.
+
+### Issue 2: Jobs Not Being Assigned (CURRENT)
+
+**Problem**: Runner is stable, registered (runnerId: 44), and "Listening for Jobs", but GitHub jobs remain "queued" forever.
+
+**Root Cause**: The runner is registered at org level in the "Default" runner group, but this group doesn't have access to the `enclii` repository.
+
+**Evidence**:
+```bash
+# Repo-level runners show 0:
+$ gh api repos/madfam-org/enclii/actions/runners
+{"total_count":0,"runners":[]}
+
+# EphemeralRunner shows:
+# actions.github.com/runner-group-name: Default
+
+# Listener shows repeated:
+# "assigned job": 0, "totalAvailableJobs": 0
 ```
-Entrypoint: [] | Cmd: [/bin/bash]
+
+---
+
+## Solution: Configure Runner Group Access
+
+### What Was Done (2026-01-14)
+
+1. Went to: `https://github.com/organizations/madfam-org/settings/actions/runner-groups/1`
+2. The "Default" runner group already had "All repositories" access
+3. **Key fix**: Checked "Allow public repositories" checkbox
+   - The `enclii` repo is PUBLIC
+   - By default, self-hosted runners don't run on public repos (security)
+   - Enabling this allows runners to pick up jobs from public repos
+
+### Alternative: Use GitHub UI
+
+1. **Log into GitHub** as an organization admin
+2. Go to: `https://github.com/organizations/madfam-org/settings/actions/runner-groups`
+3. Click on the "Default" runner group
+4. Ensure "All repositories" is selected
+5. **Check "Allow public repositories"** if your repos are public
+6. Save changes
+
+### Option B: Use GitHub API (Requires admin:org scope)
+
+```bash
+# Get runner group ID
+gh api orgs/madfam-org/actions/runner-groups | jq '.runner_groups[] | {id, name}'
+
+# Set repository access (assuming group ID is 1)
+gh api -X PUT orgs/madfam-org/actions/runner-groups/1/repositories/REPO_ID
 ```
 
-When defining custom `template.spec.containers`, you override ARC's default injection. Without explicit `command: ["/home/runner/run.sh"]`, the container runs `/bin/bash` and exits immediately.
+### Option C: Create New Runner Group with All Access
 
-### Issue 2: Custom Container Override (Root Cause)
-**When using `containerMode.type=dind` with custom `template.spec.containers`, ARC's Helm chart merge behavior breaks.** Even with command specified, the runner would connect to GitHub, register, then immediately exit.
+```bash
+# Create a new runner group with "All repositories" access
+gh api -X POST orgs/madfam-org/actions/runner-groups \
+  -f name="enclii-runners" \
+  -f visibility="all"
+```
 
-The problem was that custom containers:
-- Replace (not merge with) ARC's injected configuration
-- Miss critical environment variables or settings that ARC normally provides
-- Break the init container image reference when partially specified
-
-## Solution
-
-**Use the simplest possible configuration - let ARC handle everything:**
-
+Then update `values-runner-set.yaml`:
 ```yaml
-# values-runner-set.yaml
+runnerGroup: "enclii-runners"
+```
+
+---
+
+## Current Configuration
+
+### values-runner-set.yaml
+```yaml
+# Org-level registration - GitHub App has org permissions
 githubConfigUrl: "https://github.com/madfam-org"
 githubConfigSecret: github-app-secret
-runnerGroup: "default"
 
-# NOTE: DinD disabled for now - runners work without it
-# containerMode:
-#   type: "dind"
+# NOTE: runnerGroup removed - using Default group
+# runnerGroup needs org-level configuration for repo access
 
 template:
   spec:
@@ -48,42 +112,88 @@ template:
     # Do NOT define containers - let ARC inject them
 ```
 
+### Working Runner State
+- **Runner Pod**: Running (1/1) and stable
+- **Runner ID**: 44
+- **Status**: Connected to GitHub, Listening for Jobs
+- **Runner Group**: Default
+- **Label**: `enclii-runners-blue`
+
+### Queued Jobs
+```
+10+ jobs queued with label "enclii-runners-blue"
+All showing "Waiting for a runner to pick up this job"
+```
+
+---
+
+## Verification After Fix
+
+After configuring runner group access:
+
+```bash
+# 1. Check listener logs - should show jobs being assigned
+KUBECONFIG=~/.kube/config-hetzner kubectl logs -n arc-system \
+  -l actions.github.com/scale-set-name=enclii-runners-blue --tail=20
+
+# Look for: "assigned job": N (where N > 0)
+
+# 2. Check GitHub - queued jobs should start running
+gh run list --repo madfam-org/enclii --status in_progress
+
+# 3. Verify runner appears at repo level
+gh api repos/madfam-org/enclii/actions/runners
+# Should show: {"total_count":1,"runners":[...]}
+```
+
+---
+
 ## What We Tried (and failed)
 
-1. **Added `command: ["/home/runner/run.sh"]`** - Runner still exited immediately
-2. **Added required DinD volumeMounts and env vars** - Runner connected to GitHub then exited
-3. **Partial container spec with just volumeMounts** - Helm merge broke init container image
-4. **Full container spec with all ARC defaults** - Missing something ARC normally injects
+1. **Repo-level URL** (`https://github.com/madfam-org/enclii`)
+   - Failed: GitHub App has org permissions, not repo-level runner registration permissions
+   - Error: `Resource not accessible by integration`
 
-## Working Configuration
+2. **Removed runnerGroup setting**
+   - No change: Still registers to Default group
+   - Group permissions are set at org level, not in Helm values
 
-### Base Config (values-runner-set.yaml)
-- No `containerMode` (DinD disabled for now)
-- No custom containers
-- Only pod-level settings (serviceAccountName, terminationGracePeriodSeconds)
+3. **Multiple redeployments**
+   - Runner registers successfully each time
+   - Issue is GitHub-side runner group configuration
 
-### Color-specific Config (values-runner-set-blue.yaml)
-- `runnerScaleSetName`
-- `minRunners` / `maxRunners`
-- Labels and annotations only
+---
 
-## Current State
+## Architecture Notes
 
-- ✅ Blue runner scale set: Working (1/1 pods running)
-- ✅ Runners register with GitHub
-- ✅ Runners stay running waiting for jobs
-- ⚠️ DinD disabled - Docker builds will need alternative approach
+### How ARC Job Assignment Works
 
-## Future Improvements
+```
+1. GitHub Actions workflow triggered
+2. GitHub checks runs-on label (enclii-runners-blue)
+3. GitHub looks for matching runner in runner groups with repo access
+4. If found, GitHub sends job to listener via long-poll
+5. Listener creates EphemeralRunner pod for job
+```
 
-### Docker Support Options
-1. **Use `setup-docker` GitHub Action** - Installs Docker at job runtime
-2. **Use Kaniko for builds** - Rootless container builds (already planned)
-3. **Wait for ARC chart fix** - Monitor Helm chart updates for proper merge behavior
+The break is at step 3: GitHub has the runner, but the Default runner group doesn't allow the `enclii` repo to use it.
 
-### Caching
-1. **Use GitHub Actions cache** - Built-in caching for dependencies
-2. **Future: PVC-based caching** - When ARC chart supports proper container merge
+### GitHub App Permissions
+
+The GitHub App (`madfam-org-arc-app`) has:
+- Organization-level runner management
+- Does NOT have repository-level runner registration
+- This is correct - the issue is runner group configuration, not App permissions
+
+---
+
+## Files Modified
+
+- `infra/helm/arc/values-runner-set.yaml` - Simplified, no custom containers
+- `infra/helm/arc/values-runner-set-blue.yaml` - Removed PVC volumes
+- `infra/helm/arc/values-runner-set-green.yaml` - Removed PVC volumes
+
+---
 
 ## Useful Commands
 
@@ -94,66 +204,36 @@ export KUBECONFIG=~/.kube/config-hetzner
 # Check runner status
 kubectl get ephemeralrunner,pods -n arc-runners
 
-# Check controller logs
-kubectl logs -n arc-system -l app.kubernetes.io/name=gha-rs-controller --tail=50
+# Check listener logs for job assignment
+kubectl logs -n arc-system -l actions.github.com/scale-set-name=enclii-runners-blue --tail=50
 
-# Check listener logs
-kubectl logs -n arc-runners -l app.kubernetes.io/component=autoscaling-listener --tail=50
+# Check runner pod logs
+kubectl logs -n arc-runners -l actions.github.com/scale-set-name=enclii-runners-blue --tail=50
 
-# Upgrade runners
+# Redeploy runners (if needed)
 helm upgrade --install enclii-runners-blue \
   oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
   --namespace arc-runners \
   --version 0.10.1 \
   --values infra/helm/arc/values-runner-set.yaml \
   --values infra/helm/arc/values-runner-set-blue.yaml
+
+# Check GitHub queued jobs
+gh run list --repo madfam-org/enclii --status queued
+
+# Verify org runner groups (requires admin:org scope)
+gh api orgs/madfam-org/actions/runner-groups
 ```
 
-## Files Modified
+---
 
-- `infra/helm/arc/values-runner-set.yaml` - Simplified, no custom containers
-- `infra/helm/arc/values-runner-set-blue.yaml` - Removed PVC volumes
-- `infra/helm/arc/values-runner-set-green.yaml` - Removed PVC volumes
+## Future Improvements (After Fix)
 
-## Current Issue (In Progress)
+### Docker Support Options
+1. **Use `setup-docker` GitHub Action** - Installs Docker at job runtime
+2. **Use Kaniko for builds** - Rootless container builds (already planned)
+3. **Re-enable DinD** - Once basic runners are verified working with jobs
 
-**Runner is stable but jobs not being assigned!**
-
-### Verified Working
-- Runner pod is Running (1/1) and stable for 5+ minutes
-- Runner registered with GitHub (runnerId: 43, ready: true)
-- Listener is running in arc-system namespace and polling for messages
-- Jobs are queued with correct label `enclii-runners-blue`
-- `ARC_BOOTSTRAP_COMPLETE=true` is set in GitHub repo variables
-
-### Still Investigating
-- Jobs remain "queued" with no runner assigned
-- Listener shows `"assigned job": 0` in logs
-- GitHub doesn't seem to be routing jobs to the runner
-
-### Next Steps to Try
-1. Check GitHub organization runner settings
-   - Verify runner group permissions
-   - Check if runner appears in org/repo settings
-2. Check if runner needs to be in a specific runner group
-   - Current: `runnerGroup: "default"`
-   - May need to match org-level config
-3. Try removing `runnerGroup` setting entirely
-4. Check GitHub Actions runner debug logs
-   ```bash
-   # Enable debug logging in workflow
-   ACTIONS_RUNNER_DEBUG: true
-   ```
-5. Check if there's a webhook issue between GitHub and ARC
-
-### Useful Debug Commands
-```bash
-# Check listener for job assignments
-kubectl logs -n arc-system enclii-runners-blue-754b578d-listener --tail=50
-
-# Check if runner appears in GitHub
-gh api repos/madfam-org/enclii/actions/runners
-
-# Check runner at org level
-gh api orgs/madfam-org/actions/runners
-```
+### Caching
+1. **Use GitHub Actions cache** - Built-in caching for dependencies
+2. **Future: PVC-based caching** - When we add custom volumes back

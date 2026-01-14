@@ -9,10 +9,14 @@
 # ARC's merge behavior doesn't work properly, causing runners to exit immediately.
 # SOLUTION: Don't use custom containers - let ARC handle everything.
 
+# Org-level registration - GitHub App has org permissions
+# The runner will be registered to run for all repos in the org
 githubConfigUrl: "https://github.com/madfam-org"
 githubConfigSecret: github-app-secret
 
-runnerGroup: "default"
+# NOTE: Removed explicit runnerGroup setting
+# GitHub may use the "Default" group which may have full repo access
+# If issues persist, an org admin needs to grant the Default group access to enclii repo
 
 # NOTE: DinD disabled for now - runners work without it
 # Jobs that need Docker will need to use setup-docker action or alternative
