@@ -1236,10 +1236,10 @@ type GitHubWorkflowRunEvent struct {
 		Name         string `json:"name"`
 		WorkflowID   int64  `json:"workflow_id"`
 		RunNumber    int    `json:"run_number"`
-		Status       string `json:"status"`      // queued, in_progress, completed
-		Conclusion   string `json:"conclusion"`  // success, failure, cancelled, skipped, etc.
+		Status       string `json:"status"`     // queued, in_progress, completed
+		Conclusion   string `json:"conclusion"` // success, failure, cancelled, skipped, etc.
 		HTMLURL      string `json:"html_url"`
-		Event        string `json:"event"`       // push, pull_request, etc.
+		Event        string `json:"event"` // push, pull_request, etc.
 		HeadBranch   string `json:"head_branch"`
 		HeadSHA      string `json:"head_sha"`
 		RunStartedAt string `json:"run_started_at"`

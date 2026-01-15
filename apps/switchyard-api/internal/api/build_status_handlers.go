@@ -22,12 +22,12 @@ type GitHubActionsStatus struct {
 
 // RoundhouseStatus represents the status of Roundhouse container builds
 type RoundhouseStatus struct {
-	Release       *types.Release `json:"release,omitempty"`
-	Status        string         `json:"status"` // building, ready, failed
-	ImageURI      string         `json:"image_uri,omitempty"`
-	ErrorMessage  string         `json:"error_message,omitempty"`
-	HasSBOM       bool           `json:"has_sbom"`
-	HasSignature  bool           `json:"has_signature"`
+	Release      *types.Release `json:"release,omitempty"`
+	Status       string         `json:"status"` // building, ready, failed
+	ImageURI     string         `json:"image_uri,omitempty"`
+	ErrorMessage string         `json:"error_message,omitempty"`
+	HasSBOM      bool           `json:"has_sbom"`
+	HasSignature bool           `json:"has_signature"`
 }
 
 // DeploymentProgressStatus represents the status of a deployment

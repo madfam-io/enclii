@@ -88,28 +88,7 @@ export default function AnalyzeRepositoryPage({ params }: PageProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
 
-  // Fetch branches and projects on mount
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const [branchesResp, projectsResp] = await Promise.all([
-          apiGet<BranchesResponse>(`/v1/integrations/github/repos/${owner}/${repo}/branches`),
-          apiGet<ProjectsResponse>('/v1/projects'),
-        ]);
-        setBranches(branchesResp.branches || []);
-        setProjects(projectsResp.projects || []);
-
-        // Auto-analyze with initial branch
-        analyzeRepository(initialBranch);
-      } catch (err) {
-        console.error("Failed to fetch initial data:", err);
-        setError("Failed to load repository data");
-        setLoading(false);
-      }
-    };
-    fetchInitialData();
-  }, [owner, repo, initialBranch]);
-
+  // Define analyzeRepository before useEffect to avoid TDZ
   const analyzeRepository = async (branch: string) => {
     setAnalyzing(true);
     setError(null);
@@ -135,6 +114,28 @@ export default function AnalyzeRepositoryPage({ params }: PageProps) {
       setAnalyzing(false);
     }
   };
+
+  // Fetch branches and projects on mount
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const [branchesResp, projectsResp] = await Promise.all([
+          apiGet<BranchesResponse>(`/v1/integrations/github/repos/${owner}/${repo}/branches`),
+          apiGet<ProjectsResponse>('/v1/projects'),
+        ]);
+        setBranches(branchesResp.branches || []);
+        setProjects(projectsResp.projects || []);
+
+        // Auto-analyze with initial branch
+        analyzeRepository(initialBranch);
+      } catch (err) {
+        console.error("Failed to fetch initial data:", err);
+        setError("Failed to load repository data");
+        setLoading(false);
+      }
+    };
+    fetchInitialData();
+  }, [owner, repo, initialBranch, analyzeRepository]);
 
   const handleBranchChange = (branch: string) => {
     setSelectedBranch(branch);
