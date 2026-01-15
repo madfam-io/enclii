@@ -75,12 +75,16 @@ func (h *Handler) BuildService(c *gin.Context) {
 
 // triggerBuildAsync routes builds to either in-process execution or Roundhouse queue
 // based on the ENCLII_BUILD_MODE configuration
+// This function returns immediately and processes builds in the background to avoid
+// blocking webhook responses (GitHub has a 10-second timeout)
 func (h *Handler) triggerBuildAsync(service *types.Service, release *types.Release, gitSHA, gitBranch string) {
-	ctx := context.Background()
-
 	if h.config.BuildMode == "roundhouse" && h.roundhouseClient != nil {
 		// Enqueue to Roundhouse for fault-tolerant, scalable builds
-		h.enqueueToRoundhouse(ctx, service, release, gitSHA, gitBranch)
+		// Run in goroutine to avoid blocking webhook response
+		go func() {
+			ctx := context.Background()
+			h.enqueueToRoundhouse(ctx, service, release, gitSHA, gitBranch)
+		}()
 	} else {
 		// Fall back to in-process builds (legacy behavior)
 		go h.triggerBuild(service, release, gitSHA)
