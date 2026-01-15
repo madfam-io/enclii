@@ -435,7 +435,14 @@ func (c *Controller) handleResult(ctx context.Context, workResult *ReconcileWork
 		logger.WithError(err).Error("Failed to parse deployment ID")
 		return
 	}
-	err = c.repositories.Deployments.UpdateStatus(deploymentUUID, status, health)
+
+	// Store error message for failed deployments
+	var errorMsg *string
+	if status == types.DeploymentStatusFailed && result.Error != nil {
+		errStr := result.Error.Error()
+		errorMsg = &errStr
+	}
+	err = c.repositories.Deployments.UpdateStatusWithError(deploymentUUID, status, health, errorMsg)
 	if err != nil {
 		logger.WithError(err).Error("Failed to update deployment status")
 	}

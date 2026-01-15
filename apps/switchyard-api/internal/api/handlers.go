@@ -171,7 +171,9 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 
 	// Health check (no auth required)
 	router.GET("/health", h.Health)
-	router.GET("/v1/build/status", h.GetBuildStatus)
+
+	// Build status - public endpoint for cross-service commit status lookup
+	router.GET("/v1/builds/:commit_sha/status", h.GetBuildStatusByCommit)
 
 	// Dashboard stats (public endpoint for local development)
 	router.GET("/v1/dashboard/stats", h.GetDashboardStats)
@@ -272,6 +274,9 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/deployments/:id/logs/stream", h.StreamLogsWS)
 			protected.GET("/services/:id/builds/:build_id/logs", h.GetBuildLogs)
 			protected.GET("/services/:id/builds/:build_id/logs/stream", h.StreamBuildLogsWS)
+
+			// Build Status (Unified CI + Build + Deploy status)
+			protected.GET("/services/:id/builds/:commit_sha/status", h.GetUnifiedBuildStatus)
 
 			// Topology
 			protected.GET("/topology", h.GetTopology)

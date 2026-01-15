@@ -43,34 +43,43 @@ func NewServicesSyncCommand(cfg *config.Config) *cobra.Command {
 	var dir string
 	var dryRun bool
 	var projectSlug string
+	var ignoreProjectMismatch bool
 
 	cmd := &cobra.Command{
 		Use:   "services-sync",
 		Short: "Sync service definitions from YAML files to Enclii",
 		Long: `Reads service YAML files from a directory and registers missing services in Enclii.
 
+This command respects the metadata.project field in service specs. Only services
+whose metadata.project matches the --project flag will be synced. Services without
+a metadata.project field will use the --project flag as default.
+
 This command is useful for bootstrapping services from dogfooding specs or
 maintaining service definitions as code.
 
 Examples:
-  # Sync services from dogfooding directory
+  # Sync services from dogfooding directory (only services matching project)
   enclii services-sync --dir dogfooding/ --project enclii
 
   # Dry run to see what would be created
-  enclii services-sync --dir dogfooding/ --project enclii --dry-run`,
+  enclii services-sync --dir dogfooding/ --project enclii --dry-run
+
+  # Force sync all services regardless of metadata.project
+  enclii services-sync --dir dogfooding/ --project enclii --ignore-project-mismatch`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runServicesSync(cfg, dir, projectSlug, dryRun)
+			return runServicesSync(cfg, dir, projectSlug, dryRun, ignoreProjectMismatch)
 		},
 	}
 
 	cmd.Flags().StringVar(&dir, "dir", "dogfooding/", "Directory containing service YAML files")
 	cmd.Flags().StringVar(&projectSlug, "project", "enclii", "Project slug to register services under")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be done without making changes")
+	cmd.Flags().BoolVar(&ignoreProjectMismatch, "ignore-project-mismatch", false, "Sync all services regardless of metadata.project field")
 
 	return cmd
 }
 
-func runServicesSync(cfg *config.Config, dir, projectSlug string, dryRun bool) error {
+func runServicesSync(cfg *config.Config, dir, projectSlug string, dryRun, ignoreProjectMismatch bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -116,6 +125,45 @@ func runServicesSync(cfg *config.Config, dir, projectSlug string, dryRun bool) e
 		fmt.Println("No service YAML files found. Nothing to sync.")
 		return nil
 	}
+
+	// Filter specs by project (unless --ignore-project-mismatch is set)
+	var filteredSpecs []*RawServiceSpec
+	var skippedSpecs []*RawServiceSpec
+
+	for _, s := range specs {
+		specProject := s.Metadata.Project
+		if specProject == "" {
+			// No project specified in spec - use CLI flag as default
+			filteredSpecs = append(filteredSpecs, s)
+		} else if specProject == projectSlug || ignoreProjectMismatch {
+			// Project matches or we're ignoring mismatches
+			filteredSpecs = append(filteredSpecs, s)
+		} else {
+			// Project mismatch - skip this spec
+			skippedSpecs = append(skippedSpecs, s)
+		}
+	}
+
+	// Report skipped services
+	if len(skippedSpecs) > 0 {
+		fmt.Printf("Skipping %d services (project mismatch):\n", len(skippedSpecs))
+		for _, s := range skippedSpecs {
+			fmt.Printf("   - %s (metadata.project: %s != %s)\n", s.Metadata.Name, s.Metadata.Project, projectSlug)
+		}
+		fmt.Println()
+		if !ignoreProjectMismatch {
+			fmt.Println("Tip: Use --ignore-project-mismatch to sync these services anyway.")
+			fmt.Println()
+		}
+	}
+
+	specs = filteredSpecs
+	if len(specs) == 0 {
+		fmt.Println("No matching service specs found for this project. Nothing to sync.")
+		return nil
+	}
+
+	fmt.Printf("Processing %d services for project '%s'...\n\n", len(specs), projectSlug)
 
 	// Determine actions
 	var toCreate []*RawServiceSpec

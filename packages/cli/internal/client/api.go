@@ -206,6 +206,22 @@ func (c *APIClient) ListServices(ctx context.Context, projectSlug string) ([]*ty
 	return response.Services, nil
 }
 
+// DeleteService deletes a service by ID
+func (c *APIClient) DeleteService(ctx context.Context, serviceID string) error {
+	resp, err := c.makeRequest(ctx, "DELETE", fmt.Sprintf("/v1/services/%s", serviceID), nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete service: %s", string(body))
+	}
+
+	return nil
+}
+
 // Environments
 func (c *APIClient) CreateEnvironment(ctx context.Context, projectSlug, envName string) (*types.Environment, error) {
 	payload := map[string]string{

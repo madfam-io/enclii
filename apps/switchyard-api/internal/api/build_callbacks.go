@@ -175,8 +175,12 @@ func (h *Handler) processBuildCallback(ctx context.Context, req *BuildCallbackRe
 			h.triggerAutoDeploy(ctx, service, release)
 		}
 	} else {
-		// Build failed
-		if err := h.repos.Releases.UpdateStatus(req.ReleaseID, types.ReleaseStatusFailed); err != nil {
+		// Build failed - store the error message for debugging
+		var errorMsg *string
+		if req.ErrorMessage != "" {
+			errorMsg = &req.ErrorMessage
+		}
+		if err := h.repos.Releases.UpdateStatusWithError(req.ReleaseID, types.ReleaseStatusFailed, errorMsg); err != nil {
 			h.logger.Error(ctx, "Failed to update release status to failed",
 				logging.String("release_id", req.ReleaseID.String()),
 				logging.Error("db_error", err))

@@ -105,6 +105,7 @@ type Release struct {
 	ImageURI            string        `json:"image_uri" db:"image_uri"`
 	GitSHA              string        `json:"git_sha" db:"git_sha"`
 	Status              ReleaseStatus `json:"status" db:"status"`
+	ErrorMessage        *string       `json:"error_message,omitempty" db:"error_message"`     // Error from build failure
 	SBOM                string        `json:"sbom,omitempty" db:"sbom"`                       // Software Bill of Materials (JSON)
 	SBOMFormat          string        `json:"sbom_format,omitempty" db:"sbom_format"`         // e.g., "cyclonedx-json", "spdx-json"
 	ImageSignature      string        `json:"image_signature,omitempty" db:"image_signature"` // Cosign signature
@@ -131,6 +132,7 @@ type Deployment struct {
 	Replicas      int              `json:"replicas" db:"replicas"`
 	Status        DeploymentStatus `json:"status" db:"status"`
 	Health        HealthStatus     `json:"health" db:"health"`
+	ErrorMessage  *string          `json:"error_message,omitempty" db:"error_message"` // Error from reconciliation failure
 	CreatedAt     time.Time        `json:"created_at" db:"created_at"`
 	UpdatedAt     time.Time        `json:"updated_at" db:"updated_at"`
 }
@@ -1066,4 +1068,46 @@ type WebhookDatabaseInfo struct {
 	Type   string    `json:"type"`
 	Status string    `json:"status"`
 	Error  string    `json:"error,omitempty"`
+}
+
+// CIRunStatus represents the status of a CI workflow run
+type CIRunStatus string
+
+const (
+	CIRunStatusQueued     CIRunStatus = "queued"
+	CIRunStatusInProgress CIRunStatus = "in_progress"
+	CIRunStatusCompleted  CIRunStatus = "completed"
+)
+
+// CIRunConclusion represents the final result of a completed CI run
+type CIRunConclusion string
+
+const (
+	CIRunConclusionSuccess        CIRunConclusion = "success"
+	CIRunConclusionFailure        CIRunConclusion = "failure"
+	CIRunConclusionCancelled      CIRunConclusion = "cancelled"
+	CIRunConclusionSkipped        CIRunConclusion = "skipped"
+	CIRunConclusionTimedOut       CIRunConclusion = "timed_out"
+	CIRunConclusionActionRequired CIRunConclusion = "action_required"
+)
+
+// CIRun represents a GitHub Actions workflow run for tracking CI status
+type CIRun struct {
+	ID           uuid.UUID        `json:"id" db:"id"`
+	ServiceID    uuid.UUID        `json:"service_id" db:"service_id"`
+	CommitSHA    string           `json:"commit_sha" db:"commit_sha"`
+	WorkflowName string           `json:"workflow_name" db:"workflow_name"`
+	WorkflowID   int64            `json:"workflow_id" db:"workflow_id"`
+	RunID        int64            `json:"run_id" db:"run_id"`
+	RunNumber    int              `json:"run_number" db:"run_number"`
+	Status       CIRunStatus      `json:"status" db:"status"`
+	Conclusion   *CIRunConclusion `json:"conclusion,omitempty" db:"conclusion"`
+	HTMLURL      string           `json:"html_url,omitempty" db:"html_url"`
+	Branch       string           `json:"branch,omitempty" db:"branch"`
+	EventType    string           `json:"event_type,omitempty" db:"event_type"`
+	Actor        string           `json:"actor,omitempty" db:"actor"`
+	StartedAt    *time.Time       `json:"started_at,omitempty" db:"started_at"`
+	CompletedAt  *time.Time       `json:"completed_at,omitempty" db:"completed_at"`
+	CreatedAt    time.Time        `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time        `json:"updated_at" db:"updated_at"`
 }
