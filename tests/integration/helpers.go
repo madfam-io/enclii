@@ -249,12 +249,8 @@ func (h *TestHelper) Cleanup(ctx context.Context) error {
 		return err
 	}
 
-	// Delete all services
-	if err := h.clientset.CoreV1().Services(h.namespace).DeleteCollection(
-		ctx,
-		metav1.DeleteOptions{},
-		metav1.ListOptions{},
-	); err != nil && !errors.IsNotFound(err) {
+	// Delete all services (Services don't support DeleteCollection, must delete individually)
+	if err := h.deleteAllServices(ctx); err != nil {
 		return err
 	}
 
@@ -267,17 +263,57 @@ func (h *TestHelper) Cleanup(ctx context.Context) error {
 		return err
 	}
 
-	// Delete all ingresses
-	if err := h.clientset.NetworkingV1().Ingresses(h.namespace).DeleteCollection(
-		ctx,
-		metav1.DeleteOptions{},
-		metav1.ListOptions{},
-	); err != nil && !errors.IsNotFound(err) {
+	// Delete all ingresses (Ingresses don't support DeleteCollection, must delete individually)
+	if err := h.deleteAllIngresses(ctx); err != nil {
 		return err
 	}
 
 	// Wait for pods to terminate
 	time.Sleep(5 * time.Second)
+
+	return nil
+}
+
+// deleteAllServices deletes all services in the namespace one by one
+// Note: Services API doesn't support DeleteCollection
+func (h *TestHelper) deleteAllServices(ctx context.Context) error {
+	services, err := h.clientset.CoreV1().Services(h.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	for _, svc := range services.Items {
+		if err := h.clientset.CoreV1().Services(h.namespace).Delete(ctx, svc.Name, metav1.DeleteOptions{}); err != nil {
+			if !errors.IsNotFound(err) {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// deleteAllIngresses deletes all ingresses in the namespace one by one
+// Note: Ingresses API doesn't support DeleteCollection in all k8s versions
+func (h *TestHelper) deleteAllIngresses(ctx context.Context) error {
+	ingresses, err := h.clientset.NetworkingV1().Ingresses(h.namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	for _, ing := range ingresses.Items {
+		if err := h.clientset.NetworkingV1().Ingresses(h.namespace).Delete(ctx, ing.Name, metav1.DeleteOptions{}); err != nil {
+			if !errors.IsNotFound(err) {
+				return err
+			}
+		}
+	}
 
 	return nil
 }

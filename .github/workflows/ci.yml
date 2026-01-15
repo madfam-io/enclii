@@ -57,7 +57,9 @@ jobs:
 
   unit-tests:
     name: Unit Tests
-    runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
+    # Always use GitHub-hosted runners for unit tests because service containers
+    # (postgres, redis) require Docker, which isn't available on ARC self-hosted runners
+    runs-on: ubuntu-latest
     needs: lint
 
     services:
