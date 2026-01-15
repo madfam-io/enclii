@@ -1261,18 +1261,24 @@ func (r *ServiceReconciler) generateNetworkPolicies(req *ReconcileRequest, names
 			},
 		},
 		// Kubernetes API server (for services that need K8s access)
+		// Internal cluster IPs (10.x.x.x)
 		{
 			To: []networkingv1.NetworkPolicyPeer{
 				{
 					IPBlock: &networkingv1.IPBlock{
-						// Kubernetes API server typically on 10.x.x.1 or cluster IP range
-						// Allow common ranges - could be made configurable
 						CIDR: "10.0.0.0/8",
 					},
 				},
 			},
 			Ports: []networkingv1.NetworkPolicyPort{
 				{Protocol: protocolPtr(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 443}},
+				{Protocol: protocolPtr(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 6443}},
+			},
+		},
+		// External K8s API server (k3s single-node uses node's external IP)
+		// Port 6443 is K8s API specific, safe to allow to any destination
+		{
+			Ports: []networkingv1.NetworkPolicyPort{
 				{Protocol: protocolPtr(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 6443}},
 			},
 		},
