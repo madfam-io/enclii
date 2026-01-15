@@ -77,6 +77,13 @@ spec:
             secretKeyRef:
               name: enclii-github-webhook
               key: secret
+        # Build Worker Configuration
+        - name: ENCLII_BUILD_MODE
+          value: "roundhouse"
+        - name: ENCLII_ROUNDHOUSE_URL
+          value: "http://roundhouse:80"
+        - name: ENCLII_SELF_URL
+          value: "http://switchyard-api:4200"
         # Janua API URL for GitHub token retrieval
         - name: ENCLII_JANUA_API_URL
           value: "https://api.janua.dev"
