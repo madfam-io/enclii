@@ -268,7 +268,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push switchyard-api
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/switchyard-api/Dockerfile
@@ -278,7 +278,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push switchyard-ui
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/switchyard-ui/Dockerfile
@@ -292,7 +292,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push roundhouse
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: apps/roundhouse
           push: true
@@ -301,7 +301,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push waybill
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: apps/waybill
           push: true
@@ -310,7 +310,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push landing-page
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: apps/landing
           push: true
