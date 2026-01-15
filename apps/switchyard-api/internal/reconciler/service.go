@@ -1297,6 +1297,23 @@ func (r *ServiceReconciler) generateNetworkPolicies(req *ReconcileRequest, names
 		})
 	}
 
+	// Allow egress to data namespace (postgres, redis in shared data tier)
+	egressRules = append(egressRules, networkingv1.NetworkPolicyEgressRule{
+		To: []networkingv1.NetworkPolicyPeer{
+			{
+				NamespaceSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"kubernetes.io/metadata.name": "data",
+					},
+				},
+			},
+		},
+		Ports: []networkingv1.NetworkPolicyPort{
+			{Protocol: protocolPtr(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 5432}}, // PostgreSQL
+			{Protocol: protocolPtr(corev1.ProtocolTCP), Port: &intstr.IntOrString{Type: intstr.Int, IntVal: 6379}}, // Redis
+		},
+	})
+
 	// Allow egress to same namespace (inter-service communication)
 	egressRules = append(egressRules, networkingv1.NetworkPolicyEgressRule{
 		To: []networkingv1.NetworkPolicyPeer{
