@@ -61,11 +61,12 @@ type BuildStage struct {
 }
 
 // GetUnifiedBuildStatus returns the unified build status for a commit
-// GET /v1/services/:service_id/builds/:commit_sha/status
+// GET /v1/services/:id/builds/:build_id/status
+// Note: :build_id can be either a release UUID or commit SHA
 func (h *Handler) GetUnifiedBuildStatus(c *gin.Context) {
 	ctx := c.Request.Context()
-	serviceID := c.Param("service_id")
-	commitSHA := c.Param("commit_sha")
+	serviceID := c.Param("id")
+	commitSHA := c.Param("build_id") // Can be commit SHA or release ID
 
 	h.logger.Info(ctx, "Getting unified build status",
 		logging.String("service_id", serviceID),

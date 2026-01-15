@@ -276,7 +276,8 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/services/:id/builds/:build_id/logs/stream", h.StreamBuildLogsWS)
 
 			// Build Status (Unified CI + Build + Deploy status)
-			protected.GET("/services/:id/builds/:commit_sha/status", h.GetUnifiedBuildStatus)
+			// Note: :build_id here can be either a release UUID or commit SHA
+			protected.GET("/services/:id/builds/:build_id/status", h.GetUnifiedBuildStatus)
 
 			// Topology
 			protected.GET("/topology", h.GetTopology)
