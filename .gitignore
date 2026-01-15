@@ -11,6 +11,9 @@ vendor/
 .env
 .env.local
 .env.*.local
+.env.build
+.env.production
+.env.staging
 
 # IDE
 .vscode/
@@ -65,8 +68,30 @@ temp/
 
 # Secrets (NEVER commit)
 infra/k8s/production/oidc-secrets.yaml
+infra/k8s/production/backup/backup-secrets.yaml
 *-secrets.yaml
+secrets.dev.yaml
+secrets.*.yaml
 !*-secrets.example.yaml
+!*-secrets.yaml.template
+!*.TEMPLATE
+!secrets.yaml.TEMPLATE
+
+# Terraform
+terraform.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
 
 # CLI binary artifacts
 packages/cli/enclii
+
+# Playwright
+playwright-report/
+playwright/.cache/
+test-results/
+.playwright/
+
+# Serena MCP
+.serena/

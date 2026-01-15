@@ -11,11 +11,16 @@ import (
 
 // CustomDomainRepository handles database operations for custom domains
 type CustomDomainRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewCustomDomainRepository(db *sql.DB) *CustomDomainRepository {
+func NewCustomDomainRepository(db DBTX) *CustomDomainRepository {
 	return &CustomDomainRepository{db: db}
+}
+
+// NewCustomDomainRepositoryWithTx creates a repository using a transaction
+func NewCustomDomainRepositoryWithTx(tx DBTX) *CustomDomainRepository {
+	return &CustomDomainRepository{db: tx}
 }
 
 // Create adds a new custom domain

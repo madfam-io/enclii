@@ -4,7 +4,7 @@
 
 ## Current Status
 
-**Production:** 85% Ready (Beta) | **Live at:** [app.enclii.dev](https://app.enclii.dev)
+**Production:** 95% Ready (Beta) | **Live at:** [app.enclii.dev](https://app.enclii.dev)
 
 | Component | Status | Details |
 |-----------|--------|---------|
@@ -13,6 +13,9 @@
 | Auth | ✅ Janua SSO | auth.madfam.io |
 | Build Pipeline | ✅ Operational | GitHub webhooks + Buildpacks |
 | Docs | ✅ Running | docs.enclii.dev |
+| GitOps | ✅ ArgoCD | App-of-Apps pattern, auto-sync |
+| Storage | ✅ Longhorn | CSI storage (single-node; ready for scaling) |
+| GPU Prep | ✅ Ready | Manifests staged, pending nodes |
 
 ## Quick Start
 
@@ -56,6 +59,23 @@ Production deployment, readiness, and operational guides.
 - [Production Readiness Audit](./production/PRODUCTION_READINESS_AUDIT.md) - Production readiness assessment
 - [Production Deployment Roadmap](./production/PRODUCTION_DEPLOYMENT_ROADMAP.md) - Deployment timeline and milestones
 - [Gap Analysis](./production/GAP_ANALYSIS.md) - Feature comparison with Vercel and Railway
+
+### ☸️ Infrastructure
+GitOps, storage, compute, and Kubernetes infrastructure. **[Infrastructure Index →](./infrastructure/README.md)**
+
+**Core Infrastructure (Jan 2026):**
+- [GitOps with ArgoCD](./infrastructure/GITOPS.md) - App-of-Apps pattern, self-heal, sync operations
+- [Storage with Longhorn](./infrastructure/STORAGE.md) - Replicated CSI, StorageClasses, backup/recovery
+- [Cloudflare Integration](./infrastructure/CLOUDFLARE.md) - Zero-trust ingress, tunnel route automation
+- [External Secrets](./infrastructure/EXTERNAL_SECRETS.md) - Secret sync from external providers
+
+**Configuration Files:**
+- [ArgoCD Apps](../infra/argocd/README.md) - GitOps App-of-Apps configuration
+- [Longhorn Values](../infra/helm/longhorn/) - Helm values for storage
+- [GPU Node Setup](../infra/k8s/base/gpu/README.md) - NVIDIA device plugin and tolerations
+- [Kaniko Builds](../apps/roundhouse/k8s/kaniko-job-template.yaml) - Secure rootless container builds
+- [Cloudflare Tunnel](../infra/k8s/production/cloudflared-unified.yaml) - Tunnel manifest
+- [ARC Runners](../infra/argocd/apps/arc-runners.yaml) - GitHub Actions self-hosted runners
 
 ### 🔍 Audits
 Comprehensive audit reports organized by category. **Start with the [Audit README](./audits/README.md)** for navigation.
@@ -227,5 +247,5 @@ When adding new documentation:
 
 ---
 
-**Last Updated:** 2025-12-11
-**Documentation Version:** 2.1 (Production Beta)
+**Last Updated:** 2026-01-14
+**Documentation Version:** 2.3 (Infrastructure Documentation Complete)

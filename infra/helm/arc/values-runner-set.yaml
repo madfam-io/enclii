@@ -1,0 +1,44 @@
+# Shared configuration for ARC runner scale sets
+# Blue and green scale sets inherit from this base configuration
+# Helm chart: oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set
+#
+# CURRENT STATE: Running without DinD to get stable CI working
+# TODO: Add DinD support later once basic runners are stable
+#
+# ROOT CAUSE FOUND: When using containerMode.type=dind with custom containers,
+# ARC's merge behavior doesn't work properly, causing runners to exit immediately.
+# SOLUTION: Don't use custom containers - let ARC handle everything.
+
+# Org-level registration - GitHub App has org permissions
+# The runner will be registered to run for all repos in the org
+githubConfigUrl: "https://github.com/madfam-org"
+githubConfigSecret: github-app-secret
+
+# NOTE: Removed explicit runnerGroup setting
+# GitHub may use the "Default" group which may have full repo access
+# If issues persist, an org admin needs to grant the Default group access to enclii repo
+
+# NOTE: DinD disabled for now - runners work without it
+# Jobs that need Docker will need to use setup-docker action or alternative
+# containerMode:
+#   type: "dind"
+
+# Runner pod template - minimal customization, let ARC handle injection
+template:
+  spec:
+    serviceAccountName: arc-runner
+    terminationGracePeriodSeconds: 300
+    # NOTE: Do NOT define containers here - let ARC inject them properly
+
+# Listener configuration (manages scale set communication with GitHub)
+listenerTemplate:
+  spec:
+    containers:
+      - name: listener
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi

@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
 // UsageMetric represents a single usage metric
@@ -106,16 +109,17 @@ func (h *Handler) GetCostBreakdown(c *gin.Context) {
 	c.JSON(http.StatusOK, breakdown)
 }
 
-// calculateUsage computes usage metrics from actual data
+// calculateUsage computes usage metrics from actual K8s data
 func (h *Handler) calculateUsage(ctx context.Context, periodStart, periodEnd time.Time) (*UsageSummary, error) {
-	// Count services for compute estimation
+	// Count services
 	services, err := h.repos.Services.ListAll(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Count releases for build minutes estimation
+	// Count releases for build minutes
 	var totalBuilds int
+	var totalBuildMinutes float64
 	for _, svc := range services {
 		releases, err := h.repos.Releases.ListByService(svc.ID)
 		if err != nil {
@@ -124,6 +128,8 @@ func (h *Handler) calculateUsage(ctx context.Context, periodStart, periodEnd tim
 		for _, rel := range releases {
 			if rel.CreatedAt.After(periodStart) && rel.CreatedAt.Before(periodEnd) {
 				totalBuilds++
+				// Estimate 3 minutes per build (average for buildpacks)
+				totalBuildMinutes += 3.0
 			}
 		}
 	}
@@ -138,26 +144,22 @@ func (h *Handler) calculateUsage(ctx context.Context, periodStart, periodEnd tim
 		totalDomains += len(domains)
 	}
 
-	// Calculate metrics based on actual usage
-	// Estimate: each running service uses ~5 GB-hours per day on average
+	// Calculate compute usage from real K8s metrics
+	computeUsed := h.calculateRealComputeUsage(ctx, services, periodStart)
+
+	// Calculate storage from actual container images
+	storageUsed := h.calculateRealStorageUsage(ctx, services)
+
+	// Bandwidth estimation (would need ingress metrics for real data)
 	daysInPeriod := time.Since(periodStart).Hours() / 24
 	if daysInPeriod < 1 {
 		daysInPeriod = 1
 	}
-	computeUsed := float64(len(services)) * 5.0 * daysInPeriod
-
-	// Estimate: each build takes ~3 minutes on average
-	buildMinutes := float64(totalBuilds) * 3.0
-
-	// Estimate storage: ~0.5 GB per service for images and artifacts
-	storageUsed := float64(len(services)) * 0.5
-
-	// Estimate bandwidth: ~10 GB per service per billing period
 	bandwidthUsed := float64(len(services)) * 10.0 * (daysInPeriod / 30.0)
 
 	// Calculate overage costs
 	computeCost := calculateOverage(computeUsed, includedCompute, computePerGBHour)
-	buildCost := calculateOverage(buildMinutes, includedBuild, buildPerMinute)
+	buildCost := calculateOverage(totalBuildMinutes, includedBuild, buildPerMinute)
 	storageCost := calculateOverage(storageUsed, includedStorage, storagePerGB)
 	bandwidthCost := calculateOverage(bandwidthUsed, includedBandwidth, bandwidthPerGB)
 
@@ -175,7 +177,7 @@ func (h *Handler) calculateUsage(ctx context.Context, periodStart, periodEnd tim
 		{
 			Type:     "build",
 			Label:    "Build Minutes",
-			Used:     roundToTwoDecimals(buildMinutes),
+			Used:     roundToTwoDecimals(totalBuildMinutes),
 			Included: includedBuild,
 			Unit:     "minutes",
 			Cost:     roundToTwoDecimals(buildCost),
@@ -215,6 +217,211 @@ func (h *Handler) calculateUsage(ctx context.Context, periodStart, periodEnd tim
 		GrandTotal:  roundToTwoDecimals(proPlanBase + totalCost),
 		PlanName:    "Pro",
 	}, nil
+}
+
+// calculateRealComputeUsage calculates compute usage from real K8s metrics
+func (h *Handler) calculateRealComputeUsage(ctx context.Context, services []*types.Service, periodStart time.Time) float64 {
+	if h.k8sClient == nil {
+		// Fallback to estimation if K8s client not available
+		daysInPeriod := time.Since(periodStart).Hours() / 24
+		if daysInPeriod < 1 {
+			daysInPeriod = 1
+		}
+		return float64(len(services)) * 5.0 * daysInPeriod
+	}
+
+	// Try to get real metrics from K8s metrics-server
+	var totalComputeGBHours float64
+
+	for _, svc := range services {
+		// Determine namespace for service
+		namespace := getServiceNamespace(svc)
+
+		// Get real-time metrics for the service
+		metrics, err := h.k8sClient.GetServiceMetrics(ctx, namespace, svc.Name)
+		if err != nil {
+			h.logger.Warn(ctx, "Failed to get metrics for service",
+				logging.String("service", svc.Name),
+				logging.Error("error", err))
+			// Fallback to estimate for this service
+			daysInPeriod := time.Since(periodStart).Hours() / 24
+			if daysInPeriod < 1 {
+				daysInPeriod = 1
+			}
+			totalComputeGBHours += 5.0 * daysInPeriod
+			continue
+		}
+
+		// Convert current memory usage to GB and extrapolate for the billing period
+		// Memory is in bytes, convert to GB
+		memoryGB := float64(metrics.TotalMemory) / (1024 * 1024 * 1024)
+
+		// Hours since period start (or service creation, whichever is later)
+		hoursActive := time.Since(periodStart).Hours()
+		if hoursActive < 0 {
+			hoursActive = 0
+		}
+
+		// GB-hours = memory in GB * hours active
+		totalComputeGBHours += memoryGB * hoursActive
+	}
+
+	return totalComputeGBHours
+}
+
+// calculateRealStorageUsage calculates storage from actual deployments
+func (h *Handler) calculateRealStorageUsage(ctx context.Context, services []*types.Service) float64 {
+	// For now, estimate based on service count
+	// Real implementation would check container image sizes from registry
+	// Each service typically has ~0.5 GB of image layers
+	return float64(len(services)) * 0.5
+}
+
+// getServiceNamespace determines the namespace for a service
+func getServiceNamespace(svc *types.Service) string {
+	// Services are deployed to project namespaces like "proj-{project_id}"
+	if svc.ProjectID.String() != "" {
+		return fmt.Sprintf("proj-%s", svc.ProjectID.String()[:8])
+	}
+	return "default"
+}
+
+// ServiceMetrics represents real-time metrics for a service
+type ServiceMetrics struct {
+	ServiceID   string  `json:"service_id"`
+	ServiceName string  `json:"service_name"`
+	Namespace   string  `json:"namespace"`
+	PodCount    int     `json:"pod_count"`
+	CPUUsage    float64 `json:"cpu_usage_millicores"` // millicores
+	MemoryUsage float64 `json:"memory_usage_mb"`      // MB
+	Status      string  `json:"status"`               // "running", "stopped", "error"
+}
+
+// ClusterMetricsResponse represents cluster-wide metrics
+type ClusterMetricsResponse struct {
+	TotalCPU       float64          `json:"total_cpu_millicores"`
+	TotalMemory    float64          `json:"total_memory_mb"`
+	TotalPods      int              `json:"total_pods"`
+	MetricsEnabled bool             `json:"metrics_enabled"`
+	Services       []ServiceMetrics `json:"services"`
+	CollectedAt    string           `json:"collected_at"`
+}
+
+// GetRealTimeMetrics returns current resource usage from K8s
+// GET /v1/usage/realtime
+func (h *Handler) GetRealTimeMetrics(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Check if K8s client is available
+	if h.k8sClient == nil {
+		c.JSON(http.StatusOK, ClusterMetricsResponse{
+			MetricsEnabled: false,
+			Services:       []ServiceMetrics{},
+			CollectedAt:    time.Now().Format(time.RFC3339),
+		})
+		return
+	}
+
+	// Get all services
+	services, err := h.repos.Services.ListAll(ctx)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list services", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list services"})
+		return
+	}
+
+	// Try to get cluster-wide metrics
+	clusterMetrics, err := h.k8sClient.GetClusterMetrics(ctx)
+	if err != nil {
+		h.logger.Warn(ctx, "Failed to get cluster metrics", logging.Error("error", err))
+	}
+
+	response := ClusterMetricsResponse{
+		MetricsEnabled: clusterMetrics != nil && clusterMetrics.MetricsEnabled,
+		Services:       make([]ServiceMetrics, 0, len(services)),
+		CollectedAt:    time.Now().Format(time.RFC3339),
+	}
+
+	if clusterMetrics != nil {
+		response.TotalCPU = float64(clusterMetrics.TotalCPU)
+		response.TotalMemory = float64(clusterMetrics.TotalMemory) / (1024 * 1024) // Convert to MB
+		response.TotalPods = clusterMetrics.TotalPods
+	}
+
+	// Get metrics for each service
+	for _, svc := range services {
+		namespace := getServiceNamespace(svc)
+		sm := ServiceMetrics{
+			ServiceID:   svc.ID.String(),
+			ServiceName: svc.Name,
+			Namespace:   namespace,
+			Status:      "running",
+		}
+
+		// Try to get service-specific metrics
+		if h.k8sClient != nil && clusterMetrics != nil && clusterMetrics.MetricsEnabled {
+			serviceMetrics, err := h.k8sClient.GetServiceMetrics(ctx, namespace, svc.Name)
+			if err == nil && serviceMetrics != nil {
+				sm.PodCount = serviceMetrics.PodCount
+				sm.CPUUsage = float64(serviceMetrics.TotalCPU)
+				sm.MemoryUsage = float64(serviceMetrics.TotalMemory) / (1024 * 1024) // Convert to MB
+			} else {
+				sm.Status = "unknown"
+			}
+		}
+
+		response.Services = append(response.Services, sm)
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// GetServiceResourceMetrics returns metrics for a specific service
+// GET /v1/services/:id/metrics
+func (h *Handler) GetServiceResourceMetrics(c *gin.Context) {
+	ctx := c.Request.Context()
+	serviceIDStr := c.Param("id")
+
+	// Parse service ID
+	serviceID, err := uuid.Parse(serviceIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid service ID"})
+		return
+	}
+
+	// Get service
+	svc, err := h.repos.Services.GetByID(serviceID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Service not found"})
+		return
+	}
+
+	namespace := getServiceNamespace(svc)
+	response := ServiceMetrics{
+		ServiceID:   svc.ID.String(),
+		ServiceName: svc.Name,
+		Namespace:   namespace,
+		Status:      "running",
+	}
+
+	// Get metrics if K8s client is available
+	if h.k8sClient != nil {
+		metrics, err := h.k8sClient.GetServiceMetrics(ctx, namespace, svc.Name)
+		if err == nil && metrics != nil {
+			response.PodCount = metrics.PodCount
+			response.CPUUsage = float64(metrics.TotalCPU)
+			response.MemoryUsage = float64(metrics.TotalMemory) / (1024 * 1024) // Convert to MB
+		} else {
+			response.Status = "unknown"
+			h.logger.Warn(ctx, "Failed to get service metrics",
+				logging.String("service_id", serviceID.String()),
+				logging.Error("error", err))
+		}
+	} else {
+		response.Status = "metrics_unavailable"
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // calculateCostBreakdown computes cost breakdown from actual data

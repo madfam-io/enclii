@@ -8,8 +8,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
@@ -203,6 +206,36 @@ func (c *APIClient) ListServices(ctx context.Context, projectSlug string) ([]*ty
 	return response.Services, nil
 }
 
+// DeleteService deletes a service by ID
+func (c *APIClient) DeleteService(ctx context.Context, serviceID string) error {
+	resp, err := c.makeRequest(ctx, "DELETE", fmt.Sprintf("/v1/services/%s", serviceID), nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete service: %s", string(body))
+	}
+
+	return nil
+}
+
+// Environments
+func (c *APIClient) CreateEnvironment(ctx context.Context, projectSlug, envName string) (*types.Environment, error) {
+	payload := map[string]string{
+		"name": envName,
+	}
+
+	var env types.Environment
+	if err := c.post(ctx, fmt.Sprintf("/v1/projects/%s/environments", projectSlug), payload, &env); err != nil {
+		return nil, fmt.Errorf("failed to create environment: %w", err)
+	}
+
+	return &env, nil
+}
+
 // Build & Deploy
 func (c *APIClient) BuildService(ctx context.Context, serviceID, gitSHA string) (*types.Release, error) {
 	payload := map[string]string{
@@ -357,9 +390,10 @@ func (c *APIClient) Health(ctx context.Context) (*HealthResponse, error) {
 
 // Request/Response types
 type DeployRequest struct {
-	ReleaseID   string            `json:"release_id"`
-	Environment map[string]string `json:"environment,omitempty"`
-	Replicas    int               `json:"replicas,omitempty"`
+	ReleaseID       string            `json:"release_id"`
+	EnvironmentName string            `json:"environment_name"` // e.g., "dev", "staging", "production"
+	Environment     map[string]string `json:"environment,omitempty"`
+	Replicas        int               `json:"replicas,omitempty"`
 }
 
 type RollbackRequest struct {
@@ -399,4 +433,491 @@ type HealthResponse struct {
 	Status  string `json:"status"`
 	Service string `json:"service"`
 	Version string `json:"version"`
+}
+
+// Environment Variables / Secrets
+
+// EnvVarRequest represents a request to create or update an environment variable
+type EnvVarRequest struct {
+	Key      string `json:"key"`
+	Value    string `json:"value"`
+	IsSecret bool   `json:"is_secret"`
+}
+
+// EnvVarResponse represents an environment variable in API responses
+type EnvVarResponse struct {
+	ID            uuid.UUID  `json:"id"`
+	ServiceID     uuid.UUID  `json:"service_id"`
+	EnvironmentID *uuid.UUID `json:"environment_id,omitempty"`
+	Key           string     `json:"key"`
+	Value         string     `json:"value"` // Masked as "••••••" if is_secret=true
+	IsSecret      bool       `json:"is_secret"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+// ServiceInfo represents basic service information for CLI use
+type ServiceInfo struct {
+	ID        uuid.UUID `json:"id"`
+	ProjectID uuid.UUID `json:"project_id"`
+	Name      string    `json:"name"`
+}
+
+// EnvironmentInfo represents basic environment information for CLI use
+type EnvironmentInfo struct {
+	ID            uuid.UUID `json:"id"`
+	ProjectID     uuid.UUID `json:"project_id"`
+	Name          string    `json:"name"`
+	KubeNamespace string    `json:"kube_namespace"`
+}
+
+// ListEnvVars returns all environment variables for a service
+func (c *APIClient) ListEnvVars(ctx context.Context, serviceID string, environmentID *string) ([]EnvVarResponse, error) {
+	endpoint := fmt.Sprintf("/v1/services/%s/env-vars", serviceID)
+	if environmentID != nil && *environmentID != "" {
+		endpoint += "?environment_id=" + url.QueryEscape(*environmentID)
+	}
+
+	var response struct {
+		EnvVars []EnvVarResponse `json:"environment_variables"`
+	}
+
+	if err := c.get(ctx, endpoint, &response); err != nil {
+		return nil, fmt.Errorf("failed to list env vars: %w", err)
+	}
+
+	return response.EnvVars, nil
+}
+
+// CreateEnvVar creates a new environment variable
+func (c *APIClient) CreateEnvVar(ctx context.Context, serviceID string, req EnvVarRequest, environmentID *string) (*EnvVarResponse, error) {
+	payload := map[string]interface{}{
+		"key":       req.Key,
+		"value":     req.Value,
+		"is_secret": req.IsSecret,
+	}
+
+	if environmentID != nil && *environmentID != "" {
+		payload["environment_id"] = *environmentID
+	}
+
+	var result EnvVarResponse
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/env-vars", serviceID), payload, &result); err != nil {
+		return nil, fmt.Errorf("failed to create env var: %w", err)
+	}
+
+	return &result, nil
+}
+
+// BulkCreateEnvVars creates multiple environment variables at once
+func (c *APIClient) BulkCreateEnvVars(ctx context.Context, serviceID string, vars []EnvVarRequest, environmentID *string) ([]EnvVarResponse, error) {
+	payload := map[string]interface{}{
+		"variables": vars,
+	}
+
+	if environmentID != nil && *environmentID != "" {
+		payload["environment_id"] = *environmentID
+	}
+
+	var response struct {
+		EnvVars []EnvVarResponse `json:"environment_variables"`
+	}
+
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/env-vars/bulk", serviceID), payload, &response); err != nil {
+		return nil, fmt.Errorf("failed to bulk create env vars: %w", err)
+	}
+
+	return response.EnvVars, nil
+}
+
+// DeleteEnvVar deletes an environment variable
+func (c *APIClient) DeleteEnvVar(ctx context.Context, serviceID, envVarID string) error {
+	resp, err := c.makeRequest(ctx, "DELETE", fmt.Sprintf("/v1/services/%s/env-vars/%s", serviceID, envVarID), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// RevealEnvVar reveals the actual value of a secret (logged for audit)
+func (c *APIClient) RevealEnvVar(ctx context.Context, serviceID, envVarID string) (string, error) {
+	var response struct {
+		Value string `json:"value"`
+	}
+
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/env-vars/%s/reveal", serviceID, envVarID), nil, &response); err != nil {
+		return "", fmt.Errorf("failed to reveal env var: %w", err)
+	}
+
+	return response.Value, nil
+}
+
+// ListServicesWithInfo returns all services for a project with basic info
+func (c *APIClient) ListServicesWithInfo(ctx context.Context, projectSlug string) ([]*ServiceInfo, error) {
+	services, err := c.ListServices(ctx, projectSlug)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*ServiceInfo, len(services))
+	for i, svc := range services {
+		result[i] = &ServiceInfo{
+			ID:        svc.ID,
+			ProjectID: svc.ProjectID,
+			Name:      svc.Name,
+		}
+	}
+
+	return result, nil
+}
+
+// ListEnvironments returns all environments for a project
+func (c *APIClient) ListEnvironments(ctx context.Context, projectSlug string) ([]*EnvironmentInfo, error) {
+	var response struct {
+		Environments []*EnvironmentInfo `json:"environments"`
+	}
+
+	if err := c.get(ctx, fmt.Sprintf("/v1/projects/%s/environments", projectSlug), &response); err != nil {
+		return nil, fmt.Errorf("failed to list environments: %w", err)
+	}
+
+	return response.Environments, nil
+}
+
+// Custom Domains
+
+// CustomDomainRequest represents a request to add a custom domain
+type CustomDomainRequest struct {
+	Domain        string `json:"domain"`
+	Environment   string `json:"environment,omitempty"`
+	EnvironmentID string `json:"environment_id,omitempty"`
+	TLSEnabled    bool   `json:"tls_enabled"`
+	TLSIssuer     string `json:"tls_issuer,omitempty"`
+}
+
+// CustomDomainResponse represents a custom domain in API responses
+type CustomDomainResponse struct {
+	ID               uuid.UUID  `json:"id"`
+	ServiceID        uuid.UUID  `json:"service_id"`
+	EnvironmentID    *uuid.UUID `json:"environment_id,omitempty"`
+	Domain           string     `json:"domain"`
+	Verified         bool       `json:"verified"`
+	TLSEnabled       bool       `json:"tls_enabled"`
+	TLSIssuer        string     `json:"tls_issuer,omitempty"`
+	TLSProvider      string     `json:"tls_provider,omitempty"`
+	Status           string     `json:"status"`
+	DNSCNAME         string     `json:"dns_cname,omitempty"`
+	IsPlatformDomain bool       `json:"is_platform_domain"`
+	ZeroTrustEnabled bool       `json:"zero_trust_enabled"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	VerifiedAt       *time.Time `json:"verified_at,omitempty"`
+}
+
+// DomainVerifyResponse represents the verification response
+type DomainVerifyResponse struct {
+	Message           string                `json:"message"`
+	Domain            *CustomDomainResponse `json:"domain,omitempty"`
+	VerificationValue string                `json:"verification_value,omitempty"`
+	Error             string                `json:"error,omitempty"`
+}
+
+// ListCustomDomains returns all custom domains for a service
+func (c *APIClient) ListCustomDomains(ctx context.Context, serviceID string) ([]CustomDomainResponse, error) {
+	var response struct {
+		Domains []CustomDomainResponse `json:"domains"`
+	}
+
+	if err := c.get(ctx, fmt.Sprintf("/v1/services/%s/domains", serviceID), &response); err != nil {
+		return nil, fmt.Errorf("failed to list domains: %w", err)
+	}
+
+	return response.Domains, nil
+}
+
+// AddCustomDomain adds a custom domain to a service
+func (c *APIClient) AddCustomDomain(ctx context.Context, serviceID string, req CustomDomainRequest) (*CustomDomainResponse, error) {
+	var domain CustomDomainResponse
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/domains", serviceID), req, &domain); err != nil {
+		return nil, fmt.Errorf("failed to add domain: %w", err)
+	}
+
+	return &domain, nil
+}
+
+// GetCustomDomain gets a specific custom domain
+func (c *APIClient) GetCustomDomain(ctx context.Context, serviceID, domainID string) (*CustomDomainResponse, error) {
+	var domain CustomDomainResponse
+	if err := c.get(ctx, fmt.Sprintf("/v1/services/%s/domains/%s", serviceID, domainID), &domain); err != nil {
+		return nil, fmt.Errorf("failed to get domain: %w", err)
+	}
+
+	return &domain, nil
+}
+
+// DeleteCustomDomain removes a custom domain from a service
+func (c *APIClient) DeleteCustomDomain(ctx context.Context, serviceID, domainID string) error {
+	resp, err := c.makeRequest(ctx, "DELETE", fmt.Sprintf("/v1/services/%s/domains/%s", serviceID, domainID), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	return nil
+}
+
+// VerifyCustomDomain verifies domain ownership via DNS TXT record
+func (c *APIClient) VerifyCustomDomain(ctx context.Context, serviceID, domainID string) (*DomainVerifyResponse, error) {
+	var response DomainVerifyResponse
+	if err := c.post(ctx, fmt.Sprintf("/v1/services/%s/domains/%s/verify", serviceID, domainID), nil, &response); err != nil {
+		return nil, fmt.Errorf("failed to verify domain: %w", err)
+	}
+
+	return &response, nil
+}
+
+// Log Streaming (WebSocket)
+
+// LogStreamMessage represents a log message from WebSocket streaming
+type LogStreamMessage struct {
+	Type      string    `json:"type"` // "log", "error", "info", "connected", "disconnected"
+	Pod       string    `json:"pod"`
+	Container string    `json:"container"`
+	Timestamp time.Time `json:"timestamp"`
+	Message   string    `json:"message"`
+}
+
+// StreamLogsOptions configures log streaming behavior
+type StreamLogsOptions struct {
+	Lines      int
+	Timestamps bool
+	Since      *time.Time
+}
+
+// StreamLogs establishes a WebSocket connection to stream logs in real-time.
+// It returns a channel of LogStreamMessage and an error channel.
+// The caller should select on both channels and handle the context cancellation.
+func (c *APIClient) StreamLogs(ctx context.Context, serviceID string, envName string, opts StreamLogsOptions) (<-chan LogStreamMessage, <-chan error, error) {
+	// Build WebSocket URL
+	wsURL, err := c.buildWSURL(serviceID, envName, opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to build WebSocket URL: %w", err)
+	}
+
+	// Set up WebSocket dialer with auth header
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 10 * time.Second,
+	}
+
+	header := http.Header{}
+	if c.token != "" {
+		header.Set("Authorization", "Bearer "+c.token)
+	}
+	header.Set("User-Agent", c.userAgent)
+
+	// Connect to WebSocket
+	conn, resp, err := dialer.DialContext(ctx, wsURL, header)
+	if err != nil {
+		if resp != nil && resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, nil, fmt.Errorf("WebSocket connection failed (%d): %s", resp.StatusCode, string(body))
+		}
+		return nil, nil, fmt.Errorf("failed to connect to log stream: %w", err)
+	}
+
+	// Create channels
+	logChan := make(chan LogStreamMessage, 100)
+	errChan := make(chan error, 1)
+
+	// Start goroutine to read messages
+	go func() {
+		defer close(logChan)
+		defer close(errChan)
+		defer conn.Close()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				_, message, err := conn.ReadMessage()
+				if err != nil {
+					if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+						return
+					}
+					if ctx.Err() != nil {
+						return // Context cancelled, don't report as error
+					}
+					select {
+					case errChan <- fmt.Errorf("read error: %w", err):
+					default:
+					}
+					return
+				}
+
+				var msg LogStreamMessage
+				if err := json.Unmarshal(message, &msg); err != nil {
+					// Skip malformed messages
+					continue
+				}
+
+				select {
+				case logChan <- msg:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return logChan, errChan, nil
+}
+
+// buildWSURL constructs the WebSocket URL for log streaming
+func (c *APIClient) buildWSURL(serviceID, envName string, opts StreamLogsOptions) (string, error) {
+	// Parse base URL and convert to WebSocket scheme
+	baseURL := c.baseURL
+	if strings.HasPrefix(baseURL, "https://") {
+		baseURL = "wss://" + strings.TrimPrefix(baseURL, "https://")
+	} else if strings.HasPrefix(baseURL, "http://") {
+		baseURL = "ws://" + strings.TrimPrefix(baseURL, "http://")
+	}
+
+	// Build path with query parameters
+	path := fmt.Sprintf("/v1/services/%s/logs/stream", serviceID)
+
+	params := url.Values{}
+	if envName != "" {
+		params.Set("env", envName)
+	}
+	if opts.Lines > 0 {
+		params.Set("lines", fmt.Sprintf("%d", opts.Lines))
+	}
+	if opts.Timestamps {
+		params.Set("timestamps", "true")
+	}
+	if opts.Since != nil {
+		params.Set("since", opts.Since.Format(time.RFC3339))
+	}
+
+	fullURL := baseURL + path
+	if params.Encode() != "" {
+		fullURL += "?" + params.Encode()
+	}
+
+	return fullURL, nil
+}
+
+// StreamDeploymentLogs streams logs for a specific deployment (alternative endpoint)
+func (c *APIClient) StreamDeploymentLogs(ctx context.Context, deploymentID string, opts StreamLogsOptions) (<-chan LogStreamMessage, <-chan error, error) {
+	// Build WebSocket URL
+	baseURL := c.baseURL
+	if strings.HasPrefix(baseURL, "https://") {
+		baseURL = "wss://" + strings.TrimPrefix(baseURL, "https://")
+	} else if strings.HasPrefix(baseURL, "http://") {
+		baseURL = "ws://" + strings.TrimPrefix(baseURL, "http://")
+	}
+
+	path := fmt.Sprintf("/v1/deployments/%s/logs/stream", deploymentID)
+
+	params := url.Values{}
+	if opts.Lines > 0 {
+		params.Set("lines", fmt.Sprintf("%d", opts.Lines))
+	}
+	if opts.Timestamps {
+		params.Set("timestamps", "true")
+	}
+	if opts.Since != nil {
+		params.Set("since", opts.Since.Format(time.RFC3339))
+	}
+
+	wsURL := baseURL + path
+	if params.Encode() != "" {
+		wsURL += "?" + params.Encode()
+	}
+
+	// Set up WebSocket dialer with auth header
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 10 * time.Second,
+	}
+
+	header := http.Header{}
+	if c.token != "" {
+		header.Set("Authorization", "Bearer "+c.token)
+	}
+	header.Set("User-Agent", c.userAgent)
+
+	// Connect to WebSocket
+	conn, resp, err := dialer.DialContext(ctx, wsURL, header)
+	if err != nil {
+		if resp != nil && resp.StatusCode >= 400 {
+			body, _ := io.ReadAll(resp.Body)
+			return nil, nil, fmt.Errorf("WebSocket connection failed (%d): %s", resp.StatusCode, string(body))
+		}
+		return nil, nil, fmt.Errorf("failed to connect to log stream: %w", err)
+	}
+
+	// Create channels
+	logChan := make(chan LogStreamMessage, 100)
+	errChan := make(chan error, 1)
+
+	// Start goroutine to read messages
+	go func() {
+		defer close(logChan)
+		defer close(errChan)
+		defer conn.Close()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				_, message, err := conn.ReadMessage()
+				if err != nil {
+					if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+						return
+					}
+					if ctx.Err() != nil {
+						return
+					}
+					select {
+					case errChan <- fmt.Errorf("read error: %w", err):
+					default:
+					}
+					return
+				}
+
+				var msg LogStreamMessage
+				if err := json.Unmarshal(message, &msg); err != nil {
+					continue
+				}
+
+				select {
+				case logChan <- msg:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return logChan, errChan, nil
 }

@@ -198,12 +198,19 @@ curl https://api.enclii.dev/health
 
 ### Service Routing
 
-| Public Domain | Internal Service | Container Port |
-|---------------|------------------|----------------|
+**Port Mapping Hierarchy** (Critical for Cloudflare Tunnel Configuration):
+1. **Container Port**: What the application listens on internally (e.g., 4200, 4201, 4204)
+2. **K8s Service Port**: What the service exposes to the cluster (typically port 80)
+3. **Cloudflare Tunnel Route**: Should point to K8s Service port (80), NOT container port
+
+| Public Domain | Internal Service (K8s Service:Port) | Container Port |
+|---------------|-------------------------------------|----------------|
 | api.enclii.dev | switchyard-api.enclii.svc.cluster.local:80 | 4200 |
 | app.enclii.dev | switchyard-ui.enclii.svc.cluster.local:80 | 4201 |
-| enclii.dev | landing-page.enclii.svc.cluster.local:4204 | 4204 |
+| enclii.dev | landing-page.enclii.svc.cluster.local:80 | 4204 |
 | docs.enclii.dev | docs-site.enclii.svc.cluster.local:80 | 4203 |
+
+> **Important**: The Cloudflare tunnel routes traffic to K8s Services, not directly to containers. Always use the K8s Service port (80) in tunnel configuration, not the container port.
 
 ### NetworkPolicy Requirements
 

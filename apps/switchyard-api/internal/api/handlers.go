@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/addons"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/audit"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/builder"
@@ -15,6 +16,7 @@ import (
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/middleware"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/notifications"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/reconciler"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
@@ -33,6 +35,10 @@ type Handler struct {
 	projectService         *services.ProjectService
 	deploymentService      *services.DeploymentService
 	deploymentGroupService *services.DeploymentGroupService
+	domainSyncService      *services.DomainSyncService
+	tunnelRoutesService    services.TunnelRoutesManager
+	addonService           *addons.AddonService
+	notificationService    *notifications.Service
 
 	// Infrastructure
 	config             *config.Config
@@ -119,6 +125,31 @@ func NewHandler(
 	}
 }
 
+// SetDomainSyncService sets the domain sync service for Cloudflare integration
+// This is optional - if not set, sync endpoints will return 503 Service Unavailable
+func (h *Handler) SetDomainSyncService(svc *services.DomainSyncService) {
+	h.domainSyncService = svc
+}
+
+// SetAddonService sets the addon service for database addon management
+// This is optional - if not set, addon endpoints will return 503 Service Unavailable
+func (h *Handler) SetAddonService(svc *addons.AddonService) {
+	h.addonService = svc
+}
+
+// SetNotificationService sets the notification service for webhook delivery
+// This is optional - if not set, notification test endpoints will return 503 Service Unavailable
+func (h *Handler) SetNotificationService(svc *notifications.Service) {
+	h.notificationService = svc
+}
+
+// SetTunnelRoutesService sets the tunnel routes service for automatic cloudflared route management
+// This is optional - if not set, domain additions will not automatically update tunnel routes
+// Accepts either TunnelRoutesService (ConfigMap-based) or TunnelRoutesServiceCloudflare (API-based)
+func (h *Handler) SetTunnelRoutesService(svc services.TunnelRoutesManager) {
+	h.tunnelRoutesService = svc
+}
+
 // SetupRoutes configures all API routes
 // Handler methods are implemented in separate files:
 // - auth_handlers.go: Authentication endpoints
@@ -140,7 +171,9 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 
 	// Health check (no auth required)
 	router.GET("/health", h.Health)
-	router.GET("/v1/build/status", h.GetBuildStatus)
+
+	// Build status - public endpoint for cross-service commit status lookup
+	router.GET("/v1/builds/:commit_sha/status", h.GetBuildStatusByCommit)
 
 	// Dashboard stats (public endpoint for local development)
 	router.GET("/v1/dashboard/stats", h.GetDashboardStats)
@@ -204,6 +237,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.POST("/projects", h.auth.RequireRole(string(types.RoleAdmin)), h.CreateProject)
 			protected.GET("/projects", h.ListProjects)
 			protected.GET("/projects/:slug", h.GetProject)
+			protected.DELETE("/projects/:slug", h.auth.RequireRole(string(types.RoleAdmin)), h.DeleteProject)
 
 			// Environments
 			protected.POST("/projects/:slug/environments", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateEnvironment)
@@ -226,6 +260,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 
 			// Status & Deployments
 			protected.GET("/services/:id/status", h.GetServiceStatus)
+			protected.GET("/services/:id/metrics", h.GetServiceResourceMetrics)
 			protected.GET("/services/:id/deployments", h.ListServiceDeployments)
 			protected.GET("/services/:id/deployments/latest", h.GetLatestDeployment)
 			protected.GET("/deployments/:id", h.GetDeployment)
@@ -239,6 +274,9 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/deployments/:id/logs/stream", h.StreamLogsWS)
 			protected.GET("/services/:id/builds/:build_id/logs", h.GetBuildLogs)
 			protected.GET("/services/:id/builds/:build_id/logs/stream", h.StreamBuildLogsWS)
+
+			// Build Status (Unified CI + Build + Deploy status)
+			protected.GET("/services/:id/builds/:commit_sha/status", h.GetUnifiedBuildStatus)
 
 			// Topology
 			protected.GET("/topology", h.GetTopology)
@@ -286,6 +324,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.PUT("/services/:id/env-vars/:var_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateEnvVar)
 			protected.DELETE("/services/:id/env-vars/:var_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteEnvVar)
 			protected.POST("/services/:id/env-vars/bulk", h.auth.RequireRole(string(types.RoleDeveloper)), h.BulkUpsertEnvVars)
+			protected.POST("/services/:id/env-vars/sync-from-pod", h.auth.RequireRole(string(types.RoleAdmin)), h.SyncEnvVarsFromPod)
 			protected.POST("/services/:id/env-vars/:var_id/reveal", h.auth.RequireRole(string(types.RoleDeveloper)), h.RevealEnvVar)
 
 			// Preview Environments (PR-based ephemeral deployments)
@@ -329,10 +368,16 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			// Usage & Billing
 			protected.GET("/usage", h.GetUsageSummary)
 			protected.GET("/usage/costs", h.GetCostBreakdown)
+			protected.GET("/usage/realtime", h.GetRealTimeMetrics)
 
 			// Global Domains (cross-service domain management)
 			protected.GET("/domains", h.GetAllDomains)
 			protected.GET("/domains/stats", h.GetDomainStats)
+			protected.POST("/domains/sync", h.auth.RequireRole(string(types.RoleAdmin)), h.SyncDomainsFromCloudflare)
+			protected.POST("/domains/:domain_id/sync", h.auth.RequireRole(string(types.RoleDeveloper)), h.SyncDomainFromCloudflare)
+
+			// Cloudflare Tunnel Status
+			protected.GET("/tunnel/status", h.GetTunnelStatus)
 
 			// Activity (Audit Logs)
 			protected.GET("/activity", h.GetActivity)
@@ -351,6 +396,42 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.GET("/user/tokens", h.ListAPITokens)
 			protected.GET("/user/tokens/:token_id", h.GetAPIToken)
 			protected.DELETE("/user/tokens/:token_id", h.RevokeAPIToken)
+
+			// Database Add-ons (PostgreSQL, Redis, MySQL)
+			// Global addon listing (all addons user has access to)
+			protected.GET("/addons", h.ListAllAddons)
+			protected.GET("/databases", h.ListAllAddons) // Alias for better UX
+			// Project-specific addon operations
+			protected.POST("/projects/:slug/addons", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateAddon)
+			protected.GET("/projects/:slug/addons", h.ListAddons)
+			protected.GET("/addons/:id", h.GetAddon)
+			protected.GET("/addons/:id/credentials", h.GetAddonCredentials)
+			protected.POST("/addons/:id/refresh", h.RefreshAddonStatus)
+			protected.DELETE("/addons/:id", h.auth.RequireRole(string(types.RoleAdmin)), h.DeleteAddon)
+			protected.POST("/addons/:id/bindings", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateAddonBinding)
+			protected.DELETE("/addons/:id/bindings/:service_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteAddonBinding)
+			protected.GET("/services/:id/bindings", h.GetServiceBindings)
+
+			// Notification Webhooks (Slack/Discord/Telegram/Custom)
+			protected.POST("/projects/:slug/webhooks", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateWebhook)
+			protected.GET("/projects/:slug/webhooks", h.ListWebhooks)
+			protected.GET("/webhooks/event-types", h.GetWebhookEventTypes)
+			protected.GET("/webhooks/:id", h.GetWebhook)
+			protected.PATCH("/webhooks/:id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateWebhook)
+			protected.DELETE("/webhooks/:id", h.auth.RequireRole(string(types.RoleAdmin)), h.DeleteWebhook)
+			protected.POST("/webhooks/:id/test", h.auth.RequireRole(string(types.RoleDeveloper)), h.TestWebhook)
+			protected.GET("/webhooks/:id/deliveries", h.ListWebhookDeliveries)
+			protected.POST("/webhooks/:id/deliveries/:delivery_id/retry", h.auth.RequireRole(string(types.RoleDeveloper)), h.RetryWebhookDelivery)
+
+			// Templates (Starter templates and marketplace)
+			protected.GET("/templates", h.ListTemplates)
+			protected.GET("/templates/featured", h.GetFeaturedTemplates)
+			protected.GET("/templates/filters", h.GetTemplateFilters)
+			protected.GET("/templates/search", h.SearchTemplates)
+			protected.GET("/templates/:slug", h.GetTemplate)
+			protected.POST("/templates/:slug/deploy", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeployTemplate)
+			protected.GET("/templates/deployments/:id", h.GetTemplateDeployment)
+			protected.POST("/templates/import", h.auth.RequireRole(string(types.RoleDeveloper)), h.ImportTemplateFromGitHub)
 		}
 	}
 }

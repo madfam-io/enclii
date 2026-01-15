@@ -41,15 +41,24 @@ Enclii has a **working build pipeline** (as of Dec 11, 2025):
 **SQL Commands Needed:**
 ```sql
 -- Check existing environments
-SELECT * FROM environments;
+SELECT e.id, p.slug as project, e.name, e.kube_namespace
+FROM environments e JOIN projects p ON e.project_id = p.id;
 
 -- Check services with auto_deploy
-SELECT id, name, auto_deploy FROM services;
+SELECT s.id, s.name, s.auto_deploy, p.slug as project
+FROM services s JOIN projects p ON s.project_id = p.id;
 
--- Create production environment if missing
-INSERT INTO environments (service_id, name, is_production, created_at)
-SELECT id, 'production', true, NOW()
-FROM services WHERE name = 'switchyard-api';
+-- Create production environment for ALL projects that don't have one
+INSERT INTO environments (id, project_id, name, kube_namespace, created_at, updated_at)
+SELECT gen_random_uuid(), p.id, 'production', 'enclii', NOW(), NOW()
+FROM projects p
+WHERE NOT EXISTS (
+    SELECT 1 FROM environments e
+    WHERE e.project_id = p.id AND e.name = 'production'
+);
+
+-- Or use the fix script:
+-- ./scripts/fix-environment-not-found.sh fix
 ```
 
 ### Task 0.2: Verify Reconciler is Processing Releases

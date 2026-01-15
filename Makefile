@@ -1,4 +1,4 @@
-.PHONY: bootstrap build-all build-api build-cli build-ui build-reconcilers
+.PHONY: bootstrap install-hooks build-all build-api build-cli build-ui build-reconcilers
 .PHONY: test test-integration test-coverage test-benchmark test-all lint 
 .PHONY: run-switchyard run-ui run-reconcilers
 .PHONY: kind-up kind-down infra-dev deploy-staging deploy-prod health-check clean
@@ -13,7 +13,22 @@ bootstrap:
 	@echo "🚂 Bootstrapping Enclii development environment..."
 	go mod download
 	cd apps/switchyard-ui && npm install
+	@echo "🔐 Installing git hooks..."
+	@cp scripts/hooks/pre-commit .git/hooks/pre-commit 2>/dev/null || true
+	@chmod +x .git/hooks/pre-commit 2>/dev/null || true
 	@echo "✅ Bootstrap complete"
+
+# Install pre-commit hooks (requires pre-commit to be installed)
+install-hooks:
+	@echo "🔐 Installing pre-commit hooks..."
+	@if command -v pre-commit &> /dev/null; then \
+		pre-commit install; \
+	else \
+		echo "⚠️  pre-commit not found, using built-in git hook"; \
+		cp scripts/hooks/pre-commit .git/hooks/pre-commit; \
+		chmod +x .git/hooks/pre-commit; \
+	fi
+	@echo "✅ Hooks installed"
 
 # Build all components
 build-all: build-api build-cli build-ui build-reconcilers

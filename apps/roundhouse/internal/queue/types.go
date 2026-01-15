@@ -90,3 +90,24 @@ type EnqueueResponse struct {
 	Position       int       `json:"position"`
 	EstimatedStart time.Time `json:"estimated_start,omitempty"`
 }
+
+// FailedCallback represents a callback that needs to be retried
+type FailedCallback struct {
+	ID          uuid.UUID    `json:"id"`
+	JobID       uuid.UUID    `json:"job_id"`
+	URL         string       `json:"url"`
+	Result      *BuildResult `json:"result"`
+	Attempts    int          `json:"attempts"`
+	MaxAttempts int          `json:"max_attempts"`
+	NextRetry   time.Time    `json:"next_retry"`
+	LastError   string       `json:"last_error"`
+	CreatedAt   time.Time    `json:"created_at"`
+}
+
+// CallbackRetryConfig configures callback retry behavior
+type CallbackRetryConfig struct {
+	MaxAttempts     int           // Maximum retry attempts (default: 5)
+	InitialInterval time.Duration // Initial retry interval (default: 10s)
+	MaxInterval     time.Duration // Maximum retry interval (default: 5m)
+	Multiplier      float64       // Backoff multiplier (default: 2.0)
+}

@@ -13,11 +13,13 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/sirupsen/logrus"
 
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/addons"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/api"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/builder"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/cache"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/clients"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/cloudflare"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/compliance"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/config"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
@@ -25,6 +27,7 @@ import (
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/middleware"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/notifications"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/provenance"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/reconciler"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
@@ -245,6 +248,15 @@ func main() {
 	)
 	logrus.Info("✓ DeploymentGroupService initialized")
 
+	// Initialize addon service (database add-ons: PostgreSQL, Redis, MySQL)
+	addonService := addons.NewAddonService(repos, k8sClient, logrus.StandardLogger())
+	logrus.Info("✓ AddonService initialized (PostgreSQL, Redis, MySQL add-ons)")
+
+	// Initialize and start addon reconciler (syncs database addon status from K8s)
+	addonReconciler := reconciler.NewAddonReconciler(repos, k8sClient, logrus.StandardLogger())
+	go addonReconciler.Start(ctx)
+	logrus.Info("✓ Addon reconciler started (syncing database addon status)")
+
 	// Initialize Roundhouse client (for async builds)
 	var roundhouseClient *clients.RoundhouseClient
 	if cfg.BuildMode == "roundhouse" {
@@ -255,6 +267,48 @@ func main() {
 		}).Info("✓ Build mode: roundhouse (async builds via worker)")
 	} else {
 		logrus.WithField("build_mode", "in-process").Info("✓ Build mode: in-process (sync builds in API)")
+	}
+
+	// Initialize Cloudflare client (for domain status sync)
+	var cfClient *cloudflare.Client
+	var domainSyncService *services.DomainSyncService
+	if cfg.CloudflareAPIToken != "" && cfg.CloudflareAccountID != "" && cfg.CloudflareZoneID != "" {
+		var cfErr error
+		cfClient, cfErr = cloudflare.NewClient(&cloudflare.Config{
+			APIToken:  cfg.CloudflareAPIToken,
+			AccountID: cfg.CloudflareAccountID,
+			ZoneID:    cfg.CloudflareZoneID,
+			TunnelID:  cfg.CloudflareTunnelID,
+		})
+		if cfErr != nil {
+			logrus.WithError(cfErr).Warn("⚠ Failed to initialize Cloudflare client")
+		} else {
+			// Verify token works
+			if verifyErr := cfClient.VerifyToken(ctx); verifyErr != nil {
+				logrus.WithError(verifyErr).Warn("⚠ Cloudflare API token verification failed")
+				cfClient = nil
+			} else {
+				logrus.Info("✓ Cloudflare client initialized")
+
+				// Create domain sync service
+				domainSyncService = services.NewDomainSyncService(cfClient, repos, logrus.StandardLogger())
+				logrus.Info("✓ Domain sync service initialized")
+			}
+		}
+	} else {
+		logrus.Info("ℹ Cloudflare integration not configured")
+		logrus.Info("   Set ENCLII_CLOUDFLARE_API_TOKEN, ENCLII_CLOUDFLARE_ACCOUNT_ID, ENCLII_CLOUDFLARE_ZONE_ID to enable")
+	}
+
+	// Initialize tunnel routes service (Cloudflare API-based for remotely-managed tunnels)
+	var tunnelRoutesService services.TunnelRoutesManager
+	if cfClient != nil && cfg.CloudflareTunnelID != "" {
+		tunnelRoutesService = services.NewTunnelRoutesServiceCloudflare(cfClient, logrus.StandardLogger())
+		logrus.WithField("tunnel_id", cfg.CloudflareTunnelID).Info("✓ Tunnel routes service initialized (Cloudflare API)")
+	} else if cfClient == nil {
+		logrus.Info("ℹ Tunnel routes service not configured (Cloudflare client required)")
+	} else {
+		logrus.Info("ℹ Tunnel routes service not configured (ENCLII_CLOUDFLARE_TUNNEL_ID required)")
 	}
 
 	// Setup HTTP server
@@ -295,6 +349,29 @@ func main() {
 		// Optional clients
 		roundhouseClient,
 	)
+
+	// Wire up optional domain sync service (if Cloudflare is configured)
+	if domainSyncService != nil {
+		apiHandler.SetDomainSyncService(domainSyncService)
+		logrus.Info("✓ Domain sync service wired to API handler")
+	}
+
+	// Wire up tunnel routes service (Cloudflare API-based route management)
+	if tunnelRoutesService != nil {
+		apiHandler.SetTunnelRoutesService(tunnelRoutesService)
+		logrus.Info("✓ Tunnel routes service wired to API handler (automatic route management enabled)")
+	}
+
+	// Wire up addon service (database add-ons)
+	apiHandler.SetAddonService(addonService)
+	logrus.Info("✓ Addon service wired to API handler")
+
+	// Initialize notification service (Slack/Discord/Telegram webhooks)
+	notificationService := notifications.NewService(repos.Webhooks, logrus.StandardLogger())
+	apiHandler.SetNotificationService(notificationService)
+	reconcilerController.SetNotificationService(notificationService)
+	logrus.Info("✓ Notification service wired to API handler and reconciler (Slack/Discord/Telegram)")
+
 	api.SetupRoutes(router, apiHandler)
 
 	server := &http.Server{
@@ -333,9 +410,19 @@ func main() {
 	}
 
 	// Clean up resources
+	// Stop domain sync service if running
+	if domainSyncService != nil {
+		domainSyncService.StopBackgroundSync()
+		logrus.Info("Domain sync service stopped")
+	}
+
 	// Stop reconciler controller gracefully
 	reconcilerController.Stop()
 	logrus.Info("Reconciler controller stopped")
+
+	// Stop addon reconciler
+	addonReconciler.Stop()
+	logrus.Info("Addon reconciler stopped")
 
 	if cacheService != nil {
 		if err := cacheService.Close(); err != nil {

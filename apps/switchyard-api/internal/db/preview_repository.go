@@ -12,11 +12,16 @@ import (
 
 // PreviewEnvironmentRepository handles preview environment CRUD operations
 type PreviewEnvironmentRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewPreviewEnvironmentRepository(db *sql.DB) *PreviewEnvironmentRepository {
+func NewPreviewEnvironmentRepository(db DBTX) *PreviewEnvironmentRepository {
 	return &PreviewEnvironmentRepository{db: db}
+}
+
+// NewPreviewEnvironmentRepositoryWithTx creates a repository using a transaction
+func NewPreviewEnvironmentRepositoryWithTx(tx DBTX) *PreviewEnvironmentRepository {
+	return &PreviewEnvironmentRepository{db: tx}
 }
 
 // Create creates a new preview environment
@@ -402,11 +407,16 @@ func (r *PreviewEnvironmentRepository) queryPreviews(ctx context.Context, query 
 
 // PreviewCommentRepository handles preview comment operations
 type PreviewCommentRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewPreviewCommentRepository(db *sql.DB) *PreviewCommentRepository {
+func NewPreviewCommentRepository(db DBTX) *PreviewCommentRepository {
 	return &PreviewCommentRepository{db: db}
+}
+
+// NewPreviewCommentRepositoryWithTx creates a repository using a transaction
+func NewPreviewCommentRepositoryWithTx(tx DBTX) *PreviewCommentRepository {
+	return &PreviewCommentRepository{db: tx}
 }
 
 // Create creates a new preview comment
@@ -517,11 +527,16 @@ func (r *PreviewCommentRepository) Delete(ctx context.Context, id uuid.UUID) err
 
 // PreviewAccessLogRepository handles preview access log operations
 type PreviewAccessLogRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewPreviewAccessLogRepository(db *sql.DB) *PreviewAccessLogRepository {
+func NewPreviewAccessLogRepository(db DBTX) *PreviewAccessLogRepository {
 	return &PreviewAccessLogRepository{db: db}
+}
+
+// NewPreviewAccessLogRepositoryWithTx creates a repository using a transaction
+func NewPreviewAccessLogRepositoryWithTx(tx DBTX) *PreviewAccessLogRepository {
+	return &PreviewAccessLogRepository{db: tx}
 }
 
 // Log records an access to a preview environment

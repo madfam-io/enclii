@@ -19,7 +19,7 @@
 | CPU-only workloads | GPU + CPU workloads |
 | No serverless GPU | Scale-to-zero GPU endpoints |
 | Basic billing | Per-second GPU metering |
-| ~$100/month infra | ~$300-600/month with GPU |
+| ~$55/month infra | ~$200-500/month with GPU |
 
 ---
 
@@ -27,7 +27,7 @@
 
 ### Current Limitations
 
-1. **No GPU Support**: Enclii currently runs on CPX31 instances (shared vCPU, no GPU)
+1. **No GPU Support**: Enclii currently runs on dedicated server (AX41-NVME, no GPU)
 2. **No Serverless Model**: All deployments are always-on, no scale-to-zero
 3. **Limited Billing Granularity**: Waybill tracks GB-hours, not GPU-seconds
 4. **No AI/ML Optimization**: No model caching, cold start optimization, or GPU scheduling

@@ -1,0 +1,122 @@
+# NVIDIA Device Plugin DaemonSet
+# Enables GPU resource scheduling in Kubernetes
+#
+# Prerequisites:
+# - NVIDIA drivers installed on GPU nodes
+# - nvidia-container-toolkit configured
+# - GPU nodes labeled: nvidia.com/gpu=present
+# - GPU nodes tainted: nvidia.com/gpu=present:NoSchedule
+#
+# Enable by uncommenting in kustomization.yaml when GPU nodes are added
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-device-plugin-daemonset
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: nvidia-device-plugin
+    app.kubernetes.io/component: gpu
+    app.kubernetes.io/part-of: enclii
+spec:
+  selector:
+    matchLabels:
+      name: nvidia-device-plugin-ds
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        name: nvidia-device-plugin-ds
+    spec:
+      # Only run on GPU nodes
+      nodeSelector:
+        nvidia.com/gpu: "present"
+
+      # Tolerate GPU node taints
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+        - key: CriticalAddonsOnly
+          operator: Exists
+
+      priorityClassName: system-node-critical
+
+      containers:
+        - name: nvidia-device-plugin-ctr
+          image: nvcr.io/nvidia/k8s-device-plugin:v0.14.3
+          env:
+            - name: FAIL_ON_INIT_ERROR
+              value: "false"  # Don't crash if no GPU found (safe for mixed clusters)
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: device-plugin
+              mountPath: /var/lib/kubelet/device-plugins
+
+      volumes:
+        - name: device-plugin
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+---
+# GPU Node Labeling Job (run once per new GPU node)
+# Usage: kubectl create job label-gpu-node --from=cronjob/gpu-node-labeler -- <node-name>
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: gpu-node-labeler
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: gpu-node-labeler
+    app.kubernetes.io/component: gpu
+spec:
+  schedule: "0 0 31 2 *"  # Never runs automatically (Feb 31)
+  suspend: true  # Disabled by default
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: gpu-node-labeler
+          containers:
+            - name: labeler
+              image: bitnami/kubectl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  NODE=$1
+                  kubectl label node $NODE nvidia.com/gpu=present --overwrite
+                  kubectl taint node $NODE nvidia.com/gpu=present:NoSchedule --overwrite
+                  echo "Node $NODE labeled and tainted for GPU workloads"
+          restartPolicy: Never
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gpu-node-labeler
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gpu-node-labeler
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gpu-node-labeler
+subjects:
+  - kind: ServiceAccount
+    name: gpu-node-labeler
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: gpu-node-labeler
+  apiGroup: rbac.authorization.k8s.io

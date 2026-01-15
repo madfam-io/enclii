@@ -63,11 +63,15 @@ type EnqueueResponse struct {
 
 // BuildServiceConfigToRoundhouse converts SDK BuildConfig to Roundhouse format
 func BuildServiceConfigToRoundhouse(cfg types.BuildConfig) RoundhouseBuildConfig {
+	context := cfg.Context
+	if context == "" {
+		context = "." // Default context if not specified
+	}
 	return RoundhouseBuildConfig{
 		Type:       string(cfg.Type),
 		Dockerfile: cfg.Dockerfile,
 		Buildpack:  cfg.Buildpack,
-		Context:    ".", // Default context
+		Context:    context,
 		BuildArgs:  nil,
 		Target:     "",
 	}

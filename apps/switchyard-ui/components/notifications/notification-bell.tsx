@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Bell, Check, X, AlertCircle, CheckCircle2, Clock, Rocket } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Bell, Check, X, AlertCircle, CheckCircle2, Clock, Rocket, RefreshCw } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { apiGet } from '@/lib/api';
 
 export interface Notification {
   id: string;
@@ -22,44 +23,89 @@ export interface Notification {
   link?: string;
 }
 
-// Mock notifications for now - will be replaced with real API
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'deployment',
-    title: 'Deployment Completed',
-    message: 'switchyard-api deployed to production',
-    timestamp: new Date(Date.now() - 5 * 60 * 1000),
-    read: false,
-    link: '/services/switchyard-api',
-  },
-  {
-    id: '2',
-    type: 'build',
-    title: 'Build Started',
-    message: 'Building janua-docs from commit abc123',
-    timestamp: new Date(Date.now() - 15 * 60 * 1000),
-    read: false,
-    link: '/deployments',
-  },
-  {
-    id: '3',
-    type: 'error',
-    title: 'Build Failed',
-    message: 'demo-app build failed: npm install error',
-    timestamp: new Date(Date.now() - 60 * 60 * 1000),
-    read: true,
-    link: '/deployments',
-  },
-  {
-    id: '4',
-    type: 'info',
-    title: 'Welcome to Enclii',
-    message: 'Start by importing a project from GitHub',
-    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    read: true,
-  },
-];
+// API response types
+interface AuditLog {
+  id: string;
+  timestamp: string;
+  actor_email: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  resource_name: string;
+  outcome: string;
+  context?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+interface ActivityResponse {
+  activities: AuditLog[];
+  count: number;
+  limit: number;
+  offset: number;
+}
+
+// Map audit log action to notification type
+function mapActionToType(action: string, outcome: string): Notification['type'] {
+  if (outcome === 'failure' || outcome === 'denied') return 'error';
+  if (action === 'deploy' || action === 'rollback') return 'deployment';
+  if (action === 'build') return 'build';
+  return 'info';
+}
+
+// Generate notification title from audit log
+function generateTitle(action: string, resourceType: string, outcome: string): string {
+  const actionMap: Record<string, string> = {
+    deploy: 'Deployment',
+    rollback: 'Rollback',
+    build: 'Build',
+    create: 'Created',
+    update: 'Updated',
+    delete: 'Deleted',
+    login: 'Login',
+    logout: 'Logout',
+    invite: 'Invitation',
+    join: 'Joined',
+    leave: 'Left',
+  };
+
+  const actionLabel = actionMap[action] || action.charAt(0).toUpperCase() + action.slice(1);
+  const outcomeLabel = outcome === 'success' ? 'completed' : outcome === 'failure' ? 'failed' : outcome;
+
+  return `${actionLabel} ${outcomeLabel}`;
+}
+
+// Generate resource link from audit log
+function generateLink(resourceType: string, resourceName: string): string | undefined {
+  switch (resourceType) {
+    case 'service':
+      return `/services/${resourceName}`;
+    case 'project':
+      return `/projects/${resourceName}`;
+    case 'deployment':
+    case 'release':
+      return '/deployments';
+    case 'domain':
+      return '/domains';
+    default:
+      return '/activity';
+  }
+}
+
+// Convert audit log to notification
+function auditLogToNotification(log: AuditLog, readIds: Set<string>): Notification {
+  return {
+    id: log.id,
+    type: mapActionToType(log.action, log.outcome),
+    title: generateTitle(log.action, log.resource_type, log.outcome),
+    message: `${log.resource_type}: ${log.resource_name}${log.actor_email ? ` by ${log.actor_email}` : ''}`,
+    timestamp: new Date(log.timestamp),
+    read: readIds.has(log.id) || log.outcome === 'success',
+    link: generateLink(log.resource_type, log.resource_name),
+  };
+}
+
+// Local storage key for read notification IDs
+const READ_NOTIFICATIONS_KEY = 'enclii_read_notifications';
 
 function getNotificationIcon(type: Notification['type']) {
   switch (type) {
@@ -92,29 +138,76 @@ function formatTimestamp(date: Date): string {
 export function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [readIds, setReadIds] = useState<Set<string>>(new Set());
 
+  // Load read notification IDs from localStorage
   useEffect(() => {
-    // In production, this would fetch from API
-    setNotifications(mockNotifications);
-
-    // TODO: Set up WebSocket connection for real-time updates
-    // const ws = new WebSocket(`${process.env.NEXT_PUBLIC_WS_URL}/notifications`);
-    // ws.onmessage = (event) => {
-    //   const notification = JSON.parse(event.data);
-    //   setNotifications((prev) => [notification, ...prev]);
-    // };
-    // return () => ws.close();
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(READ_NOTIFICATIONS_KEY);
+      if (stored) {
+        try {
+          setReadIds(new Set(JSON.parse(stored)));
+        } catch {
+          // Invalid JSON, ignore
+        }
+      }
+    }
   }, []);
+
+  // Persist read IDs to localStorage
+  const persistReadIds = useCallback((ids: Set<string>) => {
+    if (typeof window !== 'undefined') {
+      // Keep only the last 100 IDs to prevent unbounded growth
+      const idsArray = Array.from(ids).slice(-100);
+      localStorage.setItem(READ_NOTIFICATIONS_KEY, JSON.stringify(idsArray));
+    }
+  }, []);
+
+  // Fetch notifications from API
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await apiGet<ActivityResponse>('/v1/activity?limit=10');
+      const mappedNotifications = (data.activities || []).map((log) =>
+        auditLogToNotification(log, readIds)
+      );
+      setNotifications(mappedNotifications);
+    } catch (err) {
+      console.error('Failed to fetch notifications:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch notifications');
+    } finally {
+      setLoading(false);
+    }
+  }, [readIds]);
+
+  // Initial fetch and polling
+  useEffect(() => {
+    fetchNotifications();
+
+    // Poll every 30 seconds for updates
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const markAsRead = (id: string) => {
+    const newReadIds = new Set(readIds);
+    newReadIds.add(id);
+    setReadIds(newReadIds);
+    persistReadIds(newReadIds);
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
   };
 
   const markAllAsRead = () => {
+    const newReadIds = new Set(readIds);
+    notifications.forEach((n) => newReadIds.add(n.id));
+    setReadIds(newReadIds);
+    persistReadIds(newReadIds);
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
@@ -154,7 +247,23 @@ export function NotificationBell() {
         </div>
         <DropdownMenuSeparator />
         <div className="max-h-96 overflow-y-auto">
-          {notifications.length === 0 ? (
+          {loading ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <RefreshCw className="h-6 w-6 mx-auto mb-2 animate-spin opacity-50" />
+              <p className="text-sm">Loading...</p>
+            </div>
+          ) : error ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-500 opacity-70" />
+              <p className="text-sm text-red-600">{error}</p>
+              <button
+                onClick={() => fetchNotifications()}
+                className="mt-2 text-xs text-blue-600 hover:underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : notifications.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No notifications</p>

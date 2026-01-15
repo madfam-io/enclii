@@ -1,0 +1,308 @@
+---
+# PostgreSQL Backup to Cloudflare R2
+#
+# This CronJob runs daily backups of PostgreSQL and uploads to R2.
+# Requires r2-backup-credentials secret with R2 access keys.
+#
+# Usage:
+#   1. Create the R2 bucket: enclii-backups
+#   2. Create R2 API tokens with write access
+#   3. Create the secret (see backup-secrets.yaml.template)
+#   4. Apply this manifest
+
+# Backup Script ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-backup-script
+  namespace: enclii
+  labels:
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: enclii
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Configuration from environment
+    BACKUP_BUCKET="${R2_BUCKET:-enclii-backups}"
+    BACKUP_PREFIX="${BACKUP_PREFIX:-postgres}"
+    RETENTION_DAYS="${RETENTION_DAYS:-30}"
+
+    # Timestamp for backup file
+    TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+    BACKUP_FILE="/tmp/backup_${TIMESTAMP}.sql.gz"
+    BACKUP_KEY="${BACKUP_PREFIX}/${TIMESTAMP}.sql.gz"
+
+    echo "[$(date)] Starting PostgreSQL backup..."
+
+    # Create backup
+    echo "[$(date)] Running pg_dump..."
+    PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump \
+      -h "${POSTGRES_HOST}" \
+      -U "${POSTGRES_USER}" \
+      -d "${POSTGRES_DB}" \
+      --format=plain \
+      --no-owner \
+      --no-acl \
+      | gzip > "${BACKUP_FILE}"
+
+    BACKUP_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
+    echo "[$(date)] Backup created: ${BACKUP_FILE} (${BACKUP_SIZE})"
+
+    # Upload to R2
+    echo "[$(date)] Uploading to R2: s3://${BACKUP_BUCKET}/${BACKUP_KEY}"
+    aws s3 cp "${BACKUP_FILE}" "s3://${BACKUP_BUCKET}/${BACKUP_KEY}" \
+      --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+    # Also maintain a 'latest' copy for easy access
+    aws s3 cp "${BACKUP_FILE}" "s3://${BACKUP_BUCKET}/${BACKUP_PREFIX}/latest.sql.gz" \
+      --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+    echo "[$(date)] Upload complete"
+
+    # Cleanup old backups (keep last RETENTION_DAYS days)
+    echo "[$(date)] Cleaning up backups older than ${RETENTION_DAYS} days..."
+    CUTOFF_DATE=$(date -d "-${RETENTION_DAYS} days" +%Y%m%d 2>/dev/null || date -v-${RETENTION_DAYS}d +%Y%m%d)
+
+    aws s3 ls "s3://${BACKUP_BUCKET}/${BACKUP_PREFIX}/" \
+      --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+      | while read -r line; do
+        FILE_DATE=$(echo "$line" | awk '{print $4}' | grep -oE '[0-9]{8}' | head -1 || echo "")
+        FILE_NAME=$(echo "$line" | awk '{print $4}')
+
+        if [[ -n "${FILE_DATE}" && "${FILE_DATE}" < "${CUTOFF_DATE}" && "${FILE_NAME}" != "latest.sql.gz" ]]; then
+          echo "[$(date)] Deleting old backup: ${FILE_NAME}"
+          aws s3 rm "s3://${BACKUP_BUCKET}/${BACKUP_PREFIX}/${FILE_NAME}" \
+            --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+        fi
+      done
+
+    # Cleanup local file
+    rm -f "${BACKUP_FILE}"
+
+    echo "[$(date)] Backup complete: ${BACKUP_KEY}"
+
+  restore.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    # Usage: restore.sh [backup_key]
+    # If no backup_key provided, restores from latest
+
+    BACKUP_BUCKET="${R2_BUCKET:-enclii-backups}"
+    BACKUP_PREFIX="${BACKUP_PREFIX:-postgres}"
+    BACKUP_KEY="${1:-${BACKUP_PREFIX}/latest.sql.gz}"
+    RESTORE_FILE="/tmp/restore.sql.gz"
+
+    echo "[$(date)] Starting PostgreSQL restore..."
+    echo "[$(date)] Downloading backup: s3://${BACKUP_BUCKET}/${BACKUP_KEY}"
+
+    aws s3 cp "s3://${BACKUP_BUCKET}/${BACKUP_KEY}" "${RESTORE_FILE}" \
+      --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+    echo "[$(date)] Restoring database..."
+
+    # Drop existing connections
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql \
+      -h "${POSTGRES_HOST}" \
+      -U "${POSTGRES_USER}" \
+      -d postgres \
+      -c "SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = '${POSTGRES_DB}' AND pid <> pg_backend_pid();" || true
+
+    # Drop and recreate database
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql \
+      -h "${POSTGRES_HOST}" \
+      -U "${POSTGRES_USER}" \
+      -d postgres \
+      -c "DROP DATABASE IF EXISTS ${POSTGRES_DB};"
+
+    PGPASSWORD="${POSTGRES_PASSWORD}" psql \
+      -h "${POSTGRES_HOST}" \
+      -U "${POSTGRES_USER}" \
+      -d postgres \
+      -c "CREATE DATABASE ${POSTGRES_DB};"
+
+    # Restore
+    gunzip -c "${RESTORE_FILE}" | PGPASSWORD="${POSTGRES_PASSWORD}" psql \
+      -h "${POSTGRES_HOST}" \
+      -U "${POSTGRES_USER}" \
+      -d "${POSTGRES_DB}"
+
+    # Cleanup
+    rm -f "${RESTORE_FILE}"
+
+    echo "[$(date)] Restore complete"
+---
+# CronJob for daily backups
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: enclii
+  labels:
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: enclii
+spec:
+  # Run daily at 2 AM UTC
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800  # 30 minute timeout
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres:15
+              command:
+                - /bin/bash
+                - /scripts/backup.sh
+              env:
+                # PostgreSQL connection
+                - name: POSTGRES_HOST
+                  value: postgres.data.svc.cluster.local
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: username
+                - name: POSTGRES_DB
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: database
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-credentials
+                      key: password
+                # R2 configuration
+                - name: R2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: r2-backup-credentials
+                      key: account-id
+                - name: R2_BUCKET
+                  value: enclii-backups
+                - name: BACKUP_PREFIX
+                  value: postgres
+                - name: RETENTION_DAYS
+                  value: "30"
+                # AWS CLI config for R2
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: r2-backup-credentials
+                      key: access-key-id
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: r2-backup-credentials
+                      key: secret-access-key
+                - name: AWS_DEFAULT_REGION
+                  value: auto
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+          volumes:
+            - name: scripts
+              configMap:
+                name: postgres-backup-script
+                defaultMode: 0755
+---
+# Manual backup job template (for ad-hoc backups)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-backup-manual
+  namespace: enclii
+  labels:
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: enclii
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  template:
+    metadata:
+      labels:
+        app: postgres-backup-manual
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: backup
+          image: postgres:15
+          command:
+            - /bin/bash
+            - /scripts/backup.sh
+          env:
+            - name: POSTGRES_HOST
+              value: postgres.data.svc.cluster.local
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: username
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: database
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+            - name: R2_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: account-id
+            - name: R2_BUCKET
+              value: enclii-backups
+            - name: BACKUP_PREFIX
+              value: postgres
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: r2-backup-credentials
+                  key: secret-access-key
+            - name: AWS_DEFAULT_REGION
+              value: auto
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: scripts
+          configMap:
+            name: postgres-backup-script
+            defaultMode: 0755

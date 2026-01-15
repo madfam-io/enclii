@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -65,6 +66,8 @@ func (h *Handler) GitHubWebhook(c *gin.Context) {
 		h.handleGitHubPush(c, ctx, body)
 	case "pull_request":
 		h.handleGitHubPullRequest(c, ctx, body)
+	case "workflow_run":
+		h.handleGitHubWorkflowRun(c, ctx, body)
 	case "ping":
 		// GitHub sends ping event when webhook is first configured
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
@@ -95,14 +98,23 @@ type GitHubPushEvent struct {
 		Email string `json:"email"`
 	} `json:"pusher"`
 	HeadCommit struct {
-		ID        string `json:"id"`
-		Message   string `json:"message"`
-		Timestamp string `json:"timestamp"`
+		ID        string   `json:"id"`
+		Message   string   `json:"message"`
+		Timestamp string   `json:"timestamp"`
+		Added     []string `json:"added"`
+		Modified  []string `json:"modified"`
+		Removed   []string `json:"removed"`
 		Author    struct {
 			Name  string `json:"name"`
 			Email string `json:"email"`
 		} `json:"author"`
 	} `json:"head_commit"`
+	Commits []struct {
+		ID       string   `json:"id"`
+		Added    []string `json:"added"`
+		Modified []string `json:"modified"`
+		Removed  []string `json:"removed"`
+	} `json:"commits"`
 }
 
 // handleGitHubPush processes push events and triggers builds for ALL matching services
@@ -172,23 +184,44 @@ func (h *Handler) handleGitHubPush(c *gin.Context, ctx context.Context, body []b
 		return
 	}
 
+	// Extract all changed files from the push event for monorepo path filtering
+	changedFiles := extractChangedFiles(&event)
+
 	h.logger.Info(ctx, "Triggering builds from GitHub webhook (monorepo)",
 		logging.Int("service_count", len(services)),
+		logging.Int("changed_files", len(changedFiles)),
 		logging.String("repo", event.Repository.FullName),
 		logging.String("git_sha", gitSHA),
 		logging.String("branch", branch),
 		logging.String("pusher", event.Pusher.Name),
 		logging.String("commit_message", truncateString(event.HeadCommit.Message, 100)))
 
-	// Trigger builds for ALL matching services
+	// Trigger builds for matching services (filtered by watch paths if configured)
 	type buildResult struct {
 		Service   string `json:"service"`
 		ReleaseID string `json:"release_id"`
 		Status    string `json:"status"`
+		Skipped   bool   `json:"skipped,omitempty"`
+		Reason    string `json:"reason,omitempty"`
 	}
 	var results []buildResult
+	var skippedCount int
 
 	for _, service := range services {
+		// Check if service should be rebuilt based on changed files and WatchPaths
+		if len(service.WatchPaths) > 0 && !shouldRebuildService(service.WatchPaths, changedFiles) {
+			h.logger.Info(ctx, "Skipping build for service - no relevant file changes",
+				logging.String("service", service.Name),
+				logging.String("watch_paths", strings.Join(service.WatchPaths, ", ")))
+			results = append(results, buildResult{
+				Service: service.Name,
+				Status:  "skipped",
+				Skipped: true,
+				Reason:  "No files changed in watched paths",
+			})
+			skippedCount++
+			continue
+		}
 		// Create release record for this service
 		release := &types.Release{
 			ID:        uuid.New(),
@@ -220,6 +253,28 @@ func (h *Handler) handleGitHubPush(c *gin.Context, ctx context.Context, body []b
 			logging.String("service_name", service.Name),
 			logging.String("release_id", release.ID.String()))
 
+		// Log webhook event to Activity feed for dashboard visibility
+		h.repos.AuditLogs.Log(ctx, &types.AuditLog{
+			ActorID:      nil, // System action (webhook)
+			ActorEmail:   "github-webhook@system.enclii.dev",
+			ActorRole:    types.RoleSystem,
+			Action:       "webhook.build_triggered",
+			ResourceType: "service",
+			ResourceID:   service.ID.String(),
+			ResourceName: service.Name,
+			ProjectID:    &service.ProjectID,
+			Outcome:      "success",
+			Context: map[string]interface{}{
+				"event_type": "push",
+				"commit_sha": gitSHA,
+				"branch":     branch,
+				"repository": event.Repository.FullName,
+				"release_id": release.ID.String(),
+				"pusher":     event.Pusher.Name,
+				"trigger":    "github_push",
+			},
+		})
+
 		results = append(results, buildResult{
 			Service:   service.Name,
 			ReleaseID: release.ID.String(),
@@ -227,13 +282,17 @@ func (h *Handler) handleGitHubPush(c *gin.Context, ctx context.Context, body []b
 		})
 	}
 
+	triggeredCount := len(results) - skippedCount
 	c.JSON(http.StatusOK, gin.H{
-		"message":       fmt.Sprintf("Builds triggered for %d services", len(results)),
-		"repo":          event.Repository.FullName,
-		"git_sha":       gitSHA,
-		"branch":        branch,
-		"builds":        results,
-		"service_count": len(results),
+		"message":         fmt.Sprintf("Builds triggered for %d services (%d skipped)", triggeredCount, skippedCount),
+		"repo":            event.Repository.FullName,
+		"git_sha":         gitSHA,
+		"branch":          branch,
+		"builds":          results,
+		"service_count":   len(results),
+		"triggered_count": triggeredCount,
+		"skipped_count":   skippedCount,
+		"changed_files":   len(changedFiles),
 	})
 }
 
@@ -271,6 +330,107 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// extractChangedFiles extracts all changed file paths from a push event
+// Combines added, modified, and removed files from all commits
+func extractChangedFiles(event *GitHubPushEvent) []string {
+	seen := make(map[string]bool)
+	var files []string
+
+	// Add files from head commit
+	for _, f := range event.HeadCommit.Added {
+		if !seen[f] {
+			seen[f] = true
+			files = append(files, f)
+		}
+	}
+	for _, f := range event.HeadCommit.Modified {
+		if !seen[f] {
+			seen[f] = true
+			files = append(files, f)
+		}
+	}
+	for _, f := range event.HeadCommit.Removed {
+		if !seen[f] {
+			seen[f] = true
+			files = append(files, f)
+		}
+	}
+
+	// Add files from all commits (for push with multiple commits)
+	for _, commit := range event.Commits {
+		for _, f := range commit.Added {
+			if !seen[f] {
+				seen[f] = true
+				files = append(files, f)
+			}
+		}
+		for _, f := range commit.Modified {
+			if !seen[f] {
+				seen[f] = true
+				files = append(files, f)
+			}
+		}
+		for _, f := range commit.Removed {
+			if !seen[f] {
+				seen[f] = true
+				files = append(files, f)
+			}
+		}
+	}
+
+	return files
+}
+
+// shouldRebuildService checks if any changed file matches the service's watch paths
+// Uses glob patterns and prefix matching for flexible path filtering
+func shouldRebuildService(watchPaths []string, changedFiles []string) bool {
+	for _, changed := range changedFiles {
+		for _, watchPath := range watchPaths {
+			if matchWatchPath(changed, watchPath) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// matchWatchPath checks if a file path matches a watch path pattern
+// Supports:
+// - Exact file matches: "package.json"
+// - Directory prefixes: "apps/api/" (matches any file in that directory)
+// - Glob patterns: "*.go", "apps/*/src/**"
+func matchWatchPath(filePath, watchPath string) bool {
+	// Handle glob patterns
+	if strings.Contains(watchPath, "*") {
+		matched, _ := filepath.Match(watchPath, filePath)
+		if matched {
+			return true
+		}
+		// Try matching just the filename for patterns like "*.go"
+		matched, _ = filepath.Match(watchPath, filepath.Base(filePath))
+		if matched {
+			return true
+		}
+		// Try recursive glob matching for ** patterns
+		if strings.Contains(watchPath, "**") {
+			// Convert ** to single * for basic matching and check prefix
+			prefix := strings.Split(watchPath, "**")[0]
+			if strings.HasPrefix(filePath, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Handle directory prefix matching (e.g., "apps/api/")
+	if strings.HasSuffix(watchPath, "/") {
+		return strings.HasPrefix(filePath, watchPath)
+	}
+
+	// Exact match or directory prefix without trailing slash
+	return filePath == watchPath || strings.HasPrefix(filePath, watchPath+"/")
 }
 
 // GitHubPullRequestEvent represents a GitHub pull_request webhook payload
@@ -761,7 +921,11 @@ func (h *Handler) reconcilePreviewDeployment(ctx context.Context, req *previewRe
 	reconcileReq.EnvVars["ENCLII_IS_PREVIEW"] = "true"
 
 	// Schedule reconciliation
-	h.reconciler.ScheduleReconciliation(req.Deployment.ID.String(), 1)
+	if err := h.reconciler.ScheduleReconciliation(req.Deployment.ID.String(), 1); err != nil {
+		h.logger.Warn(context.Background(), "Reconciler queue full, work queued for retry",
+			logging.String("deployment_id", req.Deployment.ID.String()),
+			logging.Error("queue_error", err))
+	}
 
 	return &previewReconcileResult{
 		Success: true,
@@ -793,11 +957,191 @@ func (h *Handler) postGitHubPRComment(service *types.Service, preview *types.Pre
 		logging.Int("pr_number", preview.PRNumber),
 		logging.String("preview_url", preview.PreviewURL))
 
-	// Note: GitHub API integration would go here
-	// This would use the GitHub API client to post a comment
-	// For now, log the intent - full implementation would use go-github
-	h.logger.Info(ctx, "GitHub PR comment would be posted here",
-		logging.String("comment", fmt.Sprintf("🚀 Preview deployed: %s", preview.PreviewURL)))
+	// Build the comment body with useful information
+	commentMarker := "<!-- enclii-preview-comment -->"
+	commentBody := fmt.Sprintf(`%s
+## 🚀 Preview Deployment
+
+| Environment | Status |
+|------------|--------|
+| **Preview URL** | [%s](%s) |
+| **Branch** | %s |
+| **Commit** | %s |
+
+---
+
+<details>
+<summary>📋 Preview Details</summary>
+
+- **Service**: %s
+- **Created**: %s
+- **Auto-sleep**: %d minutes after inactivity
+
+</details>
+
+*Deployed with [Enclii](https://enclii.dev)*`,
+		commentMarker,
+		preview.PreviewURL,
+		preview.PreviewURL,
+		preview.PRBranch,
+		preview.CommitSHA[:7],
+		service.Name,
+		preview.CreatedAt.Format("2006-01-02 15:04 UTC"),
+		preview.AutoSleepAfter,
+	)
+
+	// Check if we already have a comment on this PR (update it instead of creating new)
+	existingComment, err := h.findExistingPreviewComment(ctx, owner, repo, preview.PRNumber, commentMarker)
+	if err != nil {
+		h.logger.Warn(ctx, "Failed to check for existing comment",
+			logging.Error("error", err))
+	}
+
+	if existingComment != nil {
+		// Update existing comment
+		if err := h.updateGitHubComment(ctx, owner, repo, existingComment.ID, commentBody); err != nil {
+			h.logger.Error(ctx, "Failed to update GitHub PR comment",
+				logging.Int("pr_number", preview.PRNumber),
+				logging.Error("error", err))
+			return
+		}
+		h.logger.Info(ctx, "Updated existing GitHub PR comment",
+			logging.Int("pr_number", preview.PRNumber),
+			logging.String("comment_id", fmt.Sprintf("%d", existingComment.ID)))
+	} else {
+		// Create new comment
+		commentID, err := h.createGitHubComment(ctx, owner, repo, preview.PRNumber, commentBody)
+		if err != nil {
+			h.logger.Error(ctx, "Failed to create GitHub PR comment",
+				logging.Int("pr_number", preview.PRNumber),
+				logging.Error("error", err))
+			return
+		}
+		h.logger.Info(ctx, "Created GitHub PR comment",
+			logging.Int("pr_number", preview.PRNumber),
+			logging.String("comment_id", fmt.Sprintf("%d", commentID)))
+	}
+}
+
+// existingGitHubComment represents a GitHub comment for lookup
+type existingGitHubComment struct {
+	ID int64
+}
+
+// findExistingPreviewComment checks if we already posted a preview comment
+func (h *Handler) findExistingPreviewComment(ctx context.Context, owner, repo string, prNumber int, marker string) (*existingGitHubComment, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%d/comments?per_page=100", owner, repo, prNumber)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+h.config.GitHubToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API error: %d - %s", resp.StatusCode, string(body))
+	}
+
+	var comments []struct {
+		ID   int64  `json:"id"`
+		Body string `json:"body"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
+		return nil, err
+	}
+
+	for _, c := range comments {
+		if strings.Contains(c.Body, marker) {
+			return &existingGitHubComment{ID: c.ID}, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// createGitHubComment creates a new comment on a GitHub PR
+func (h *Handler) createGitHubComment(ctx context.Context, owner, repo string, prNumber int, body string) (int64, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/%d/comments", owner, repo, prNumber)
+
+	payload := struct {
+		Body string `json:"body"`
+	}{Body: body}
+
+	payloadBytes, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(string(payloadBytes)))
+	if err != nil {
+		return 0, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+h.config.GitHubToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("GitHub API error: %d - %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, err
+	}
+
+	return result.ID, nil
+}
+
+// updateGitHubComment updates an existing comment on a GitHub PR
+func (h *Handler) updateGitHubComment(ctx context.Context, owner, repo string, commentID int64, body string) error {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/issues/comments/%d", owner, repo, commentID)
+
+	payload := struct {
+		Body string `json:"body"`
+	}{Body: body}
+
+	payloadBytes, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, "PATCH", url, strings.NewReader(string(payloadBytes)))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+h.config.GitHubToken)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("GitHub API error: %d - %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
 }
 
 // parseGitHubRepo extracts owner and repo from a GitHub URL
@@ -882,4 +1226,179 @@ func (h *Handler) deletePreviewIngress(ctx context.Context, namespace, serviceNa
 // itoa converts an int to string
 func itoa(i int) string {
 	return fmt.Sprintf("%d", i)
+}
+
+// GitHubWorkflowRunEvent represents a GitHub workflow_run webhook payload
+type GitHubWorkflowRunEvent struct {
+	Action      string `json:"action"` // requested, in_progress, completed
+	WorkflowRun struct {
+		ID           int64  `json:"id"`
+		Name         string `json:"name"`
+		WorkflowID   int64  `json:"workflow_id"`
+		RunNumber    int    `json:"run_number"`
+		Status       string `json:"status"`      // queued, in_progress, completed
+		Conclusion   string `json:"conclusion"`  // success, failure, cancelled, skipped, etc.
+		HTMLURL      string `json:"html_url"`
+		Event        string `json:"event"`       // push, pull_request, etc.
+		HeadBranch   string `json:"head_branch"`
+		HeadSHA      string `json:"head_sha"`
+		RunStartedAt string `json:"run_started_at"`
+		UpdatedAt    string `json:"updated_at"`
+		Actor        struct {
+			Login string `json:"login"`
+		} `json:"actor"`
+	} `json:"workflow_run"`
+	Workflow struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+		Path string `json:"path"`
+	} `json:"workflow"`
+	Repository struct {
+		ID       int64  `json:"id"`
+		Name     string `json:"name"`
+		FullName string `json:"full_name"`
+		CloneURL string `json:"clone_url"`
+		SSHURL   string `json:"ssh_url"`
+		HTMLURL  string `json:"html_url"`
+	} `json:"repository"`
+	Sender struct {
+		Login string `json:"login"`
+	} `json:"sender"`
+}
+
+// handleGitHubWorkflowRun processes workflow_run events for CI status tracking
+func (h *Handler) handleGitHubWorkflowRun(c *gin.Context, ctx context.Context, body []byte) {
+	var event GitHubWorkflowRunEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		h.logger.Error(ctx, "Failed to parse workflow_run event", logging.Error("error", err))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid workflow_run event payload"})
+		return
+	}
+
+	h.logger.Info(ctx, "Processing workflow_run event",
+		logging.String("action", event.Action),
+		logging.String("workflow_name", event.WorkflowRun.Name),
+		logging.String("run_id", fmt.Sprintf("%d", event.WorkflowRun.ID)),
+		logging.String("status", event.WorkflowRun.Status),
+		logging.String("conclusion", event.WorkflowRun.Conclusion),
+		logging.String("repo", event.Repository.FullName),
+		logging.String("commit_sha", event.WorkflowRun.HeadSHA))
+
+	// Find ALL services matching this git repo
+	var services []*types.Service
+	var err error
+
+	for _, repoURL := range []string{
+		event.Repository.CloneURL,
+		event.Repository.HTMLURL,
+		event.Repository.SSHURL,
+	} {
+		services, err = h.repos.Services.ListByGitRepo(repoURL)
+		if err == nil && len(services) > 0 {
+			break
+		}
+	}
+
+	if len(services) == 0 {
+		h.logger.Info(ctx, "No services found for repository (workflow_run)",
+			logging.String("repo", event.Repository.FullName))
+		c.JSON(http.StatusOK, gin.H{
+			"message": "No services registered for this repository",
+			"repo":    event.Repository.FullName,
+		})
+		return
+	}
+
+	// Map GitHub status/action to our CIRunStatus
+	var status types.CIRunStatus
+	switch event.Action {
+	case "requested":
+		status = types.CIRunStatusQueued
+	case "in_progress":
+		status = types.CIRunStatusInProgress
+	case "completed":
+		status = types.CIRunStatusCompleted
+	default:
+		// Acknowledge but don't process unknown actions
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Workflow run action not handled",
+			"action":  event.Action,
+		})
+		return
+	}
+
+	// Map GitHub conclusion to our CIRunConclusion
+	var conclusion *types.CIRunConclusion
+	if event.WorkflowRun.Conclusion != "" {
+		c := types.CIRunConclusion(event.WorkflowRun.Conclusion)
+		conclusion = &c
+	}
+
+	// Parse timestamps
+	var startedAt, completedAt *time.Time
+	if event.WorkflowRun.RunStartedAt != "" {
+		if t, err := time.Parse(time.RFC3339, event.WorkflowRun.RunStartedAt); err == nil {
+			startedAt = &t
+		}
+	}
+	if status == types.CIRunStatusCompleted && event.WorkflowRun.UpdatedAt != "" {
+		if t, err := time.Parse(time.RFC3339, event.WorkflowRun.UpdatedAt); err == nil {
+			completedAt = &t
+		}
+	}
+
+	// Create or update CI run record for each matching service
+	var results []map[string]any
+	for _, service := range services {
+		ciRun := &types.CIRun{
+			ServiceID:    service.ID,
+			CommitSHA:    event.WorkflowRun.HeadSHA,
+			WorkflowName: event.WorkflowRun.Name,
+			WorkflowID:   event.WorkflowRun.WorkflowID,
+			RunID:        event.WorkflowRun.ID,
+			RunNumber:    event.WorkflowRun.RunNumber,
+			Status:       status,
+			Conclusion:   conclusion,
+			HTMLURL:      event.WorkflowRun.HTMLURL,
+			Branch:       event.WorkflowRun.HeadBranch,
+			EventType:    event.WorkflowRun.Event,
+			Actor:        event.WorkflowRun.Actor.Login,
+			StartedAt:    startedAt,
+			CompletedAt:  completedAt,
+		}
+
+		if err := h.repos.CIRuns.Upsert(ctx, ciRun); err != nil {
+			h.logger.Error(ctx, "Failed to upsert CI run",
+				logging.String("service", service.Name),
+				logging.String("run_id", fmt.Sprintf("%d", event.WorkflowRun.ID)),
+				logging.Error("db_error", err))
+			results = append(results, map[string]any{
+				"service": service.Name,
+				"status":  "failed: " + err.Error(),
+			})
+			continue
+		}
+
+		h.logger.Info(ctx, "CI run status updated",
+			logging.String("service", service.Name),
+			logging.String("run_id", fmt.Sprintf("%d", event.WorkflowRun.ID)),
+			logging.String("status", string(status)))
+
+		results = append(results, map[string]any{
+			"service":  service.Name,
+			"run_id":   event.WorkflowRun.ID,
+			"status":   string(status),
+			"workflow": event.WorkflowRun.Name,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":       fmt.Sprintf("Workflow run status processed for %d services", len(results)),
+		"action":        event.Action,
+		"workflow_name": event.WorkflowRun.Name,
+		"run_id":        event.WorkflowRun.ID,
+		"status":        string(status),
+		"conclusion":    event.WorkflowRun.Conclusion,
+		"services":      results,
+	})
 }

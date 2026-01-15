@@ -2,9 +2,30 @@ package db
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/google/uuid"
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
+)
+
+// DBTX is an interface that both *sql.DB and *sql.Tx satisfy.
+// This allows repositories to work with either a direct database connection
+// or within a transaction context.
+type DBTX interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	// Note: Exec, Query, QueryRow without context are also available on both
+	// but we prefer context-aware versions for production use
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
+// Ensure *sql.DB and *sql.Tx implement DBTX at compile time
+var (
+	_ DBTX = (*sql.DB)(nil)
+	_ DBTX = (*sql.Tx)(nil)
 )
 
 // Repository interfaces define standard CRUD operations for each entity

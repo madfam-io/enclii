@@ -16,12 +16,17 @@ import (
 
 // APITokenRepository handles API token CRUD operations
 type APITokenRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
 // NewAPITokenRepository creates a new API token repository
-func NewAPITokenRepository(db *sql.DB) *APITokenRepository {
+func NewAPITokenRepository(db DBTX) *APITokenRepository {
 	return &APITokenRepository{db: db}
+}
+
+// NewAPITokenRepositoryWithTx creates a repository using a transaction
+func NewAPITokenRepositoryWithTx(tx DBTX) *APITokenRepository {
+	return &APITokenRepository{db: tx}
 }
 
 // generateAPIToken creates a cryptographically secure random API token

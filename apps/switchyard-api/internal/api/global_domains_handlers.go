@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
@@ -149,4 +150,86 @@ func (h *Handler) GetDomainStats(c *gin.Context) {
 		"platform_domains": platformDomains,
 		"custom_domains":   customDomains,
 	})
+}
+
+// SyncDomainsFromCloudflare syncs all domain statuses from Cloudflare
+// POST /v1/domains/sync
+func (h *Handler) SyncDomainsFromCloudflare(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Check if domain sync service is configured
+	if h.domainSyncService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Cloudflare integration not configured",
+		})
+		return
+	}
+
+	// Sync all domains
+	result, err := h.domainSyncService.SyncAllDomains(ctx)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to sync domains from Cloudflare", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sync domains"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+// SyncDomainFromCloudflare syncs a single domain's status from Cloudflare
+// POST /v1/domains/:domain_id/sync
+func (h *Handler) SyncDomainFromCloudflare(c *gin.Context) {
+	ctx := c.Request.Context()
+	domainID := c.Param("domain_id")
+
+	// Check if domain sync service is configured
+	if h.domainSyncService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Cloudflare integration not configured",
+		})
+		return
+	}
+
+	// Parse domain ID
+	id, err := uuid.Parse(domainID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid domain ID"})
+		return
+	}
+
+	// Sync the domain
+	result, err := h.domainSyncService.SyncDomain(ctx, id)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to sync domain from Cloudflare",
+			logging.String("domain_id", domainID),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sync domain"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+// GetTunnelStatus returns the current Cloudflare tunnel status
+// GET /v1/tunnel/status
+func (h *Handler) GetTunnelStatus(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// Check if domain sync service is configured
+	if h.domainSyncService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Cloudflare integration not configured",
+		})
+		return
+	}
+
+	// Get tunnel status
+	status, err := h.domainSyncService.GetTunnelStatus(ctx)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get tunnel status", logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get tunnel status"})
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
 }

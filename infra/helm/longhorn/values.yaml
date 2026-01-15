@@ -1,0 +1,75 @@
+# Longhorn CSI Storage - Multi-Node Replicated Storage
+# Install: helm install longhorn longhorn/longhorn -n longhorn-system --create-namespace -f values.yaml
+#
+# Prerequisites:
+# - helm repo add longhorn https://charts.longhorn.io
+# - kubectl create namespace longhorn-system
+#
+# After install:
+# - PVCs using 'longhorn-replicated' StorageClass will replicate across nodes
+# - Dashboard available via: kubectl port-forward -n longhorn-system svc/longhorn-frontend 8080:80
+
+defaultSettings:
+  # Replicate data across 2 nodes for HA (set to 3 when >3 nodes available)
+  defaultReplicaCount: 2
+
+  # Storage allocation settings
+  storageOverProvisioningPercentage: 100
+  storageMinimalAvailablePercentage: 15
+
+  # Backup settings (configure when R2 is ready)
+  backupTarget: ""
+  backupTargetCredentialSecret: ""
+
+  # Performance tuning for SSD/NVMe
+  guaranteedEngineManagerCPU: 12
+  guaranteedReplicaManagerCPU: 12
+
+  # Auto-salvage replicas when majority are available
+  autoSalvage: true
+
+  # Disable auto-deletion of workload pods on volume degradation
+  # (allows time for manual intervention)
+  autoDeletePodWhenVolumeDetachedUnexpectedly: false
+
+  # Node drain policy - allow pods to continue during maintenance
+  nodeDrainPolicy: always-allow
+
+  # Replica auto-balance across nodes
+  replicaAutoBalance: best-effort
+
+persistence:
+  # Default replica count for dynamic provisioning
+  defaultClassReplicaCount: 2
+
+  # Reclaim policy - Retain data on PVC deletion (safer for production)
+  reclaimPolicy: Retain
+
+ingress:
+  enabled: false  # Use kubectl port-forward for dashboard access
+
+# Resource limits for Longhorn components
+longhornManager:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+longhornDriver:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Tolerate GPU taints (Longhorn needs to run on all nodes)
+longhornManager:
+  tolerations:
+    - key: "nvidia.com/gpu"
+      operator: "Exists"
+      effect: "NoSchedule"

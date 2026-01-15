@@ -253,13 +253,19 @@ func (j *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 		return nil, fmt.Errorf("invalid token type")
 	}
 
-	// SECURITY FIX: Check if session has been revoked (logout, security event, etc.)
+	// SECURITY: Check if session has been revoked (logout, security event, etc.)
+	// Fail-closed: if we can't verify session status, deny access for security
 	if j.cache != nil && claims.SessionID != "" {
 		revoked, err := j.cache.IsSessionRevoked(context.Background(), claims.SessionID)
 		if err != nil {
-			logrus.Warnf("Failed to check session revocation: %v", err)
-			// Don't fail validation on cache errors to prevent DoS, but log it
-		} else if revoked {
+			logrus.WithFields(logrus.Fields{
+				"session_id": claims.SessionID,
+				"user_id":    claims.UserID,
+				"error":      err.Error(),
+			}).Error("Failed to check session revocation - denying access (fail-closed)")
+			return nil, fmt.Errorf("unable to verify session status")
+		}
+		if revoked {
 			return nil, fmt.Errorf("session has been revoked")
 		}
 	}

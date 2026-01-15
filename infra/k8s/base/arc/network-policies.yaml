@@ -1,0 +1,132 @@
+# Network Policies for ARC
+# These policies restrict network access for security
+---
+# ARC Controller egress policy
+# Controller needs access to GitHub API and Kubernetes API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-controller-egress
+  namespace: arc-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: gha-rs-controller
+  policyTypes:
+    - Egress
+  egress:
+    # GitHub API (api.github.com)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+    # Kubernetes API server
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# ARC Controller ingress policy
+# Only allow Prometheus scraping and webhook traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-controller-ingress
+  namespace: arc-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: gha-rs-controller
+  policyTypes:
+    - Ingress
+  ingress:
+    # Prometheus metrics scraping
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Webhook from cloudflared (for scale-from-zero)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cloudflare
+      ports:
+        - protocol: TCP
+          port: 8443
+---
+# Runner egress policy
+# Runners need broad egress for builds (npm, Docker Hub, GitHub, etc.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-runner-egress
+  namespace: arc-runners
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: runner
+  policyTypes:
+    - Egress
+  egress:
+    # Allow all HTTPS egress for builds
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80
+    # Git SSH (for private repos)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 22
+    # Internal cluster communication (for pushing to internal registry, etc.)
+    - to:
+        - namespaceSelector: {}
+    # DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Runner ingress policy
+# Runners don't accept inbound connections
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: arc-runner-ingress-deny-all
+  namespace: arc-runners
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: runner
+  policyTypes:
+    - Ingress
+  ingress: []  # Deny all ingress

@@ -7,8 +7,8 @@
 ## Completed Steps
 
 ### 1. OAuth Client Created in Janua Production
-- **Client ID**: `jnc_l_Q6z3Q07H2jEOdwrV9OxbGOWFjZojIq`
-- **Client Secret**: `jns_4mZiokDmPjT78ZwuoyLanIdW7vz1v1xy1aBbQ_o2G_xZWL1amozmVmXtl28fYcoM`
+- **Client ID**: `<GET_FROM_JANUA_ADMIN_OR_SECRETS_MANAGER>`
+- **Client Secret**: `<GET_FROM_JANUA_ADMIN_OR_SECRETS_MANAGER>` (NEVER commit actual secrets)
 - **Redirect URIs**:
   - `https://api.enclii.dev/v1/auth/callback`
   - `https://app.enclii.dev/auth/callback`
@@ -38,9 +38,10 @@ SSH into the production server and run:
 
 ```bash
 # Create the OIDC credentials secret
+# Get credentials from Janua admin panel or secrets manager
 kubectl -n enclii create secret generic enclii-oidc-credentials \
-  --from-literal=client-id=jnc_l_Q6z3Q07H2jEOdwrV9OxbGOWFjZojIq \
-  --from-literal=client-secret=jns_4mZiokDmPjT78ZwuoyLanIdW7vz1v1xy1aBbQ_o2G_xZWL1amozmVmXtl28fYcoM \
+  --from-literal=client-id=$JANUA_CLIENT_ID \
+  --from-literal=client-secret=$JANUA_CLIENT_SECRET \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 

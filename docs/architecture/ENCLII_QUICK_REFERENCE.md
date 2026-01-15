@@ -1,14 +1,16 @@
 # ENCLII QUICK REFERENCE GUIDE
 
+> ⚠️ **Note (Jan 2026):** This guide was written during planning. Current infrastructure: single Hetzner AX41-NVME (~$55/mo), self-hosted PostgreSQL/Redis.
+
 ## Platform Status at a Glance
 
 | Metric | Value |
 |--------|-------|
-| **Production Readiness** | 70% (75/100 score) |
-| **Infrastructure Cost** | $100/month |
-| **vs Railway Savings** | 95% ($127,200 over 5 years) |
-| **Services in Dogfooding** | 22 ready |
-| **Timeline to GA** | 6-8 weeks |
+| **Production Readiness** | 95% - Core services live at enclii.dev |
+| **Infrastructure Cost** | ~$55/month |
+| **vs Railway Savings** | 97% ($129,900 over 5 years) |
+| **Services Deployed** | API, UI, Auth, Docs live |
+| **GitOps** | ArgoCD App-of-Apps operational |
 | **Database Tables** | 8 implemented, 6 planned |
 | **API Endpoints** | 25 implemented, 8 planned |
 | **Test Coverage** | 11 security tests (100% middleware) |
@@ -81,10 +83,10 @@
 
 ### 🔴 Not Yet Implemented
 
-**Critical for Production:**
-- Cloudflare Tunnel auto-provisioning (3 days work)
-- R2 object storage integration (2 days work)
-- Redis Sentinel HA (1 day work)
+**Remaining Items:**
+- Status page (status.enclii.dev)
+- Landing page (enclii.dev)
+- Load testing and final security audit
 
 **Important:**
 - Build pipeline orchestration (Roundhouse component)
@@ -291,25 +293,25 @@ Hetzner Cloud - CPX31 (3x)
 ```
 k3s (Lightweight Kubernetes)
 ├─ Single cluster (v1)
-├─ 3-node HA setup
+├─ Single-node (ready for multi-node)
 ├─ Managed by k3s service
 └─ Single region
 ```
 
 ### Database
 ```
-Ubicloud PostgreSQL
-├─ Managed HA
-├─ Automated backups
+Self-hosted PostgreSQL
+├─ In-cluster deployment
+├─ Daily backups to R2
 ├─ Monitoring included
-└─ $50/month
+└─ $0/month
 ```
 
 ### Caching
 ```
-Redis Sentinel
-├─ 3-replica HA setup
-├─ Automatic failover
+Single Redis Instance
+├─ In-cluster deployment
+├─ Sentinel config staged for multi-node
 ├─ Persistence (AOF + RDB)
 └─ Self-hosted on Hetzner
 ```
@@ -529,19 +531,20 @@ SLA: P95 < 2 minutes
 
 ### Monthly Operating Cost
 ```
-Hetzner Servers         $45
-Ubicloud PostgreSQL     $50
+Hetzner AX41-NVME       $50
+Self-hosted PostgreSQL   $0
+Self-hosted Redis        $0
 Cloudflare R2            $5
 Cloudflare Tunnel        $0
 Cloudflare for SaaS      $0
 ─────────────────────────
-TOTAL                  $100/month
+TOTAL                  ~$55/month
 ```
 
 ### Comparison
 | Platform | Cost/Month | Notes |
 |----------|-----------|-------|
-| **Enclii** | $100 | Self-hosted |
+| **Enclii** | ~$55 | Self-hosted |
 | Railway | $2,000+ | SaaS |
 | Auth0 | $220+ | SaaS |
 | DigitalOcean | $341+ | SaaS alternative |

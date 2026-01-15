@@ -26,16 +26,9 @@ metadata:
     app.kubernetes.io/component: ingress
 
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cloudflared-token
-  namespace: cloudflare-tunnel
-type: Opaque
-stringData:
-  # Get this token from: cloudflared tunnel token <tunnel-name>
-  # Or from Cloudflare Zero Trust dashboard → Networks → Tunnels → Configure → Token
-  token: "${CLOUDFLARED_TUNNEL_TOKEN}"
+# Note: Secret 'cloudflared-enclii-token' managed separately (contains actual tunnel token)
+# The token is obtained from: cloudflared tunnel token <tunnel-name>
+# Or from Cloudflare Zero Trust dashboard → Networks → Tunnels → Configure → Token
 
 ---
 apiVersion: v1
@@ -78,13 +71,13 @@ data:
 
       # Landing Page (apex domain)
       - hostname: enclii.dev
-        service: http://landing-page.enclii.svc.cluster.local:4204
+        service: http://landing-page.enclii.svc.cluster.local:80
         originRequest:
           httpHostHeader: enclii.dev
 
       # Landing Page (www subdomain)
       - hostname: www.enclii.dev
-        service: http://landing-page.enclii.svc.cluster.local:4204
+        service: http://landing-page.enclii.svc.cluster.local:80
         originRequest:
           httpHostHeader: www.enclii.dev
 
@@ -93,6 +86,57 @@ data:
         service: http://docs-site.enclii.svc.cluster.local:80
         originRequest:
           httpHostHeader: docs.enclii.dev
+
+      # ============================================
+      # MADFAM Automation Services (Enclii-managed)
+      # ============================================
+
+      # ClaudeCodeUI - Auto-Claude Agents Web Interface
+      # Deployed via Enclii platform (namespace: enclii-madfam-automation-production)
+      - hostname: agents.madfam.io
+        service: http://claudecodeui.enclii-madfam-automation-production.svc.cluster.local:80
+        originRequest:
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          httpHostHeader: agents.madfam.io
+
+      # ============================================
+      # GitOps / Platform Services (namespace: argocd)
+      # ============================================
+
+      # ArgoCD UI (GitOps Dashboard)
+      - hostname: argocd.enclii.dev
+        service: https://argocd-server.argocd.svc.cluster.local:443
+        originRequest:
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          httpHostHeader: argocd.enclii.dev
+          noTLSVerify: true  # ArgoCD uses self-signed cert internally
+
+      # ============================================
+      # Monitoring Services (namespace: monitoring)
+      # ============================================
+
+      # Grafana (Dashboards)
+      - hostname: grafana.enclii.dev
+        service: http://grafana.monitoring.svc.cluster.local:3000
+        originRequest:
+          connectTimeout: 10s
+          httpHostHeader: grafana.enclii.dev
+
+      # Prometheus (Metrics - restrict access in production)
+      - hostname: prometheus.enclii.dev
+        service: http://prometheus.monitoring.svc.cluster.local:9090
+        originRequest:
+          connectTimeout: 10s
+          httpHostHeader: prometheus.enclii.dev
+
+      # AlertManager (Alerts - restrict access in production)
+      - hostname: alertmanager.enclii.dev
+        service: http://alertmanager.monitoring.svc.cluster.local:9093
+        originRequest:
+          connectTimeout: 10s
+          httpHostHeader: alertmanager.enclii.dev
 
       # ============================================
       # Janua Identity Services (namespace: janua)
@@ -184,7 +228,7 @@ spec:
             - name: TUNNEL_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: cloudflared-token
+                  name: cloudflared-enclii-token
                   key: token
           ports:
             - containerPort: 2000

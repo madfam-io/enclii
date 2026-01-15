@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -77,6 +78,12 @@ type Config struct {
 	RedisHost     string
 	RedisPort     int
 	RedisPassword string
+
+	// Cloudflare Integration (for domain status sync)
+	CloudflareAPIToken  string
+	CloudflareAccountID string
+	CloudflareZoneID    string
+	CloudflareTunnelID  string
 }
 
 func Load() (*Config, error) {
@@ -90,7 +97,10 @@ func Load() (*Config, error) {
 	// Port 4200 per PORT_ALLOCATION.md in solarpunk-foundry (Enclii block: 4200-4299)
 	viper.SetDefault("environment", "development")
 	viper.SetDefault("port", "4200")
-	viper.SetDefault("database-url", "postgres://janua:janua_dev@localhost:5432/enclii_dev?sslmode=disable")
+	// SEC-001: No hardcoded credentials - DATABASE_URL must be provided via environment
+	// For development, set: ENCLII_DATABASE_URL=postgres://user:pass@localhost:5432/enclii_dev?sslmode=disable
+	// For production, use: ENCLII_DATABASE_URL=postgres://user:pass@host:5432/enclii?sslmode=require
+	viper.SetDefault("database-url", "")
 	viper.SetDefault("log-level", "info")
 	viper.SetDefault("registry", "ghcr.io/madfam-org")
 	viper.SetDefault("registry-username", "")
@@ -113,17 +123,21 @@ func Load() (*Config, error) {
 	viper.SetDefault("build-timeout", 1800) // 30 minutes
 	viper.SetDefault("build-work-dir", "/tmp/enclii-builds")
 	viper.SetDefault("build-cache-dir", "/var/cache/enclii-buildpacks")
-	viper.SetDefault("build-mode", "in-process")                 // "in-process" or "roundhouse"
-	viper.SetDefault("roundhouse-url", "http://roundhouse:8080") // Roundhouse worker URL
-	viper.SetDefault("roundhouse-api-key", "")                   // API key for roundhouse
-	viper.SetDefault("self-url", "http://switchyard-api:4200")   // This service's URL for callbacks
-	viper.SetDefault("github-webhook-secret", "")                // Webhook disabled until secret configured
+	viper.SetDefault("build-mode", "in-process")               // "in-process" or "roundhouse"
+	viper.SetDefault("roundhouse-url", "http://roundhouse")    // Roundhouse worker URL (K8s service on port 80)
+	viper.SetDefault("roundhouse-api-key", "")                 // API key for roundhouse
+	viper.SetDefault("self-url", "http://switchyard-api:4200") // This service's URL for callbacks
+	viper.SetDefault("github-webhook-secret", "")              // Webhook disabled until secret configured
 	viper.SetDefault("compliance-webhooks-enabled", false)
 	viper.SetDefault("secret-rotation-enabled", false)
 	viper.SetDefault("vault-poll-interval", 60) // Poll every 60 seconds
 	viper.SetDefault("redis-host", "localhost")
 	viper.SetDefault("redis-port", 6379)
 	viper.SetDefault("redis-password", "")
+	viper.SetDefault("cloudflare-api-token", "")
+	viper.SetDefault("cloudflare-account-id", "")
+	viper.SetDefault("cloudflare-zone-id", "")
+	viper.SetDefault("cloudflare-tunnel-id", "")
 
 	// Parse log level
 	logLevelStr := viper.GetString("log-level")
@@ -175,6 +189,23 @@ func Load() (*Config, error) {
 		RedisHost:                 viper.GetString("redis-host"),
 		RedisPort:                 viper.GetInt("redis-port"),
 		RedisPassword:             viper.GetString("redis-password"),
+		CloudflareAPIToken:        viper.GetString("cloudflare-api-token"),
+		CloudflareAccountID:       viper.GetString("cloudflare-account-id"),
+		CloudflareZoneID:          viper.GetString("cloudflare-zone-id"),
+		CloudflareTunnelID:        viper.GetString("cloudflare-tunnel-id"),
+	}
+
+	// SEC-001: Validate required configuration
+	if config.DatabaseURL == "" {
+		return nil, fmt.Errorf("ENCLII_DATABASE_URL is required. Set it in your environment:\n" +
+			"  Development: export ENCLII_DATABASE_URL='postgres://user:pass@localhost:5432/enclii_dev?sslmode=disable'\n" +
+			"  Production:  export ENCLII_DATABASE_URL='postgres://user:pass@host:5432/enclii?sslmode=require'")
+	}
+
+	// SEC-002: Warn about insecure SSL mode in production
+	if config.Environment == "production" && strings.Contains(config.DatabaseURL, "sslmode=disable") {
+		logrus.Warn("SEC-002: Database SSL is disabled in production. This is a security risk. " +
+			"Update DATABASE_URL to use sslmode=require or sslmode=verify-full")
 	}
 
 	return config, nil

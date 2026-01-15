@@ -157,7 +157,7 @@ curl https://app.enclii.dev
 | For SaaS | 100 domains free | $0 |
 | **Subtotal** | | **$0** |
 
-### Total: ~$34/month (starter) to ~$100/month (production)
+### Total: ~$55/month (current single-node production)
 
 ---
 

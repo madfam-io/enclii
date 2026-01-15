@@ -89,11 +89,14 @@ func (h *Handler) triggerBuildAsync(service *types.Service, release *types.Relea
 
 // enqueueToRoundhouse sends a build job to the Roundhouse worker queue
 func (h *Handler) enqueueToRoundhouse(ctx context.Context, service *types.Service, release *types.Release, gitSHA, gitBranch string) {
+	// Debug: Log the service's build config to verify context is populated
 	h.logger.Info(ctx, "Enqueueing build to Roundhouse",
 		logging.String("service_id", service.ID.String()),
 		logging.String("service_name", service.Name),
 		logging.String("release_id", release.ID.String()),
-		logging.String("git_sha", gitSHA))
+		logging.String("git_sha", gitSHA),
+		logging.String("build_config_context", service.BuildConfig.Context),
+		logging.String("build_config_dockerfile", service.BuildConfig.Dockerfile))
 
 	// Get project for context
 	project, err := h.repos.Projects.GetByID(ctx, service.ProjectID)
@@ -345,7 +348,11 @@ func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service,
 	}
 
 	// Schedule deployment with reconciler (high priority)
-	h.reconciler.ScheduleReconciliation(deployment.ID.String(), 1)
+	if err := h.reconciler.ScheduleReconciliation(deployment.ID.String(), 1); err != nil {
+		h.logger.Warn(ctx, "Reconciler queue full, work queued for retry",
+			logging.String("deployment_id", deployment.ID.String()),
+			logging.Error("queue_error", err))
+	}
 
 	h.logger.Info(ctx, "Auto-deploy scheduled successfully",
 		logging.String("deployment_id", deployment.ID.String()),

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { apiGet } from '@/lib/api';
+import { apiGet, apiPost } from '@/lib/api';
 import Link from 'next/link';
 
 interface CustomDomain {
@@ -48,6 +48,7 @@ export default function DomainsPage() {
   const [domains, setDomains] = useState<CustomDomain[]>([]);
   const [stats, setStats] = useState<DomainStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [verifiedFilter, setVerifiedFilter] = useState<string>('');
@@ -98,6 +99,22 @@ export default function DomainsPage() {
       console.error('Failed to fetch domain stats:', err);
     }
   }, []);
+
+  const syncFromCloudflare = useCallback(async () => {
+    try {
+      setSyncing(true);
+      setError(null);
+      await apiPost('/v1/domains/sync', {});
+      // Refresh data after sync
+      await fetchDomains(true);
+      await fetchStats();
+    } catch (err) {
+      console.error('Failed to sync from Cloudflare:', err);
+      setError(err instanceof Error ? err.message : 'Failed to sync from Cloudflare');
+    } finally {
+      setSyncing(false);
+    }
+  }, [fetchDomains, fetchStats]);
 
   useEffect(() => {
     fetchDomains(true);
@@ -152,12 +169,31 @@ export default function DomainsPage() {
             Manage all custom domains across your services
           </p>
         </div>
-        <Button variant="outline" onClick={() => { fetchDomains(true); fetchStats(); }}>
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { fetchDomains(true); fetchStats(); }} disabled={loading}>
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </Button>
+          <Button onClick={syncFromCloudflare} disabled={syncing}>
+            {syncing ? (
+              <>
+                <svg className="w-4 h-4 mr-2 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Syncing...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+                Sync from Cloudflare
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

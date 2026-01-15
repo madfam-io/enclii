@@ -11,11 +11,16 @@ import (
 
 // RouteRepository handles database operations for routes
 type RouteRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewRouteRepository(db *sql.DB) *RouteRepository {
+func NewRouteRepository(db DBTX) *RouteRepository {
 	return &RouteRepository{db: db}
+}
+
+// NewRouteRepositoryWithTx creates a repository using a transaction
+func NewRouteRepositoryWithTx(tx DBTX) *RouteRepository {
+	return &RouteRepository{db: tx}
 }
 
 // Create adds a new route

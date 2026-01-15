@@ -69,10 +69,14 @@ func main() {
 		InternalAPIKey: cfg.InternalAPIKey,
 	}, logger)
 
-	// Start server
-	addr := ":" + cfg.APIPort
+	// Start server - prefer PORT (set by Enclii platform) over API_PORT
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = cfg.APIPort
+	}
+	addr := ":" + port
 	logger.Info("starting Waybill API",
-		zap.String("port", cfg.APIPort),
+		zap.String("port", port),
 	)
 
 	if err := server.Run(addr); err != nil {

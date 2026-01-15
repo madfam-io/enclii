@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4200';
+// Skip silent auth in E2E tests or when explicitly disabled
+const SKIP_SILENT_AUTH = process.env.NEXT_PUBLIC_SKIP_SILENT_AUTH === 'true';
 
 interface SilentAuthResult {
   type: 'silent-auth-result';
@@ -55,20 +57,46 @@ export function useSilentAuth(): UseSilentAuthReturn {
   }, []);
 
   const checkSilentAuth = useCallback(async () => {
+    // Skip silent auth in E2E tests
+    if (SKIP_SILENT_AUTH) {
+      setIsChecking(false);
+      setHasValidSession(false);
+      return;
+    }
+
     setIsChecking(true);
     setError(null);
     setHasValidSession(false);
     setTokens(null);
 
     try {
-      // Step 1: Get silent auth URL from backend
-      const response = await fetch(`${API_URL}/v1/auth/silent-check`, {
-        method: 'GET',
-        credentials: 'include', // Include cookies for state cookie
-      });
+      // Step 1: Get silent auth URL from backend with timeout
+      const controller = new AbortController();
+      const fetchTimeout = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+
+      let response: Response;
+      try {
+        response = await fetch(`${API_URL}/v1/auth/silent-check`, {
+          method: 'GET',
+          credentials: 'include', // Include cookies for state cookie
+          signal: controller.signal,
+        });
+      } catch (fetchError) {
+        clearTimeout(fetchTimeout);
+        // Network error or timeout - API unavailable, proceed without silent auth
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          console.debug('Silent auth check timed out - API may be unavailable');
+        } else {
+          console.debug('Silent auth check failed - API may be unavailable:', fetchError);
+        }
+        setHasValidSession(false);
+        setIsChecking(false);
+        return;
+      }
+      clearTimeout(fetchTimeout);
 
       if (!response.ok) {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to get silent auth URL');
       }
 

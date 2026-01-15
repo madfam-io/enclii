@@ -1,0 +1,135 @@
+# GPU Affinity Patch - Prevents web workloads from scheduling on GPU nodes
+# This patch adds "prefer non-GPU nodes" affinity to all Deployments
+#
+# When GPU nodes are added with taint: nvidia.com/gpu=present:NoSchedule
+# - Pods WITHOUT tolerations won't schedule on GPU nodes (hard block)
+# - This patch adds SOFT preference to avoid GPU nodes even without taints
+#
+# Apply via Kustomize patchesStrategicMerge or per-deployment
+---
+# Switchyard API - Avoid GPU nodes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: switchyard-api
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          # Soft preference: avoid GPU nodes but don't fail if unavailable
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: DoesNotExist
+        # Also spread across nodes for HA
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: switchyard-api
+                topologyKey: kubernetes.io/hostname
+      # Explicitly no GPU tolerations (blocks scheduling on tainted GPU nodes)
+      tolerations: []
+---
+# Switchyard UI - Avoid GPU nodes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: switchyard-ui
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: DoesNotExist
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: switchyard-ui
+                topologyKey: kubernetes.io/hostname
+      tolerations: []
+---
+# Landing Page - Avoid GPU nodes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: landing-page
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: DoesNotExist
+      tolerations: []
+---
+# Docs Site - Avoid GPU nodes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docs-site
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: DoesNotExist
+      tolerations: []
+---
+# Roundhouse API - Avoid GPU nodes (build controller, not executor)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: roundhouse-api
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: DoesNotExist
+      tolerations: []
+---
+# Waybill - Avoid GPU nodes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waybill
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: DoesNotExist
+      tolerations: []

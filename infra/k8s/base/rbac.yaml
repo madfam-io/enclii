@@ -8,6 +8,11 @@ metadata:
     app.kubernetes.io/component: control-plane
     app.kubernetes.io/part-of: enclii
 ---
+# RBAC permissions tightened based on actual code usage analysis:
+# - Removed: configmaps, secrets (not used in switchyard-api)
+# - Removed: replicasets write access (only list/watch needed for rollback)
+# - Added: persistentvolumeclaims (used by volume management)
+# - Added: namespace delete (used by webhook_handlers.go)
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -17,21 +22,34 @@ metadata:
     app.kubernetes.io/component: control-plane
     app.kubernetes.io/part-of: enclii
 rules:
+# Namespaces: create for new projects/environments, get/list/watch for queries, delete for cleanup
 - apiGroups: [""]
   resources: ["namespaces"]
-  verbs: ["create", "get", "list", "watch"]
+  verbs: ["create", "get", "list", "watch", "delete"]
+# Deployments: full lifecycle management for service deployments
 - apiGroups: ["apps"]
-  resources: ["deployments", "replicasets"]
+  resources: ["deployments"]
   verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# ReplicaSets: read-only for rollback (finding previous image versions)
+- apiGroups: ["apps"]
+  resources: ["replicasets"]
+  verbs: ["get", "list", "watch"]
+# Services: full lifecycle management for service networking
 - apiGroups: [""]
   resources: ["services"]
   verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+# Pods: read-only + logs for monitoring and debugging
 - apiGroups: [""]
-  resources: ["pods", "pods/logs"]
+  resources: ["pods"]
   verbs: ["get", "list", "watch"]
 - apiGroups: [""]
-  resources: ["configmaps", "secrets"]
-  verbs: ["create", "get", "list", "watch", "update", "patch"]
+  resources: ["pods/log"]
+  verbs: ["get"]
+# PersistentVolumeClaims: volume management for stateful services
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["create", "get", "list", "watch", "update", "delete"]
+# Ingresses: custom domain and routing management
 - apiGroups: ["networking.k8s.io"]
   resources: ["ingresses"]
   verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]

@@ -70,11 +70,16 @@ type TeamInvitationWithDetails struct {
 
 // TeamRepository handles team CRUD operations
 type TeamRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewTeamRepository(db *sql.DB) *TeamRepository {
+func NewTeamRepository(db DBTX) *TeamRepository {
 	return &TeamRepository{db: db}
+}
+
+// NewTeamRepositoryWithTx creates a repository using a transaction
+func NewTeamRepositoryWithTx(tx DBTX) *TeamRepository {
+	return &TeamRepository{db: tx}
 }
 
 // Create creates a new team
@@ -218,11 +223,16 @@ func (r *TeamRepository) ListByUser(ctx context.Context, userID uuid.UUID) ([]*T
 
 // TeamMemberRepository handles team membership operations
 type TeamMemberRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewTeamMemberRepository(db *sql.DB) *TeamMemberRepository {
+func NewTeamMemberRepository(db DBTX) *TeamMemberRepository {
 	return &TeamMemberRepository{db: db}
+}
+
+// NewTeamMemberRepositoryWithTx creates a repository using a transaction
+func NewTeamMemberRepositoryWithTx(tx DBTX) *TeamMemberRepository {
+	return &TeamMemberRepository{db: tx}
 }
 
 // Add adds a user to a team
@@ -355,11 +365,16 @@ func (r *TeamMemberRepository) CountByTeam(ctx context.Context, teamID uuid.UUID
 
 // TeamInvitationRepository handles team invitation operations
 type TeamInvitationRepository struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewTeamInvitationRepository(db *sql.DB) *TeamInvitationRepository {
+func NewTeamInvitationRepository(db DBTX) *TeamInvitationRepository {
 	return &TeamInvitationRepository{db: db}
+}
+
+// NewTeamInvitationRepositoryWithTx creates a repository using a transaction
+func NewTeamInvitationRepositoryWithTx(tx DBTX) *TeamInvitationRepository {
+	return &TeamInvitationRepository{db: tx}
 }
 
 // generateToken creates a secure random token for invitation links

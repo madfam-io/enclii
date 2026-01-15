@@ -12,12 +12,14 @@ import (
 )
 
 const (
-	buildQueueKey    = "roundhouse:queue:builds"
-	priorityQueueKey = "roundhouse:queue:priority"
-	jobHashKeyPrefix = "roundhouse:job:"
-	logsStreamPrefix = "roundhouse:logs:"
-	statsKey         = "roundhouse:stats"
-	activeWorkersKey = "roundhouse:workers:active"
+	buildQueueKey      = "roundhouse:queue:builds"
+	priorityQueueKey   = "roundhouse:queue:priority"
+	callbackRetryKey   = "roundhouse:queue:callback_retry" // Sorted set by next_retry time
+	callbackHashPrefix = "roundhouse:callback:"            // Hash for callback details
+	jobHashKeyPrefix   = "roundhouse:job:"
+	logsStreamPrefix   = "roundhouse:logs:"
+	statsKey           = "roundhouse:stats"
+	activeWorkersKey   = "roundhouse:workers:active"
 )
 
 // RedisQueue implements the build queue using Redis
@@ -309,6 +311,126 @@ func (q *RedisQueue) UnregisterWorker(ctx context.Context, workerID string) erro
 // ActiveWorkers returns the list of active workers
 func (q *RedisQueue) ActiveWorkers(ctx context.Context) ([]string, error) {
 	return q.client.SMembers(ctx, activeWorkersKey).Result()
+}
+
+// EnqueueFailedCallback adds a failed callback to the retry queue
+func (q *RedisQueue) EnqueueFailedCallback(ctx context.Context, callback *FailedCallback) error {
+	callback.ID = uuid.New()
+	callback.CreatedAt = time.Now()
+
+	data, err := json.Marshal(callback)
+	if err != nil {
+		return fmt.Errorf("failed to marshal callback: %w", err)
+	}
+
+	// Store callback details in hash
+	callbackKey := callbackHashPrefix + callback.ID.String()
+	if err := q.client.HSet(ctx, callbackKey, map[string]interface{}{
+		"data":       string(data),
+		"created_at": callback.CreatedAt.Format(time.RFC3339),
+	}).Err(); err != nil {
+		return fmt.Errorf("failed to store callback: %w", err)
+	}
+
+	// Set expiry (24 hours - callbacks should succeed or be dropped by then)
+	q.client.Expire(ctx, callbackKey, 24*time.Hour)
+
+	// Add to retry queue with score as next retry time
+	if err := q.client.ZAdd(ctx, callbackRetryKey, redis.Z{
+		Score:  float64(callback.NextRetry.Unix()),
+		Member: callback.ID.String(),
+	}).Err(); err != nil {
+		return fmt.Errorf("failed to enqueue callback retry: %w", err)
+	}
+
+	q.logger.Info("callback queued for retry",
+		zap.String("callback_id", callback.ID.String()),
+		zap.String("job_id", callback.JobID.String()),
+		zap.Int("attempt", callback.Attempts),
+		zap.Time("next_retry", callback.NextRetry),
+	)
+
+	return nil
+}
+
+// DequeueReadyCallbacks retrieves callbacks that are ready to be retried
+func (q *RedisQueue) DequeueReadyCallbacks(ctx context.Context, limit int) ([]*FailedCallback, error) {
+	now := time.Now().Unix()
+
+	// Get callbacks with score (next_retry) <= now
+	result, err := q.client.ZRangeByScoreWithScores(ctx, callbackRetryKey, &redis.ZRangeBy{
+		Min:   "-inf",
+		Max:   fmt.Sprintf("%d", now),
+		Count: int64(limit),
+	}).Result()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ready callbacks: %w", err)
+	}
+
+	var callbacks []*FailedCallback
+	for _, z := range result {
+		callbackID := z.Member
+
+		// Remove from retry queue atomically
+		removed, err := q.client.ZRem(ctx, callbackRetryKey, callbackID).Result()
+		if err != nil || removed == 0 {
+			continue // Another worker got it
+		}
+
+		// Get callback data
+		callbackKey := callbackHashPrefix + callbackID
+		data, err := q.client.HGet(ctx, callbackKey, "data").Result()
+		if err != nil {
+			q.logger.Warn("callback data not found", zap.String("id", callbackID))
+			continue
+		}
+
+		var callback FailedCallback
+		if err := json.Unmarshal([]byte(data), &callback); err != nil {
+			q.logger.Error("failed to unmarshal callback", zap.Error(err))
+			continue
+		}
+
+		callbacks = append(callbacks, &callback)
+	}
+
+	return callbacks, nil
+}
+
+// UpdateFailedCallback updates a callback for the next retry attempt
+func (q *RedisQueue) UpdateFailedCallback(ctx context.Context, callback *FailedCallback) error {
+	data, err := json.Marshal(callback)
+	if err != nil {
+		return fmt.Errorf("failed to marshal callback: %w", err)
+	}
+
+	callbackKey := callbackHashPrefix + callback.ID.String()
+	if err := q.client.HSet(ctx, callbackKey, "data", string(data)).Err(); err != nil {
+		return fmt.Errorf("failed to update callback: %w", err)
+	}
+
+	// Re-add to retry queue with new next_retry time
+	if err := q.client.ZAdd(ctx, callbackRetryKey, redis.Z{
+		Score:  float64(callback.NextRetry.Unix()),
+		Member: callback.ID.String(),
+	}).Err(); err != nil {
+		return fmt.Errorf("failed to re-enqueue callback: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveCallback removes a callback from the retry queue (on success or max attempts)
+func (q *RedisQueue) RemoveCallback(ctx context.Context, callbackID uuid.UUID) error {
+	callbackKey := callbackHashPrefix + callbackID.String()
+	q.client.Del(ctx, callbackKey)
+	q.client.ZRem(ctx, callbackRetryKey, callbackID.String())
+	return nil
+}
+
+// CallbackRetryQueueLength returns the number of callbacks pending retry
+func (q *RedisQueue) CallbackRetryQueueLength(ctx context.Context) (int64, error) {
+	return q.client.ZCard(ctx, callbackRetryKey).Result()
 }
 
 // Close closes the Redis connection

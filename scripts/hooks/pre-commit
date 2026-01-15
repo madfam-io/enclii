@@ -1,0 +1,129 @@
+#!/bin/bash
+# Enclii Pre-commit Hook - Secret Scanning
+# Prevents accidental commit of secrets, API keys, and credentials
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${YELLOW}🔍 Running secret scanning pre-commit hook...${NC}"
+
+# Get list of staged files (excluding deleted files)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -z "$STAGED_FILES" ]; then
+    echo -e "${GREEN}✓ No staged files to check${NC}"
+    exit 0
+fi
+
+# Patterns to detect secrets (each pattern on its own line for readability)
+SECRET_PATTERNS=(
+    # API Keys
+    'sk-ant-[a-zA-Z0-9_-]{20,}'                    # Anthropic API keys
+    'ghp_[a-zA-Z0-9]{36}'                          # GitHub Personal Access Tokens
+    'gho_[a-zA-Z0-9]{36}'                          # GitHub OAuth tokens
+    'github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59}'   # GitHub Fine-grained tokens
+    'AKIA[0-9A-Z]{16}'                             # AWS Access Key IDs
+    'xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24}'  # Slack tokens
+
+    # Database URLs with passwords
+    'postgres://[^:]+:[^@]+@'                      # PostgreSQL URLs with credentials
+    'mysql://[^:]+:[^@]+@'                         # MySQL URLs with credentials
+    'mongodb(\+srv)?://[^:]+:[^@]+@'              # MongoDB URLs with credentials
+    'redis://:[^@]+@'                              # Redis URLs with password
+
+    # Private keys
+    'BEGIN RSA PRIVATE KEY'
+    'BEGIN DSA PRIVATE KEY'
+    'BEGIN EC PRIVATE KEY'
+    'BEGIN OPENSSH PRIVATE KEY'
+    'BEGIN PGP PRIVATE KEY'
+
+    # Generic secrets (with context to reduce false positives)
+    'password\s*[:=]\s*["\047][^"\047]{8,}'       # password = "value" or password: "value"
+    'secret\s*[:=]\s*["\047][^"\047]{8,}'         # secret = "value"
+    'api[_-]?key\s*[:=]\s*["\047][^"\047]{8,}'    # api_key = "value"
+    'auth[_-]?token\s*[:=]\s*["\047][^"\047]{8,}' # auth_token = "value"
+
+    # JWT secrets (base64 encoded, typically long)
+    'eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*'  # JWT tokens
+)
+
+# Files to exclude from scanning
+EXCLUDE_PATTERNS=(
+    '\.md$'
+    '\.sample$'
+    'test.*\.go$'
+    '_test\.go$'
+    'mock.*\.go$'
+    '\.example$'
+    'CLAUDE\.md$'
+    'go\.sum$'
+    'go\.mod$'
+    'package-lock\.json$'
+    'yarn\.lock$'
+    'pnpm-lock\.yaml$'
+    'scripts/hooks/pre-commit$'
+    '\.pre-commit-config\.yaml$'
+    '\.git/hooks/pre-commit$'
+)
+
+# Build exclude pattern for grep
+EXCLUDE_ARGS=""
+for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+    EXCLUDE_ARGS="$EXCLUDE_ARGS --exclude-pattern=$pattern"
+done
+
+FOUND_SECRETS=0
+FINDINGS=""
+
+for file in $STAGED_FILES; do
+    # Skip if file doesn't exist (deleted)
+    if [ ! -f "$file" ]; then
+        continue
+    fi
+
+    # Skip excluded file types
+    SKIP=0
+    for exclude in "${EXCLUDE_PATTERNS[@]}"; do
+        if echo "$file" | grep -qE "$exclude"; then
+            SKIP=1
+            break
+        fi
+    done
+
+    if [ $SKIP -eq 1 ]; then
+        continue
+    fi
+
+    # Check each pattern
+    for pattern in "${SECRET_PATTERNS[@]}"; do
+        MATCHES=$(git diff --cached --diff-filter=ACM -p "$file" 2>/dev/null | grep -nE "^\+" | grep -iE "$pattern" || true)
+        if [ -n "$MATCHES" ]; then
+            FOUND_SECRETS=1
+            FINDINGS="$FINDINGS\n${RED}⚠️  Potential secret in $file:${NC}\n"
+            FINDINGS="$FINDINGS   Pattern: $pattern\n"
+            # Show first 80 chars of match (truncated for security)
+            MATCH_PREVIEW=$(echo "$MATCHES" | head -1 | cut -c1-80)
+            FINDINGS="$FINDINGS   Match: ${MATCH_PREVIEW}...\n"
+        fi
+    done
+done
+
+if [ $FOUND_SECRETS -eq 1 ]; then
+    echo -e "\n${RED}❌ SECRET DETECTED IN STAGED FILES${NC}"
+    echo -e "$FINDINGS"
+    echo -e "\n${YELLOW}If this is a false positive, you can:${NC}"
+    echo -e "  1. Add the file to the exclude list in .git/hooks/pre-commit"
+    echo -e "  2. Use 'git commit --no-verify' to bypass (not recommended)"
+    echo -e "  3. Move the secret to environment variables or a secrets manager"
+    echo -e "\n${YELLOW}For legitimate test data, ensure it's clearly marked as fake/development.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ No secrets detected in staged files${NC}"
+exit 0

@@ -1,0 +1,52 @@
+[
+  {
+    "hostname": "api.enclii.dev",
+    "service": "http://switchyard-api.enclii.svc.cluster.local:80",
+    "originRequest": {
+      "connectTimeout": "30s",
+      "keepAliveTimeout": "90s",
+      "httpHostHeader": "api.enclii.dev"
+    }
+  },
+  {
+    "hostname": "app.enclii.dev",
+    "service": "http://switchyard-ui.enclii.svc.cluster.local:80",
+    "originRequest": {
+      "connectTimeout": "10s",
+      "httpHostHeader": "app.enclii.dev"
+    }
+  },
+  {
+    "hostname": "enclii.dev",
+    "service": "http://landing-page.enclii.svc.cluster.local:80",
+    "originRequest": {
+      "httpHostHeader": "enclii.dev"
+    }
+  },
+  {
+    "hostname": "www.enclii.dev",
+    "service": "http://landing-page.enclii.svc.cluster.local:80",
+    "originRequest": {
+      "httpHostHeader": "www.enclii.dev"
+    }
+  },
+  {
+    "hostname": "docs.enclii.dev",
+    "service": "http://docs-site.enclii.svc.cluster.local:80",
+    "originRequest": {
+      "httpHostHeader": "docs.enclii.dev"
+    }
+  },
+  {
+    "hostname": "auth.madfam.io",
+    "service": "http://janua-api.janua.svc.cluster.local:4100",
+    "originRequest": {
+      "connectTimeout": "30s",
+      "keepAliveTimeout": "90s",
+      "httpHostHeader": "auth.madfam.io"
+    }
+  },
+  {
+    "service": "http_status:404"
+  }
+]

@@ -74,7 +74,12 @@ func deployService(cfg *config.Config, environment string, wait bool, specFile s
 		return fmt.Errorf("failed to ensure service: %w", err)
 	}
 
-	// 5. Trigger build
+	// 5. Ensure environment exists
+	if err := ensureEnvironment(ctx, apiClient, project.Slug, environment); err != nil {
+		return fmt.Errorf("failed to ensure environment: %w", err)
+	}
+
+	// 6. Trigger build
 	fmt.Println("🏗️  Building service...")
 	release, err := apiClient.BuildService(ctx, service.ID.String(), gitSHA)
 	if err != nil {
@@ -83,17 +88,17 @@ func deployService(cfg *config.Config, environment string, wait bool, specFile s
 
 	fmt.Printf("📦 Build initiated: %s\n", release.Version)
 
-	// 6. Wait for build completion (simplified polling)
+	// 7. Wait for build completion (simplified polling)
 	if err := waitForBuild(ctx, apiClient, service.ID.String(), release.ID.String()); err != nil {
 		return fmt.Errorf("build failed: %w", err)
 	}
 
-	// 7. Deploy to environment
+	// 8. Deploy to environment
 	fmt.Println("🚀 Deploying to Kubernetes...")
 	deployReq := client.DeployRequest{
-		ReleaseID:   release.ID.String(),
-		Environment: map[string]string{"ENV": environment},
-		Replicas:    1,
+		ReleaseID:       release.ID.String(),
+		EnvironmentName: environment, // e.g., "dev", "staging", "production"
+		Replicas:        1,
 	}
 
 	_, err = apiClient.DeployService(ctx, service.ID.String(), deployReq)
@@ -159,17 +164,40 @@ func ensureService(ctx context.Context, apiClient *client.APIClient, project *ty
 
 	// Create new service
 	fmt.Printf("Creating service: %s\n", serviceSpec.Metadata.Name)
+
+	// Map build type from spec to SDK type
+	buildType := types.BuildTypeBuildpack // Default
+	if serviceSpec.Spec.Build.Type == "dockerfile" {
+		buildType = types.BuildTypeDockerfile
+	}
+
 	newService := &types.Service{
 		ProjectID: project.ID,
 		Name:      serviceSpec.Metadata.Name,
 		GitRepo:   getCurrentGitRepo(),
 		BuildConfig: types.BuildConfig{
-			Type:       types.BuildTypeBuildpack, // Default for now
-			Dockerfile: "",
+			Type:       buildType,
+			Dockerfile: serviceSpec.Spec.Build.Dockerfile,
 		},
 	}
 
 	return apiClient.CreateService(ctx, project.Slug, newService)
+}
+
+func ensureEnvironment(ctx context.Context, apiClient *client.APIClient, projectSlug, envName string) error {
+	// Try to create the environment (will fail with 409 if it already exists, which is fine)
+	_, err := apiClient.CreateEnvironment(ctx, projectSlug, envName)
+	if err != nil {
+		// If error contains "409" or "already exists", it's fine
+		errStr := err.Error()
+		if strings.Contains(errStr, "409") || strings.Contains(errStr, "already exists") || strings.Contains(errStr, "Conflict") {
+			// Environment already exists, that's fine
+			return nil
+		}
+		return err
+	}
+	fmt.Printf("📦 Created environment: %s\n", envName)
+	return nil
 }
 
 func getCurrentGitRepo() string {

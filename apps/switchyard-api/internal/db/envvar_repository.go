@@ -20,14 +20,12 @@ import (
 
 // EnvVarRepository handles environment variable CRUD operations with encryption
 type EnvVarRepository struct {
-	db            *sql.DB
+	db            DBTX
 	encryptionKey []byte // 32-byte AES-256 key
 }
 
-// NewEnvVarRepository creates a new environment variable repository
-// The encryption key is read from ENCLII_ENVVAR_ENCRYPTION_KEY environment variable
-// or defaults to a development key (NOT safe for production)
-func NewEnvVarRepository(db *sql.DB) *EnvVarRepository {
+// getEncryptionKey returns the encryption key from environment or default
+func getEncryptionKey() []byte {
 	keyStr := os.Getenv("ENCLII_ENVVAR_ENCRYPTION_KEY")
 	if keyStr == "" {
 		// Development fallback - NOT for production use
@@ -37,10 +35,24 @@ func NewEnvVarRepository(db *sql.DB) *EnvVarRepository {
 	// Ensure key is exactly 32 bytes for AES-256
 	key := make([]byte, 32)
 	copy(key, []byte(keyStr))
+	return key
+}
 
+// NewEnvVarRepository creates a new environment variable repository
+// The encryption key is read from ENCLII_ENVVAR_ENCRYPTION_KEY environment variable
+// or defaults to a development key (NOT safe for production)
+func NewEnvVarRepository(db DBTX) *EnvVarRepository {
 	return &EnvVarRepository{
 		db:            db,
-		encryptionKey: key,
+		encryptionKey: getEncryptionKey(),
+	}
+}
+
+// NewEnvVarRepositoryWithTx creates a repository using a transaction
+func NewEnvVarRepositoryWithTx(tx DBTX) *EnvVarRepository {
+	return &EnvVarRepository{
+		db:            tx,
+		encryptionKey: getEncryptionKey(),
 	}
 }
 
@@ -157,6 +169,64 @@ func (r *EnvVarRepository) GetByID(ctx context.Context, id uuid.UUID) (*types.En
 	if createdBy.Valid {
 		parsed, _ := uuid.Parse(createdBy.String)
 		ev.CreatedBy = &parsed
+	}
+	if createdByEmail.Valid {
+		ev.CreatedByEmail = createdByEmail.String
+	}
+
+	// Decrypt the value
+	decrypted, err := r.decrypt(ev.ValueEncrypted)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt value: %w", err)
+	}
+	ev.Value = decrypted
+
+	return ev, nil
+}
+
+// GetByServiceEnvKey retrieves an environment variable by service ID, environment ID, and key
+func (r *EnvVarRepository) GetByServiceEnvKey(ctx context.Context, serviceID uuid.UUID, environmentID *uuid.UUID, key string) (*types.EnvironmentVariable, error) {
+	ev := &types.EnvironmentVariable{}
+	var query string
+	var args []interface{}
+
+	if environmentID != nil {
+		query = `
+			SELECT id, service_id, environment_id, key, value_encrypted, is_secret,
+			       created_at, updated_at, created_by, created_by_email
+			FROM environment_variables
+			WHERE service_id = $1 AND environment_id = $2 AND key = $3
+		`
+		args = []interface{}{serviceID, *environmentID, key}
+	} else {
+		query = `
+			SELECT id, service_id, environment_id, key, value_encrypted, is_secret,
+			       created_at, updated_at, created_by, created_by_email
+			FROM environment_variables
+			WHERE service_id = $1 AND environment_id IS NULL AND key = $2
+		`
+		args = []interface{}{serviceID, key}
+	}
+
+	var envID sql.NullString
+	var createdBy sql.NullString
+	var createdByEmail sql.NullString
+
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(
+		&ev.ID, &ev.ServiceID, &envID, &ev.Key, &ev.ValueEncrypted, &ev.IsSecret,
+		&ev.CreatedAt, &ev.UpdatedAt, &createdBy, &createdByEmail,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if envID.Valid {
+		parsedEnvID, _ := uuid.Parse(envID.String)
+		ev.EnvironmentID = &parsedEnvID
+	}
+	if createdBy.Valid {
+		parsedCreatedBy, _ := uuid.Parse(createdBy.String)
+		ev.CreatedBy = &parsedCreatedBy
 	}
 	if createdByEmail.Valid {
 		ev.CreatedByEmail = createdByEmail.String
@@ -299,14 +369,9 @@ func (r *EnvVarRepository) DeleteByService(ctx context.Context, serviceID uuid.U
 	return err
 }
 
-// BulkUpsert inserts or updates multiple environment variables
+// BulkUpsert inserts or updates multiple environment variables.
+// For atomic operations across multiple vars, use Repositories.WithTransaction.
 func (r *EnvVarRepository) BulkUpsert(ctx context.Context, serviceID uuid.UUID, environmentID *uuid.UUID, vars []types.EnvironmentVariable) error {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
 	for _, ev := range vars {
 		// Encrypt the value
 		encrypted, err := r.encrypt(ev.Value)
@@ -332,7 +397,7 @@ func (r *EnvVarRepository) BulkUpsert(ctx context.Context, serviceID uuid.UUID, 
 		}
 		now := time.Now()
 
-		_, err = tx.ExecContext(ctx, query,
+		_, err = r.db.ExecContext(ctx, query,
 			id, serviceID, environmentID, ev.Key, encrypted, ev.IsSecret,
 			now, now, ev.CreatedBy, ev.CreatedByEmail,
 		)
@@ -341,7 +406,69 @@ func (r *EnvVarRepository) BulkUpsert(ctx context.Context, serviceID uuid.UUID, 
 		}
 	}
 
-	return tx.Commit()
+	return nil
+}
+
+// EnvVarWithMeta represents an environment variable with metadata for K8s secret creation
+type EnvVarWithMeta struct {
+	Key      string
+	Value    string
+	IsSecret bool
+}
+
+// GetDecryptedWithMeta retrieves all environment variables with IsSecret metadata for proper K8s secret creation
+// Secrets will be stored in K8s Secrets, non-secrets as plain env vars
+func (r *EnvVarRepository) GetDecryptedWithMeta(ctx context.Context, serviceID, environmentID uuid.UUID) ([]EnvVarWithMeta, error) {
+	// Get vars for specific environment + vars that apply to all environments
+	// Environment-specific vars override global vars
+	query := `
+		SELECT key, value_encrypted, is_secret, environment_id
+		FROM environment_variables
+		WHERE service_id = $1 AND (environment_id = $2 OR environment_id IS NULL)
+		ORDER BY
+			CASE WHEN environment_id IS NULL THEN 1 ELSE 0 END, -- Global vars first
+			key
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, serviceID, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	// Use a map to handle overrides, then convert to slice
+	resultMap := make(map[string]EnvVarWithMeta)
+	for rows.Next() {
+		var key, valueEncrypted string
+		var isSecret bool
+		var envID sql.NullString
+
+		err := rows.Scan(&key, &valueEncrypted, &isSecret, &envID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Decrypt the value
+		decrypted, err := r.decrypt(valueEncrypted)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt value for key %s: %w", key, err)
+		}
+
+		// Environment-specific vars override global vars (they come later in the query)
+		resultMap[key] = EnvVarWithMeta{
+			Key:      key,
+			Value:    decrypted,
+			IsSecret: isSecret,
+		}
+	}
+
+	// Convert map to slice
+	result := make([]EnvVarWithMeta, 0, len(resultMap))
+	for _, v := range resultMap {
+		result = append(result, v)
+	}
+
+	return result, nil
 }
 
 // GetDecrypted retrieves all environment variables as a key-value map for deployment injection

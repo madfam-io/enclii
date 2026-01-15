@@ -10,7 +10,22 @@ import (
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
-// CreateService creates a new service in a project
+// CreateService creates a new service in a project.
+//
+// Services are deployable units within a project. Each service is linked to
+// a git repository and can be deployed to multiple environments.
+//
+// Request:
+//   - Method: POST /api/v1/projects/:slug/services
+//   - Authorization: Bearer <access_token>
+//   - Path Parameters: slug (string) - Project slug
+//   - Body: {name: string, git_repo: string, build_config?: BuildConfig}
+//
+// Response:
+//   - 201 Created: Service object
+//   - 400 Bad Request: Invalid request body
+//   - 404 Not Found: Project not found
+//   - 500 Internal Server Error: Failed to create service
 func (h *Handler) CreateService(c *gin.Context) {
 	ctx := c.Request.Context()
 	slug := c.Param("slug")
@@ -64,7 +79,20 @@ func (h *Handler) CreateService(c *gin.Context) {
 	c.JSON(http.StatusCreated, resp.Service)
 }
 
-// ListServices returns all services in a project
+// ListServices returns all services in a project.
+//
+// This endpoint lists all services within a project, including their
+// current deployment status and configuration.
+//
+// Request:
+//   - Method: GET /api/v1/projects/:slug/services
+//   - Authorization: Bearer <access_token>
+//   - Path Parameters: slug (string) - Project slug
+//
+// Response:
+//   - 200 OK: {services: Service[]}
+//   - 404 Not Found: Project not found
+//   - 500 Internal Server Error: Failed to list services
 func (h *Handler) ListServices(c *gin.Context) {
 	ctx := c.Request.Context()
 	slug := c.Param("slug")
@@ -83,7 +111,20 @@ func (h *Handler) ListServices(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"services": svcList})
 }
 
-// GetService returns a service by ID
+// GetService returns a service by its unique ID.
+//
+// This endpoint retrieves detailed information about a specific service,
+// including its configuration, build settings, and deployment history.
+//
+// Request:
+//   - Method: GET /api/v1/services/:id
+//   - Authorization: Bearer <access_token>
+//   - Path Parameters: id (string) - Service ID (UUID)
+//
+// Response:
+//   - 200 OK: Service object
+//   - 404 Not Found: Service not found
+//   - 500 Internal Server Error: Failed to get service
 func (h *Handler) GetService(c *gin.Context) {
 	ctx := c.Request.Context()
 	serviceID := c.Param("id")

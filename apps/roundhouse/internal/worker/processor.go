@@ -17,13 +17,16 @@ import (
 	"github.com/madfam-org/enclii/apps/roundhouse/internal/config"
 	"github.com/madfam-org/enclii/apps/roundhouse/internal/queue"
 	"go.uber.org/zap"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // Processor handles build job processing
 type Processor struct {
 	workerID   string
 	queue      *queue.RedisQueue
-	executor   *builder.Executor
+	builder    builder.Builder // Use interface for both Docker and Kaniko
 	cfg        *config.Config
 	logger     *zap.Logger
 	httpClient *http.Client
@@ -32,44 +35,120 @@ type Processor struct {
 	semaphore chan struct{}
 	wg        sync.WaitGroup
 	shutdown  chan struct{}
+
+	// Callback retry configuration
+	callbackRetry queue.CallbackRetryConfig
 }
 
 // NewProcessor creates a new job processor
-func NewProcessor(cfg *config.Config, q *queue.RedisQueue, logger *zap.Logger) *Processor {
+func NewProcessor(cfg *config.Config, q *queue.RedisQueue, logger *zap.Logger) (*Processor, error) {
 	workerID := cfg.WorkerID
 	if workerID == "" {
 		hostname, _ := os.Hostname()
 		workerID = fmt.Sprintf("%s-%s", hostname, uuid.New().String()[:8])
 	}
 
+	// Log callback for streaming build logs to Redis
+	logFunc := func(jobID uuid.UUID, line string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		q.AppendLog(ctx, jobID, line)
+	}
+
+	// Initialize the appropriate builder based on build mode
+	var b builder.Builder
+	var err error
+
+	switch builder.BuildMode(cfg.BuildMode) {
+	case builder.BuildModeKaniko:
+		logger.Info("initializing Kaniko builder (secure, rootless)",
+			zap.String("registry", cfg.Registry))
+
+		// Create Kubernetes client
+		k8sClient, err := createK8sClient(cfg.KubeConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
+		}
+
+		b = builder.NewKanikoExecutor(&builder.KanikoExecutorConfig{
+			K8sClient:      k8sClient,
+			Registry:       cfg.Registry,
+			RegistryUser:   cfg.RegistryUser,
+			RegistryPass:   cfg.RegistryPassword,
+			GenerateSBOM:   cfg.GenerateSBOM,
+			SignImages:     cfg.SignImages,
+			CosignKey:      cfg.CosignKey,
+			Timeout:        cfg.BuildTimeout,
+			CacheRepo:      cfg.KanikoCacheRepo,
+			GitCredentials: cfg.KanikoGitCredentials,
+		}, logger, logFunc)
+
+	case builder.BuildModeDocker:
+		logger.Warn("initializing Docker builder (requires Docker socket - NOT recommended for production)",
+			zap.String("registry", cfg.Registry))
+
+		b = builder.NewExecutor(&builder.ExecutorConfig{
+			WorkDir:      cfg.BuildWorkDir,
+			Registry:     cfg.Registry,
+			RegistryUser: cfg.RegistryUser,
+			RegistryPass: cfg.RegistryPassword,
+			GenerateSBOM: cfg.GenerateSBOM,
+			SignImages:   cfg.SignImages,
+			CosignKey:    cfg.CosignKey,
+			Timeout:      cfg.BuildTimeout,
+		}, logger, logFunc)
+
+	default:
+		return nil, fmt.Errorf("unsupported build mode: %s (use 'docker' or 'kaniko')", cfg.BuildMode)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize builder: %w", err)
+	}
+
 	p := &Processor{
 		workerID:   workerID,
 		queue:      q,
+		builder:    b,
 		cfg:        cfg,
 		logger:     logger,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		semaphore:  make(chan struct{}, cfg.MaxConcurrentBuilds),
 		shutdown:   make(chan struct{}),
+		callbackRetry: queue.CallbackRetryConfig{
+			MaxAttempts:     5,
+			InitialInterval: 10 * time.Second,
+			MaxInterval:     5 * time.Minute,
+			Multiplier:      2.0,
+		},
 	}
 
-	// Create executor with log callback
-	p.executor = builder.NewExecutor(&builder.ExecutorConfig{
-		WorkDir:      cfg.BuildWorkDir,
-		Registry:     cfg.Registry,
-		RegistryUser: cfg.RegistryUser,
-		RegistryPass: cfg.RegistryPassword,
-		GenerateSBOM: cfg.GenerateSBOM,
-		SignImages:   cfg.SignImages,
-		CosignKey:    cfg.CosignKey,
-		Timeout:      cfg.BuildTimeout,
-	}, logger, func(jobID uuid.UUID, line string) {
-		// Append log to Redis stream
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		q.AppendLog(ctx, jobID, line)
-	})
+	return p, nil
+}
 
-	return p
+// createK8sClient creates a Kubernetes client
+func createK8sClient(kubeconfig string) (kubernetes.Interface, error) {
+	var config *rest.Config
+	var err error
+
+	if kubeconfig != "" {
+		// Use provided kubeconfig file
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+	} else {
+		// Use in-cluster config (when running in Kubernetes)
+		config, err = rest.InClusterConfig()
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to build kubernetes config: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create kubernetes clientset: %w", err)
+	}
+
+	return clientset, nil
 }
 
 // Start begins processing jobs
@@ -93,6 +172,9 @@ func (p *Processor) Start(ctx context.Context) error {
 		p.logger.Info("shutdown signal received, waiting for builds to complete...")
 		close(p.shutdown)
 	}()
+
+	// Start callback retry processor in background
+	go p.processCallbackRetries(ctx)
 
 	// Main processing loop
 	for {
@@ -153,8 +235,8 @@ func (p *Processor) processJob(ctx context.Context, job *queue.BuildJob) {
 	buildCtx, cancel := context.WithTimeout(ctx, p.cfg.BuildTimeout)
 	defer cancel()
 
-	// Execute build
-	result, err := p.executor.Execute(buildCtx, job)
+	// Execute build using configured builder (Docker or Kaniko)
+	result, err := p.builder.Execute(buildCtx, job)
 
 	// Update final status
 	var finalStatus queue.JobStatus
@@ -182,10 +264,10 @@ func (p *Processor) processJob(ctx context.Context, job *queue.BuildJob) {
 		logger.Error("failed to update final status", zap.Error(err))
 	}
 
-	// Send callback to Switchyard
+	// Send callback to Switchyard (with retry on failure)
 	if job.CallbackURL != "" {
-		if err := p.sendCallback(ctx, job.CallbackURL, result); err != nil {
-			logger.Error("failed to send callback", zap.Error(err))
+		if err := p.sendCallbackWithRetry(ctx, job.ID, job.CallbackURL, result); err != nil {
+			logger.Error("failed to send callback, queued for retry", zap.Error(err))
 		}
 	}
 }
@@ -222,6 +304,120 @@ func (p *Processor) sendCallback(ctx context.Context, url string, result *queue.
 	)
 
 	return nil
+}
+
+// sendCallbackWithRetry attempts to send a callback, queuing for retry on failure
+func (p *Processor) sendCallbackWithRetry(ctx context.Context, jobID uuid.UUID, url string, result *queue.BuildResult) error {
+	err := p.sendCallback(ctx, url, result)
+	if err == nil {
+		return nil
+	}
+
+	// Queue for retry
+	callback := &queue.FailedCallback{
+		JobID:       jobID,
+		URL:         url,
+		Result:      result,
+		Attempts:    1,
+		MaxAttempts: p.callbackRetry.MaxAttempts,
+		NextRetry:   time.Now().Add(p.callbackRetry.InitialInterval),
+		LastError:   err.Error(),
+	}
+
+	if queueErr := p.queue.EnqueueFailedCallback(ctx, callback); queueErr != nil {
+		p.logger.Error("failed to queue callback for retry",
+			zap.String("job_id", jobID.String()),
+			zap.Error(queueErr),
+		)
+		return fmt.Errorf("callback failed and could not queue retry: %w (original: %v)", queueErr, err)
+	}
+
+	return err
+}
+
+// processCallbackRetries runs in background to retry failed callbacks
+func (p *Processor) processCallbackRetries(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second) // Check every 5 seconds
+	defer ticker.Stop()
+
+	p.logger.Info("callback retry processor started")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-p.shutdown:
+			return
+		case <-ticker.C:
+			p.processReadyCallbacks(ctx)
+		}
+	}
+}
+
+// processReadyCallbacks handles callbacks that are ready to be retried
+func (p *Processor) processReadyCallbacks(ctx context.Context) {
+	callbacks, err := p.queue.DequeueReadyCallbacks(ctx, 10)
+	if err != nil {
+		p.logger.Error("failed to dequeue ready callbacks", zap.Error(err))
+		return
+	}
+
+	for _, callback := range callbacks {
+		p.retryCallback(ctx, callback)
+	}
+}
+
+// retryCallback attempts to send a callback and handles success/failure
+func (p *Processor) retryCallback(ctx context.Context, callback *queue.FailedCallback) {
+	logger := p.logger.With(
+		zap.String("callback_id", callback.ID.String()),
+		zap.String("job_id", callback.JobID.String()),
+		zap.Int("attempt", callback.Attempts+1),
+		zap.Int("max_attempts", callback.MaxAttempts),
+	)
+
+	err := p.sendCallback(ctx, callback.URL, callback.Result)
+	if err == nil {
+		logger.Info("callback retry succeeded")
+		p.queue.RemoveCallback(ctx, callback.ID)
+		return
+	}
+
+	callback.Attempts++
+	callback.LastError = err.Error()
+
+	if callback.Attempts >= callback.MaxAttempts {
+		logger.Error("callback permanently failed after max retries",
+			zap.String("last_error", callback.LastError),
+		)
+		p.queue.RemoveCallback(ctx, callback.ID)
+		return
+	}
+
+	// Calculate next retry with exponential backoff
+	interval := time.Duration(float64(p.callbackRetry.InitialInterval) * pow(p.callbackRetry.Multiplier, float64(callback.Attempts-1)))
+	if interval > p.callbackRetry.MaxInterval {
+		interval = p.callbackRetry.MaxInterval
+	}
+	callback.NextRetry = time.Now().Add(interval)
+
+	logger.Warn("callback retry failed, will retry later",
+		zap.String("error", err.Error()),
+		zap.Duration("next_retry_in", interval),
+	)
+
+	if updateErr := p.queue.UpdateFailedCallback(ctx, callback); updateErr != nil {
+		logger.Error("failed to update callback for retry", zap.Error(updateErr))
+	}
+}
+
+// pow calculates x^y for float64
+func pow(x, y float64) float64 {
+	result := 1.0
+	for i := 0; i < int(y); i++ {
+		result *= x
+	}
+	return result
 }
 
 func (p *Processor) gracefulShutdown() error {

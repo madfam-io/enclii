@@ -1,0 +1,44 @@
+# Longhorn StorageClass for replicated storage
+# Apply after Longhorn is installed: kubectl apply -f storageclass.yaml
+#
+# Usage in PVCs:
+#   storageClassName: longhorn-replicated
+#
+# Features:
+# - 2 replicas across nodes (HA)
+# - Retain policy (data preserved on PVC deletion)
+# - Immediate binding (volume created immediately)
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-replicated
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "2"
+  staleReplicaTimeout: "30"
+  fromBackup: ""
+  fsType: "ext4"
+  dataLocality: "disabled"  # Allow replicas on any node
+---
+# High-performance StorageClass for local-only workloads (build caches)
+# Use when data loss is acceptable (caches, temp storage)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: longhorn-fast
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+provisioner: driver.longhorn.io
+allowVolumeExpansion: true
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+parameters:
+  numberOfReplicas: "1"
+  staleReplicaTimeout: "30"
+  dataLocality: "strict"  # Keep data on local node for performance

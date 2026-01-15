@@ -4,13 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure ($100/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
+Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure (~$55/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
-**Current Status:** 🟢 v0.1.0 - Production Beta (85% ready) ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
-**Infrastructure:** Hetzner Cloud + Cloudflare + Ubicloud (~$100/month) - **Running**
+**Current Status:** 🟢 v0.1.0 - Production Beta (95% ready) ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
+**Infrastructure:** Hetzner Dedicated + Cloudflare (~$55/month) - **Running**
 **Authentication:** OIDC via Janua SSO (RS256 JWT) - **Integrated**
 **Dogfooding:** Core services deployed ([api.enclii.dev](https://api.enclii.dev), [app.enclii.dev](https://app.enclii.dev))
 **Build Pipeline:** GitHub webhook CI/CD with Buildpacks - **Operational**
+**GitOps:** ArgoCD App-of-Apps with self-heal - **Operational** (Jan 2026)
+**Storage:** Longhorn CSI (single-node; ready for multi-node scaling) - **Operational** (Jan 2026)
 
 ### Port Allocation
 
@@ -153,35 +155,67 @@ Key vars for local development (set in `.env`):
 
 ## Production Infrastructure
 
-### Research-Validated Stack (~$100/month)
+### Current Production Stack (~$55/month)
 
-Enclii runs on cost-optimized infrastructure validated through independent research:
+Enclii runs on a single dedicated server with infrastructure prepared for scaling:
 
 **Compute & Kubernetes:**
-- **Hetzner Cloud** (3x CPX31) - AMD EPYC, NVMe SSD - $45/month
-- **k3s** - Lightweight Kubernetes distribution
+- **Hetzner AX41-NVME** - Dedicated server (AMD Ryzen 5 3600, 64GB RAM, 2x512GB NVMe) - ~$50/month
+- **k3s** - Lightweight Kubernetes distribution (single-node)
 - **Cloudflare Tunnel** - Zero-trust ingress (replaces LoadBalancer) - $0
+
+> **Note:** Currently single-node. Longhorn CSI and ArgoCD are deployed and ready for multi-node scaling when needed.
 
 **Ingress Architecture (Cloudflare Tunnel):**
 ```
-Internet → Cloudflare Edge → cloudflared pods → ClusterIP Services
-           (TLS, DDoS)        (2 replicas)       (internal routing)
+Internet → Cloudflare Edge → cloudflared pods → K8s Service:80 → Container:4xxx
+           (TLS, DDoS)        (2 replicas)       (ClusterIP)      (targetPort)
 ```
 - Zero exposed node ports (all traffic through tunnel)
 - Zero-downtime RollingUpdate deployments
 - NetworkPolicy isolation per namespace
 - Configuration: `infra/k8s/production/cloudflared-unified.yaml`
 
+**Port Mapping Hierarchy** (Critical for tunnel configuration):
+1. **Container Port**: What the app listens on (e.g., 4200, 4201, 4204)
+2. **K8s Service Port**: What the service exposes (port 80)
+3. **Cloudflare Route**: Must point to K8s Service port (80), NOT container port
+
+> See `infra/DEPLOYMENT.md` for complete Service Routing table.
+
 **Database & Caching:**
-- **Ubicloud PostgreSQL** - Managed DB on Hetzner infrastructure - $50/month
-- **Redis Sentinel** - Self-hosted HA (3 nodes, automatic failover) - $0
+- **Self-hosted PostgreSQL** - In-cluster deployment with PVC storage, daily backups to R2 - $0
+- **Self-hosted Redis** - Single instance in-cluster (Sentinel config ready for multi-node) - $0
+
+> **Infrastructure Audit (Jan 2026)**: Evaluated Ubicloud managed PostgreSQL ($50/mo) and Redis Sentinel HA. Conclusion: **NOT NEEDED** for current 99.5% SLA / 24-hour RPO requirements. Self-hosted meets targets at $0 cost. Redis Sentinel manifests staged at `infra/k8s/production/redis-sentinel.yaml` for multi-node deployment.
 
 **Storage & Networking:**
 - **Cloudflare R2** - Zero-egress object storage (SBOMs, artifacts) - $5/month
 - **Cloudflare for SaaS** - First 100 custom domains FREE - $0
 
+**GitOps & Orchestration (Deployed Jan 2026):**
+- **ArgoCD** - GitOps engine with App-of-Apps pattern
+- **Pull-based sync** with automatic drift correction (self-heal)
+- Configuration: `infra/argocd/` (root-application.yaml, apps/*.yaml)
+- Access: `kubectl port-forward svc/argocd-server -n argocd 8080:443`
+
+**Cluster Storage (Deployed Jan 2026):**
+- **Longhorn CSI** - Block storage (prepared for multi-node replication)
+- StorageClasses: `longhorn` (single replica on single-node; ready for HA when nodes added)
+- Configuration: `infra/helm/longhorn/`
+
+**GPU Node Preparation (Ready to Deploy):**
+- **NVIDIA Device Plugin** - DaemonSet for GPU discovery
+- **Tolerations/Affinity** - Web workloads avoid GPU nodes
+- Configuration: `infra/k8s/base/gpu/`
+
+**Secure Build Pipeline (Ready to Deploy):**
+- **Kaniko** - Rootless container builds (replaces Docker-in-Docker)
+- Pod Security `restricted`, NetworkPolicy isolation
+- Configuration: `apps/roundhouse/k8s/kaniko-job-template.yaml`
+
 **vs Traditional SaaS Stack:** $2,220/month (Railway $2,000 + Auth0 $220)
-**5-Year Savings:** $127,200
+**5-Year Savings:** $129,900
 
 See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md) for details.
 
@@ -228,3 +262,330 @@ See [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md) for complete implem
 - **Customer Confidence:** "If they trust it, we can too"
 - **Product Quality:** We find bugs before customers do
 - **Sales Credibility:** Authentic production usage metrics
+
+---
+
+## Common Workflows
+
+### Adding a New API Endpoint
+
+1. **Define handler** in `apps/switchyard-api/internal/api/`
+2. **Add route** in `apps/switchyard-api/internal/api/router.go`
+3. **Update OpenAPI spec** in `docs/api/openapi.yaml`
+4. **Add tests** in `apps/switchyard-api/internal/api/*_test.go`
+5. **Run validation**: `make lint && make test`
+
+### Adding a New CLI Command
+
+1. **Create command file** in `packages/cli/internal/cmd/`
+2. **Register in root** in `packages/cli/internal/cmd/root.go`
+3. **Add documentation** in `docs/cli/commands/`
+4. **Test locally**: `go run ./cmd/enclii <command>`
+
+### Deploying a Service Change
+
+```bash
+# Local testing
+make run-switchyard  # Test API changes
+make run-ui          # Test UI changes
+
+# Deploy to staging
+enclii deploy --env staging
+
+# Verify
+enclii logs <service> -f --env staging
+enclii ps --env staging
+
+# Deploy to production (after staging validation)
+enclii deploy --env production --strategy canary --canary-percent 10
+```
+
+### Database Migration
+
+```bash
+# Create migration
+go run apps/switchyard-api/cmd/migrate/main.go create <name>
+
+# Apply locally
+go run apps/switchyard-api/cmd/migrate/main.go up
+
+# Apply to production (via kubectl)
+kubectl exec -n enclii deploy/switchyard-api -- /app/migrate up
+```
+
+---
+
+## Debugging Guide
+
+### API Issues
+
+```bash
+# Check API health
+curl https://api.enclii.dev/health
+
+# View API logs
+enclii logs switchyard-api -f --level error
+
+# Check database connectivity
+kubectl exec -n enclii deploy/switchyard-api -- /app/healthcheck db
+
+# Inspect pod status
+kubectl get pods -n enclii -l app=switchyard-api
+kubectl describe pod -n enclii <pod-name>
+```
+
+### Build Failures
+
+```bash
+# View build logs
+enclii builds logs --latest
+
+# Check Roundhouse worker status
+kubectl logs -n enclii -l app=roundhouse -f
+
+# Inspect build job
+kubectl get jobs -n enclii-builds
+kubectl logs -n enclii-builds job/<job-name>
+```
+
+### Deployment Issues
+
+```bash
+# Check deployment status
+enclii ps --wide
+
+# View reconciler logs
+kubectl logs -n enclii -l app=reconciler -f
+
+# Inspect Kubernetes deployment
+kubectl get deploy -n <namespace>
+kubectl describe deploy -n <namespace> <service>
+kubectl rollout status deploy/<service> -n <namespace>
+```
+
+### Auth/SSO Issues
+
+```bash
+# Test JWKS endpoint
+curl https://auth.madfam.io/.well-known/jwks.json | jq
+
+# Verify token (CLI)
+enclii auth verify
+
+# Check Janua logs
+kubectl logs -n janua -l app=janua-api -f
+```
+
+### GitOps/ArgoCD Issues
+
+```bash
+# Check ArgoCD sync status
+kubectl get applications -n argocd
+
+# View application details
+kubectl describe application core-services -n argocd
+
+# Check ArgoCD controller logs
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller -f
+
+# Access ArgoCD UI (port-forward)
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+# Login: admin / (kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d)
+
+# Force sync an application
+kubectl patch application core-services -n argocd --type merge -p '{"operation":{"sync":{}}}'
+```
+
+### Storage/Longhorn Issues
+
+```bash
+# Check Longhorn pods
+kubectl get pods -n longhorn-system
+
+# View volume status
+kubectl get volumes.longhorn.io -n longhorn-system
+
+# Check PVC status
+kubectl get pvc -A
+
+# Access Longhorn UI (port-forward)
+kubectl port-forward svc/longhorn-frontend -n longhorn-system 8081:80
+
+# Check replica health
+kubectl get replicas.longhorn.io -n longhorn-system
+```
+
+---
+
+## Key File Locations
+
+### API (Go)
+
+| Purpose | Location |
+|---------|----------|
+| Entry point | `apps/switchyard-api/cmd/api/main.go` |
+| HTTP handlers | `apps/switchyard-api/internal/api/*.go` |
+| Router setup | `apps/switchyard-api/internal/api/router.go` |
+| Middleware | `apps/switchyard-api/internal/api/middleware/` |
+| Models | `apps/switchyard-api/internal/models/` |
+| Services | `apps/switchyard-api/internal/service/` |
+| Migrations | `apps/switchyard-api/migrations/` |
+
+### CLI (Go)
+
+| Purpose | Location |
+|---------|----------|
+| Entry point | `packages/cli/cmd/enclii/main.go` |
+| Commands | `packages/cli/internal/cmd/` |
+| API client | `packages/cli/internal/api/` |
+| Auth flow | `packages/cli/internal/auth/` |
+| Config | `packages/cli/internal/config/` |
+
+### UI (Next.js)
+
+| Purpose | Location |
+|---------|----------|
+| App router | `apps/switchyard-ui/app/` |
+| Components | `apps/switchyard-ui/components/` |
+| API calls | `apps/switchyard-ui/lib/api/` |
+| Hooks | `apps/switchyard-ui/hooks/` |
+| Types | `apps/switchyard-ui/types/` |
+
+### Infrastructure
+
+| Purpose | Location |
+|---------|----------|
+| Terraform | `infra/terraform/` |
+| K8s manifests | `infra/k8s/production/` |
+| Cloudflare tunnel | `infra/k8s/production/cloudflared-unified.yaml` |
+| Deploy scripts | `scripts/` |
+| ArgoCD config | `infra/argocd/` |
+| ArgoCD apps | `infra/argocd/apps/*.yaml` |
+| Longhorn values | `infra/helm/longhorn/` |
+| GPU setup | `infra/k8s/base/gpu/` |
+| Kaniko builds | `apps/roundhouse/k8s/kaniko-job-template.yaml` |
+
+### Documentation
+
+| Purpose | Location |
+|---------|----------|
+| API spec | `docs/api/openapi.yaml` |
+| CLI reference | `docs/cli/` |
+| Quickstart | `docs/quickstart/` |
+| Integrations | `docs/integrations/` |
+| Architecture | `docs/architecture/` |
+| **Infrastructure (Jan 2026)** | |
+| GitOps/ArgoCD | `docs/infrastructure/GITOPS.md` |
+| Storage/Longhorn | `docs/infrastructure/STORAGE.md` |
+| Cloudflare integration | `docs/infrastructure/CLOUDFLARE.md` |
+| External secrets | `docs/infrastructure/EXTERNAL_SECRETS.md` |
+
+---
+
+## Environment-Specific Commands
+
+### Local Development
+
+```bash
+# Start full stack
+make run-all
+
+# Start individual services
+make run-switchyard   # API on :8080
+make run-ui           # UI on :3000
+
+# Database
+docker-compose up -d postgres redis
+make migrate-up
+```
+
+### Staging Environment
+
+```bash
+# Deploy
+enclii deploy --env staging
+
+# Logs
+enclii logs <service> --env staging -f
+
+# Port forward for debugging
+kubectl port-forward -n staging svc/switchyard-api 8080:8080
+```
+
+### Production Environment
+
+```bash
+# Deploy with canary
+enclii deploy --env production --strategy canary --canary-percent 10
+
+# Monitor
+enclii ps --env production --watch
+
+# Rollback if needed
+enclii rollback <service> --env production
+
+# Direct kubectl access
+export KUBECONFIG=~/.kube/enclii-production
+kubectl get pods -n enclii
+```
+
+---
+
+## Testing Workflows
+
+### Unit Tests
+
+```bash
+# All tests
+make test
+
+# Specific package
+go test ./apps/switchyard-api/internal/api/...
+
+# With coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+### Integration Tests
+
+```bash
+# Requires running services
+make integration-test
+
+# Specific test
+go test -tags=integration -run TestDeploymentFlow ./...
+```
+
+### E2E Tests
+
+```bash
+# Full E2E suite
+make e2e
+
+# UI E2E (Playwright)
+cd apps/switchyard-ui
+pnpm test:e2e
+```
+
+---
+
+## Troubleshooting Quick Reference
+
+| Symptom | Check | Fix |
+|---------|-------|-----|
+| API 500 errors | `enclii logs switchyard-api` | Check DB connection, env vars |
+| Build stuck | `kubectl get jobs -n enclii-builds` | Restart Roundhouse worker |
+| Auth fails | `curl .../jwks.json` | Check Janua status, OIDC config |
+| Deploy timeout | `kubectl describe deploy` | Check resource limits, probes |
+| Preview not created | Webhook logs | Verify GitHub integration |
+| SSL errors | Cert-manager logs | Check issuer, DNS |
+# Build test 1768185875
+# Build trigger 1768186219
+# Final test 1768186424
+# Build trigger 1768187061
+# Build test 1768188102
+# Build trigger 1768433105
+# Build trigger 1768433846
+# Build test 1768433903
+# Build trigger 1768437150

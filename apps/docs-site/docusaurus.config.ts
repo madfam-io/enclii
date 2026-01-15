@@ -36,11 +36,9 @@ const config: Config = {
           path: process.env.DOCKER_BUILD === 'true' ? '../docs' : '../../docs',
           routeBasePath: '/',
           editUrl: 'https://github.com/madfam-io/enclii/tree/main/docs/',
-          // Exclude files with problematic {slug} patterns that break MDX
+          // Exclude archived content only (API.md fixed, infrastructure now included)
           exclude: [
-            '**/API.md',
             '**/archive/**',
-            '**/infrastructure/**',
           ],
         },
         pages: false,

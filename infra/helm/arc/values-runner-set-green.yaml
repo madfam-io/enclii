@@ -1,0 +1,28 @@
+# Green runner scale set (standby/canary)
+# This scale set is dormant during normal operations and activates during blue-green switches
+# Usage: helm upgrade --install enclii-runners-green \
+#          oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
+#          --namespace arc-runners \
+#          --values values-runner-set.yaml \
+#          --values values-runner-set-green.yaml
+
+runnerScaleSetName: "enclii-runners-green"
+
+# Start with 0 runners (standby mode)
+# During blue-green switch, this will be scaled up before blue is drained
+minRunners: 0
+maxRunners: 6
+
+# Green-specific labels for identification
+template:
+  metadata:
+    labels:
+      arc.enclii.dev/color: green
+      arc.enclii.dev/active: "false"
+    annotations:
+      arc.enclii.dev/deployed-at: ""  # Will be set by Helm
+
+# NOTE: Custom PVC volumes removed for now
+# ARC's container merge doesn't work properly with custom containers
+# Caching will use GitHub Actions cache instead of PVC-based caching
+# TODO: Revisit PVC caching when ARC Helm chart improves merge behavior

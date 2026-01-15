@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/reconciler"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
@@ -103,12 +104,45 @@ func (h *Handler) AddCustomDomain(c *gin.Context) {
 		return
 	}
 
+	// Add tunnel route if tunnel routes service is configured
+	tunnelRouteAdded := false
+	if h.tunnelRoutesService != nil {
+		routeSpec := &services.RouteSpec{
+			Hostname:         req.Domain,
+			ServiceName:      service.Name,
+			ServiceNamespace: fmt.Sprintf("enclii-%s", req.Environment),
+			ServicePort:      80, // K8s Service port (not container port)
+			ConnectTimeout:   "30s",
+			KeepAliveTimeout: "90s",
+		}
+
+		if err := h.tunnelRoutesService.AddRoute(ctx, routeSpec); err != nil {
+			h.logger.Warn(ctx, "Failed to add tunnel route (domain created, manual tunnel config may be needed)",
+				logging.String("domain", req.Domain),
+				logging.Error("error", err))
+			// Don't fail the request - domain is created, tunnel route is optional
+		} else {
+			tunnelRouteAdded = true
+			h.logger.Info(ctx, "Tunnel route added automatically",
+				logging.String("domain", req.Domain),
+				logging.String("service", service.Name))
+		}
+	}
+
 	// Trigger reconciliation to create Ingress
 	go h.triggerDomainReconciliation(ctx, serviceUUID, env.ID)
 
+	responseMessage := fmt.Sprintf("Custom domain %s added.", req.Domain)
+	if tunnelRouteAdded {
+		responseMessage += " Tunnel route configured automatically."
+	} else {
+		responseMessage += " Configure your DNS to point to the tunnel."
+	}
+
 	c.JSON(http.StatusCreated, gin.H{
-		"domain":  domain,
-		"message": fmt.Sprintf("Custom domain %s added. Configure your DNS to point to the ingress controller.", req.Domain),
+		"domain":             domain,
+		"message":            responseMessage,
+		"tunnel_route_added": tunnelRouteAdded,
 	})
 }
 
@@ -219,6 +253,21 @@ func (h *Handler) DeleteCustomDomain(c *gin.Context) {
 		return
 	}
 
+	// Remove tunnel route if tunnel routes service is configured
+	tunnelRouteRemoved := false
+	if h.tunnelRoutesService != nil {
+		if err := h.tunnelRoutesService.RemoveRoute(ctx, domain.Domain); err != nil {
+			h.logger.Warn(ctx, "Failed to remove tunnel route (continuing with domain deletion)",
+				logging.String("domain", domain.Domain),
+				logging.Error("error", err))
+			// Don't fail the request - continue with domain deletion
+		} else {
+			tunnelRouteRemoved = true
+			h.logger.Info(ctx, "Tunnel route removed automatically",
+				logging.String("domain", domain.Domain))
+		}
+	}
+
 	// Delete domain
 	if err := h.repos.CustomDomains.Delete(ctx, domainID); err != nil {
 		h.logger.Error(ctx, "Failed to delete custom domain", logging.Error("error", err))
@@ -229,7 +278,10 @@ func (h *Handler) DeleteCustomDomain(c *gin.Context) {
 	// Trigger reconciliation to remove Ingress
 	go h.triggerDomainReconciliation(ctx, domain.ServiceID, domain.EnvironmentID)
 
-	c.JSON(http.StatusOK, gin.H{"message": "custom domain deleted"})
+	c.JSON(http.StatusOK, gin.H{
+		"message":              "custom domain deleted",
+		"tunnel_route_removed": tunnelRouteRemoved,
+	})
 }
 
 // VerifyCustomDomain verifies domain ownership via DNS TXT record

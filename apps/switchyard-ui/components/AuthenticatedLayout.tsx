@@ -1,36 +1,83 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { CommandPalette } from '@/components/command/command-palette';
+import { SystemHealthBadge } from '@/components/dashboard/system-health';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Menu, ChevronDown } from 'lucide-react';
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
+}
+
+interface NavItem {
+  name: string;
+  href: string;
+}
+
+// Helper component for nav links
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+  return (
+    <Link
+      href={item.href}
+      className={`px-3 py-2 text-sm font-medium transition-colors duration-150 whitespace-nowrap ${
+        isActive
+          ? 'text-enclii-blue border-b-2 border-enclii-blue'
+          : 'text-muted-foreground hover:text-enclii-blue hover:border-b-2 hover:border-border'
+      }`}
+    >
+      {item.name}
+    </Link>
+  );
 }
 
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navigation = [
+  // Primary navigation - always visible at lg+ breakpoint
+  const primaryNav: NavItem[] = [
     { name: 'Dashboard', href: '/' },
     { name: 'Projects', href: '/projects' },
     { name: 'Services', href: '/services' },
     { name: 'Deployments', href: '/deployments' },
-    { name: 'Domains', href: '/domains' },
     { name: 'Observability', href: '/observability' },
+  ];
+
+  // Overflow navigation - in dropdown at lg, visible at xl+
+  const overflowNav: NavItem[] = [
+    { name: 'Templates', href: '/templates' },
+    { name: 'Databases', href: '/databases' },
+    { name: 'Domains', href: '/domains' },
     { name: 'Activity', href: '/activity' },
   ];
 
-  const secondaryNav = [
+  // Combined navigation for mobile menu
+  const navigation = [...primaryNav, ...overflowNav];
+
+  const secondaryNav: NavItem[] = [
     { name: 'Usage', href: '/usage' },
     { name: 'Settings', href: '/settings' },
   ];
+
+  // Check if any overflow item is active (for "More" button highlighting)
+  const isOverflowActive = overflowNav.some(
+    (item) => pathname === item.href || pathname.startsWith(item.href)
+  );
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -62,7 +109,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   }
 
   return (
-    <>
+    <div className="min-h-screen flex flex-col">
       <nav className="bg-background shadow-sm border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -70,34 +117,63 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
               <div className="flex-shrink-0">
                 <Link href="/" className="flex items-center">
                   <span className="text-2xl font-bold text-enclii-blue">🚂 Enclii</span>
-                  <span className="ml-2 text-sm text-muted-foreground font-medium">Switchyard</span>
+                  <span className="ml-2 text-sm text-muted-foreground font-medium hidden sm:inline">Switchyard</span>
                 </Link>
               </div>
-              <div className="ml-10 flex items-baseline space-x-4">
-                {navigation.map((item) => {
-                  const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className={`px-3 py-2 text-sm font-medium transition-colors duration-150 ${
-                        isActive
-                          ? 'text-enclii-blue border-b-2 border-enclii-blue'
-                          : 'text-muted-foreground hover:text-enclii-blue hover:border-b-2 hover:border-border'
-                      }`}
-                    >
-                      {item.name}
-                    </Link>
-                  );
-                })}
+              {/* Desktop Navigation - Hidden on mobile/tablet */}
+              <div className="hidden lg:flex ml-6 items-baseline space-x-1 xl:space-x-4">
+                {/* Primary nav items - always visible at lg+ */}
+                {primaryNav.map((item) => (
+                  <NavLink key={item.name} item={item} pathname={pathname} />
+                ))}
+
+                {/* More dropdown - visible at lg, hidden at xl */}
+                <div className="xl:hidden">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className={`px-3 py-2 text-sm font-medium transition-colors duration-150 flex items-center gap-1 ${
+                          isOverflowActive
+                            ? 'text-enclii-blue'
+                            : 'text-muted-foreground hover:text-enclii-blue'
+                        }`}
+                      >
+                        More
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-40">
+                      {overflowNav.map((item) => {
+                        const isActive = pathname === item.href || pathname.startsWith(item.href);
+                        return (
+                          <DropdownMenuItem key={item.name} asChild>
+                            <Link
+                              href={item.href}
+                              className={isActive ? 'text-enclii-blue bg-accent' : ''}
+                            >
+                              {item.name}
+                            </Link>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                {/* Overflow items - visible at xl+ */}
+                <div className="hidden xl:flex items-baseline space-x-4">
+                  {overflowNav.map((item) => (
+                    <NavLink key={item.name} item={item} pathname={pathname} />
+                  ))}
+                </div>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
-              {/* Command Palette */}
+            <div className="flex items-center space-x-1 lg:space-x-2">
+              {/* Command Palette - Always visible */}
               <CommandPalette />
 
-              {/* Secondary Navigation */}
-              <div className="flex items-center space-x-2 mr-4 border-r border-border pr-4">
+              {/* Secondary Navigation - Hidden on mobile */}
+              <div className="hidden md:flex items-center space-x-1 mr-2 border-r border-border pr-2 lg:mr-4 lg:pr-4">
                 {secondaryNav.map((item) => {
                   const isActive = pathname === item.href || pathname.startsWith(item.href);
                   return (
@@ -116,38 +192,133 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                 })}
               </div>
 
-              <div className="flex items-center text-sm text-muted-foreground">
-                <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                <span>System Healthy</span>
+              {/* System Health - Hidden on mobile/tablet, visible at lg+ */}
+              <div className="hidden lg:block">
+                <SystemHealthBadge />
               </div>
 
-              {/* Notifications */}
+              {/* Notifications - Always visible */}
               <NotificationBell />
 
-              {/* Theme Toggle */}
+              {/* Theme Toggle - Always visible */}
               <ThemeToggle />
 
-              {/* User Menu */}
-              <div className="relative flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">
+              {/* User Menu - Hidden until xl, shown in hamburger otherwise */}
+              <div className="hidden xl:flex relative items-center gap-2">
+                <span className="text-sm text-muted-foreground truncate max-w-[120px]">
                   {user?.name || user?.email}
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="text-sm text-muted-foreground hover:text-foreground px-3 py-1 rounded border border-border hover:bg-accent transition-colors"
+                  className="text-sm text-muted-foreground hover:text-foreground px-2 py-1 rounded border border-border hover:bg-accent transition-colors"
                 >
                   Sign out
                 </button>
               </div>
+
+              {/* Mobile/Tablet Hamburger Menu - visible below xl */}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <button className="xl:hidden p-2 rounded-md hover:bg-accent">
+                    <Menu className="h-6 w-6 text-foreground" />
+                    <span className="sr-only">Open menu</span>
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[300px] sm:w-[350px]">
+                  <SheetHeader>
+                    <SheetTitle>Menu</SheetTitle>
+                  </SheetHeader>
+                  <nav className="flex flex-col gap-4 mt-6">
+                    {/* Navigation Links */}
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        Navigation
+                      </p>
+                      {navigation.map((item) => {
+                        const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+                        return (
+                          <Link
+                            key={item.name}
+                            href={item.href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={`block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                              isActive
+                                ? 'bg-accent text-enclii-blue'
+                                : 'text-foreground hover:bg-accent'
+                            }`}
+                          >
+                            {item.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+
+                    {/* Secondary Navigation */}
+                    <div className="space-y-1 border-t border-border pt-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                        Settings
+                      </p>
+                      {secondaryNav.map((item) => {
+                        const isActive = pathname === item.href || pathname.startsWith(item.href);
+                        return (
+                          <Link
+                            key={item.name}
+                            href={item.href}
+                            onClick={() => setMobileMenuOpen(false)}
+                            className={`block px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                              isActive
+                                ? 'bg-accent text-enclii-blue'
+                                : 'text-foreground hover:bg-accent'
+                            }`}
+                          >
+                            {item.name}
+                          </Link>
+                        );
+                      })}
+                    </div>
+
+                    {/* System Status - visible in mobile menu */}
+                    <div className="border-t border-border pt-4">
+                      <div className="px-3 py-2 flex items-center gap-2">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          System Status
+                        </span>
+                        <SystemHealthBadge />
+                      </div>
+                    </div>
+
+                    {/* User Section */}
+                    <div className="border-t border-border pt-4 mt-auto">
+                      <div className="px-3 py-2">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {user?.name || 'User'}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {user?.email}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setMobileMenuOpen(false);
+                          handleLogout();
+                        }}
+                        className="w-full mt-2 px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 rounded-md transition-colors text-left"
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  </nav>
+                </SheetContent>
+              </Sheet>
             </div>
           </div>
         </div>
       </nav>
-      <main className="min-h-screen">{children}</main>
-      <footer className="bg-background border-t border-border mt-12">
+      <main className="flex-grow">{children}</main>
+      <footer className="bg-background border-t border-border">
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-sm text-muted-foreground text-center sm:text-left">
               © {new Date().getFullYear()} Enclii Platform. Built with ❤️ for developers.
             </div>
             <div className="flex items-center space-x-4 text-sm text-muted-foreground">
@@ -158,6 +329,6 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
           </div>
         </div>
       </footer>
-    </>
+    </div>
   );
 }

@@ -1,0 +1,92 @@
+---
+# ArgoCD Image Updater Registry Configuration
+# ConfigMap for registry authentication and settings
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-image-updater-config
+  namespace: argocd
+data:
+  # Log level: debug, info, warn, error
+  log.level: info
+
+  # Registries configuration
+  registries.conf: |
+    registries:
+      # GitHub Container Registry (primary registry for Enclii)
+      - name: ghcr
+        api_url: https://ghcr.io
+        prefix: ghcr.io
+        # Use pull secret for authentication (avoids rate limits)
+        credentials: pullsecret:argocd/ghcr-credentials
+        default: true
+
+      # Docker Hub (for base images)
+      - name: dockerhub
+        api_url: https://registry-1.docker.io
+        prefix: docker.io
+        # Anonymous for public images, add credentials if needed
+
+      # Google Container Registry (for Google-provided images)
+      - name: gcr
+        api_url: https://gcr.io
+        prefix: gcr.io
+
+  # Git repositories configuration
+  git.repositories: |
+    - url: https://github.com/madfam-org/enclii.git
+      name: enclii
+      # Credentials for write-back
+      credentials: secret:argocd/git-creds
+
+  # Application defaults
+  applications.defaults: |
+    # Default update strategy
+    update-strategy: semver
+    # Default write-back method
+    write-back-method: git
+    # Default branch for commits
+    write-back-target: kustomization
+    # Commit message template
+    git.commit-message-template: |
+      chore(images): update {{ .AppName }} to {{ .NewImage }}
+
+      Updated by ArgoCD Image Updater
+      - Application: {{ .AppName }}
+      - Image: {{ .Image }}
+      - Old Tag: {{ .OldTag }}
+      - New Tag: {{ .NewTag }}
+---
+# Secret for GitHub Container Registry authentication
+# Replace with actual credentials or create manually:
+# kubectl create secret generic ghcr-credentials -n argocd \
+#   --from-literal=username=<github-username> \
+#   --from-literal=password=<github-pat>
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ghcr-credentials
+  namespace: argocd
+type: Opaque
+stringData:
+  # GitHub username
+  username: "${GITHUB_USERNAME}"
+  # GitHub Personal Access Token with read:packages scope
+  password: "${GITHUB_TOKEN}"
+---
+# Secret for Git write-back authentication
+# Replace with actual credentials or create manually:
+# kubectl create secret generic git-creds -n argocd \
+#   --from-literal=username=<github-username> \
+#   --from-literal=password=<github-pat>
+apiVersion: v1
+kind: Secret
+metadata:
+  name: git-creds
+  namespace: argocd
+type: Opaque
+stringData:
+  # GitHub username
+  username: "${GITHUB_USERNAME}"
+  # GitHub Personal Access Token with repo scope
+  password: "${GITHUB_TOKEN}"
