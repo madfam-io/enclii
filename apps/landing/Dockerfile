@@ -23,8 +23,8 @@ COPY apps/landing/nginx.conf /etc/nginx/conf.d/default.conf
 # Copy built static files
 COPY --from=builder /app/out /usr/share/nginx/html
 
-# Expose port (4204 per PORT_ALLOCATION.md - Enclii landing page)
-EXPOSE 4204
+# Expose port 80 for Kubernetes health checks (service handles external routing)
+EXPOSE 80
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]

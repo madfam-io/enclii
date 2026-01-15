@@ -33,7 +33,8 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	viper.SetDefault("API_PORT", "8082")
+	// Support both PORT (set by Enclii platform) and API_PORT for backwards compatibility
+	viper.SetDefault("API_PORT", "8080")
 	viper.SetDefault("AGGREGATION_INTERVAL", time.Hour)
 	viper.SetDefault("RETENTION_DAYS", 90)
 

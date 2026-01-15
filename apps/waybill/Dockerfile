@@ -19,18 +19,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /waybill-api ./cmd/api
 # Build Aggregator binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o /waybill-aggregator ./cmd/aggregator
 
-# API runtime stage
-FROM alpine:3.19 AS api
-
-RUN apk add --no-cache ca-certificates tzdata
-
-COPY --from=builder /waybill-api /usr/local/bin/waybill-api
-
-EXPOSE 8082
-
-ENTRYPOINT ["/usr/local/bin/waybill-api"]
-
-# Aggregator runtime stage
+# Aggregator runtime stage (for background jobs)
 FROM alpine:3.19 AS aggregator
 
 RUN apk add --no-cache ca-certificates tzdata
@@ -38,3 +27,14 @@ RUN apk add --no-cache ca-certificates tzdata
 COPY --from=builder /waybill-aggregator /usr/local/bin/waybill-aggregator
 
 ENTRYPOINT ["/usr/local/bin/waybill-aggregator"]
+
+# API runtime stage (default - HTTP server with health checks)
+FROM alpine:3.19 AS api
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --from=builder /waybill-api /usr/local/bin/waybill-api
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/waybill-api"]

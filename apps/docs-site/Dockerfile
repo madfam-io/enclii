@@ -35,7 +35,7 @@ FROM nginx:alpine AS runner
 
 # Copy custom nginx config
 RUN echo 'server { \
-    listen 4203; \
+    listen 80; \
     server_name localhost; \
     root /usr/share/nginx/html; \
     index index.html; \
@@ -58,6 +58,6 @@ RUN echo 'server { \
 # Copy built static files
 COPY --from=builder /app/docs-site/build /usr/share/nginx/html
 
-EXPOSE 4203
+EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
