@@ -864,7 +864,7 @@ func (c *Controller) updateDeploymentHealth(ctx context.Context, deployment *typ
 	}
 
 	// Determine expected deployment status based on K8s state
-	// If K8s shows healthy pods but deployment is stuck at pending, transition to running
+	// If K8s shows healthy pods but deployment is stuck at pending or failed, transition to running
 	newStatus := deployment.Status
 	if expectedHealth == types.HealthStatusHealthy {
 		if deployment.Status == types.DeploymentStatusPending {
@@ -874,6 +874,15 @@ func (c *Controller) updateDeploymentHealth(ctx context.Context, deployment *typ
 				"old_status":    deployment.Status,
 				"new_status":    newStatus,
 			}).Info("Transitioning deployment from pending to running based on K8s state")
+		} else if deployment.Status == types.DeploymentStatusFailed {
+			// Recovery: If K8s shows healthy pods but deployment was marked failed,
+			// transition to running (the deployment has actually succeeded)
+			newStatus = types.DeploymentStatusRunning
+			logger.WithFields(logrus.Fields{
+				"deployment_id": deployment.ID,
+				"old_status":    deployment.Status,
+				"new_status":    newStatus,
+			}).Info("Recovering failed deployment to running - K8s shows healthy pods")
 		}
 	}
 
