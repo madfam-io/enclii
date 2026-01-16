@@ -1,0 +1,35 @@
+# DocGuard Workflow - Documentation Quality Enforcement
+#
+# Part of the Solarpunk Foundry ecosystem
+# Checks: env var documentation, banned terminology, dead links
+#
+# Source: https://github.com/madfam-org/solarpunk-foundry
+
+name: Documentation Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '*.md'
+      - '.env.example'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '*.md'
+      - '.env.example'
+
+jobs:
+  doc-guard:
+    name: DocGuard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run DocGuard
+        uses: madfam-org/solarpunk-foundry/.github/actions/doc-guard@main
+        with:
+          doc-path: './docs'
+          strict: false  # Start with warnings only, enable strict after cleanup
