@@ -10,9 +10,9 @@ resources:
   - alertmanager.yaml
   - dashboards/
 
-commonLabels:
-  app.kubernetes.io/part-of: enclii
-  app.kubernetes.io/managed-by: kustomize
+# Note: commonLabels are NOT used here because kustomize adds them to service
+# selectors, causing selector mismatches with pods. Labels are set directly
+# in each resource's metadata instead.
 
 # Common annotations
 commonAnnotations:
