@@ -10,6 +10,13 @@ configMapGenerator:
     options:
       labels:
         grafana_dashboard: "true"
+  - name: grafana-dashboard-secrets-rotation
+    namespace: monitoring
+    files:
+      - secrets-rotation.json
+    options:
+      labels:
+        grafana_dashboard: "true"
 
 generatorOptions:
   disableNameSuffixHash: true
