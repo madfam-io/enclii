@@ -87,6 +87,31 @@ type Config struct {
 
 	// Serverless Functions
 	FunctionBaseDomain string // Base domain for functions (default: fn.enclii.dev)
+
+	// Database Pool Configuration
+	DBPoolSize int // Maximum number of database connections (default: 25)
+
+	// Cache Configuration
+	CacheTTLSeconds int // Cache TTL in seconds (default: 3600)
+
+	// Rate Limiting Configuration
+	RateLimitRequestsPerMinute int  // Max requests per minute (default: 1000)
+	RateLimitEnabled           bool // Enable rate limiting (default: true)
+
+	// Request Size Limits
+	MaxRequestSizeBytes int64 // Maximum request body size in bytes (default: 10MB)
+
+	// Profiling
+	ProfilingEnabled bool // Enable pprof profiling endpoints (default: false)
+
+	// Admin Configuration
+	AdminEmails []string // Comma-separated list of admin email addresses
+
+	// Email Configuration (for transactional emails like invitations)
+	EmailAPIKey       string // RESEND_API_KEY - Resend API key for sending emails
+	EmailFromAddress  string // EMAIL_FROM_ADDRESS - From email address (default: noreply@enclii.dev)
+	EmailFromName     string // EMAIL_FROM_NAME - From name (default: Enclii)
+	AppBaseURL        string // APP_BASE_URL - Base URL for app links in emails (default: https://app.enclii.dev)
 }
 
 func Load() (*Config, error) {
@@ -143,6 +168,21 @@ func Load() (*Config, error) {
 	viper.SetDefault("cloudflare-tunnel-id", "")
 	viper.SetDefault("function-base-domain", "fn.enclii.dev")
 
+	// K8s environment variable defaults (wired from infra/k8s docs)
+	viper.SetDefault("db-pool-size", 25)                        // DB_POOL_SIZE
+	viper.SetDefault("cache-ttl-seconds", 3600)                 // CACHE_TTL_SECONDS (1 hour)
+	viper.SetDefault("rate-limit-requests-per-minute", 1000)    // RATE_LIMIT_REQUESTS_PER_MINUTE
+	viper.SetDefault("rate-limit-enabled", true)                // RATE_LIMIT_ENABLED
+	viper.SetDefault("max-request-size-bytes", int64(10485760)) // MAX_REQUEST_SIZE (10MB)
+	viper.SetDefault("profiling-enabled", false)                // ENABLE_PROFILING
+	viper.SetDefault("admin-emails", "")                        // ADMIN_EMAILS (comma-separated)
+
+	// Email configuration
+	viper.SetDefault("resend-api-key", "")                      // RESEND_API_KEY
+	viper.SetDefault("email-from-address", "noreply@enclii.dev") // EMAIL_FROM_ADDRESS
+	viper.SetDefault("email-from-name", "Enclii")               // EMAIL_FROM_NAME
+	viper.SetDefault("app-base-url", "https://app.enclii.dev")  // APP_BASE_URL
+
 	// Parse log level
 	logLevelStr := viper.GetString("log-level")
 	logLevel, err := logrus.ParseLevel(logLevelStr)
@@ -196,8 +236,19 @@ func Load() (*Config, error) {
 		CloudflareAPIToken:        viper.GetString("cloudflare-api-token"),
 		CloudflareAccountID:       viper.GetString("cloudflare-account-id"),
 		CloudflareZoneID:          viper.GetString("cloudflare-zone-id"),
-		CloudflareTunnelID:        viper.GetString("cloudflare-tunnel-id"),
-		FunctionBaseDomain:        viper.GetString("function-base-domain"),
+		CloudflareTunnelID:         viper.GetString("cloudflare-tunnel-id"),
+		FunctionBaseDomain:         viper.GetString("function-base-domain"),
+		DBPoolSize:                 viper.GetInt("db-pool-size"),
+		CacheTTLSeconds:            viper.GetInt("cache-ttl-seconds"),
+		RateLimitRequestsPerMinute: viper.GetInt("rate-limit-requests-per-minute"),
+		RateLimitEnabled:           viper.GetBool("rate-limit-enabled"),
+		MaxRequestSizeBytes:        viper.GetInt64("max-request-size-bytes"),
+		ProfilingEnabled:           viper.GetBool("profiling-enabled"),
+		AdminEmails:                parseAdminEmails(viper.GetString("admin-emails")),
+		EmailAPIKey:                viper.GetString("resend-api-key"),
+		EmailFromAddress:           viper.GetString("email-from-address"),
+		EmailFromName:              viper.GetString("email-from-name"),
+		AppBaseURL:                 viper.GetString("app-base-url"),
 	}
 
 	// SEC-001: Validate required configuration
@@ -214,4 +265,20 @@ func Load() (*Config, error) {
 	}
 
 	return config, nil
+}
+
+// parseAdminEmails parses a comma-separated list of admin email addresses
+func parseAdminEmails(emails string) []string {
+	if emails == "" {
+		return []string{}
+	}
+	parts := strings.Split(emails, ",")
+	result := make([]string, 0, len(parts))
+	for _, email := range parts {
+		trimmed := strings.TrimSpace(email)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }

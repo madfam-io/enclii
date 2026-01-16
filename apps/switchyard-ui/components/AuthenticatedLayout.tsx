@@ -16,6 +16,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Menu, ChevronDown } from 'lucide-react';
+import { useScrollShadow } from '@/hooks/use-scroll-shadow';
+import { ScopeSwitcher } from '@/components/navigation/scope-switcher';
+import { useScope } from '@/contexts/ScopeContext';
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
@@ -48,6 +51,8 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isScrolled, shadowClass } = useScrollShadow();
+  const { currentScope, scopes, switchScope } = useScope();
 
   // Primary navigation - always visible at lg+ breakpoint
   const primaryNav: NavItem[] = [
@@ -111,15 +116,29 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <nav className="bg-background shadow-sm border-b border-border">
+      <nav className={`bg-background border-b border-border sticky top-0 z-50 transition-shadow duration-200 ${isScrolled ? shadowClass : ''}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <div className="flex-shrink-0">
+              <div className="flex-shrink-0 flex items-center gap-2">
                 <Link href="/" className="flex items-center">
                   <span className="text-2xl font-bold text-enclii-blue">🚂 Enclii</span>
                   <span className="ml-2 text-sm text-muted-foreground font-medium hidden sm:inline">Switchyard</span>
                 </Link>
+                {/* Scope Switcher - Vercel-style team/personal context */}
+                {currentScope && (
+                  <>
+                    <span className="text-muted-foreground/40 hidden md:inline">/</span>
+                    <div className="hidden md:block">
+                      <ScopeSwitcher
+                        scopes={scopes}
+                        currentScope={currentScope}
+                        onScopeChange={switchScope}
+                        onCreateTeam={() => router.push('/settings/teams/new')}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
               {/* Desktop Navigation - Hidden on mobile/tablet */}
               <div className="hidden lg:flex ml-6 items-baseline space-x-1 xl:space-x-4">
@@ -230,6 +249,27 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                     <SheetTitle>Menu</SheetTitle>
                   </SheetHeader>
                   <nav className="flex flex-col gap-4 mt-6">
+                    {/* Scope Switcher - Mobile */}
+                    {currentScope && (
+                      <div className="px-3 py-2 border-b border-border pb-4">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                          Account
+                        </p>
+                        <ScopeSwitcher
+                          scopes={scopes}
+                          currentScope={currentScope}
+                          onScopeChange={(scope) => {
+                            switchScope(scope);
+                            setMobileMenuOpen(false);
+                          }}
+                          onCreateTeam={() => {
+                            setMobileMenuOpen(false);
+                            router.push('/settings/teams/new');
+                          }}
+                        />
+                      </div>
+                    )}
+
                     {/* Navigation Links */}
                     <div className="space-y-1">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">

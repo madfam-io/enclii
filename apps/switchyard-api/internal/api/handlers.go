@@ -39,6 +39,7 @@ type Handler struct {
 	tunnelRoutesService    services.TunnelRoutesManager
 	addonService           *addons.AddonService
 	notificationService    *notifications.Service
+	emailService           *notifications.EmailService
 
 	// Infrastructure
 	config             *config.Config
@@ -143,6 +144,12 @@ func (h *Handler) SetNotificationService(svc *notifications.Service) {
 	h.notificationService = svc
 }
 
+// SetEmailService sets the email service for transactional emails (invitations, etc.)
+// This is optional - if not set, emails will be logged instead of sent
+func (h *Handler) SetEmailService(svc *notifications.EmailService) {
+	h.emailService = svc
+}
+
 // SetTunnelRoutesService sets the tunnel routes service for automatic cloudflared route management
 // This is optional - if not set, domain additions will not automatically update tunnel routes
 // Accepts either TunnelRoutesService (ConfigMap-based) or TunnelRoutesServiceCloudflare (API-based)
@@ -171,6 +178,10 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 
 	// Health check (no auth required)
 	router.GET("/health", h.Health)
+
+	// Kubernetes probes (no auth required)
+	router.GET("/health/live", h.LivenessProbe)
+	router.GET("/health/ready", h.ReadinessProbe)
 
 	// Build status - public endpoint for cross-service commit status lookup
 	router.GET("/v1/builds/:commit_sha/status", h.GetBuildStatusByCommit)

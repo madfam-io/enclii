@@ -16,3 +16,10 @@ export {
 
 // System Health
 export { SystemHealth, SystemHealthBadge } from "./system-health";
+
+// View Toggle
+export { ViewToggle, useViewMode, ProjectsViewHeader } from "./view-toggle";
+export type { ViewMode } from "./view-toggle";
+
+// Usage Overview (CircularGauge integration)
+export { UsageOverview, UsageGauges } from "./usage-overview";

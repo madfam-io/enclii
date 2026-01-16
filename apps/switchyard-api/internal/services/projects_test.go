@@ -4,42 +4,8 @@ import (
 	"testing"
 )
 
-// TODO: Project service tests need refactoring for the same reasons as auth tests:
-// - MockRepositories type incompatibility
-// - Changed constructor signatures
-// - Repository method signature changes
-//
-// Rewrite as integration tests with proper database setup.
+// Unit tests for pure functions (no DB required)
 
-func TestProjectService_CreateProject(t *testing.T) {
-	t.Skip("TODO: Rewrite with proper mocks or as integration test")
-}
-
-func TestProjectService_CreateProject_DuplicateSlug(t *testing.T) {
-	t.Skip("TODO: Rewrite with proper mocks or as integration test")
-}
-
-func TestProjectService_GetProject(t *testing.T) {
-	t.Skip("TODO: Rewrite with proper mocks or as integration test")
-}
-
-func TestProjectService_ListProjects(t *testing.T) {
-	t.Skip("TODO: Rewrite with proper mocks or as integration test")
-}
-
-func TestProjectService_CreateService(t *testing.T) {
-	t.Skip("TODO: Rewrite with proper mocks or as integration test")
-}
-
-func TestProjectService_GetService(t *testing.T) {
-	t.Skip("TODO: Rewrite with proper mocks or as integration test")
-}
-
-func TestProjectService_ListServices(t *testing.T) {
-	t.Skip("TODO: Rewrite with proper mocks or as integration test")
-}
-
-// Simple validation function tests can still work
 func Test_isValidSlug(t *testing.T) {
 	tests := []struct {
 		slug string

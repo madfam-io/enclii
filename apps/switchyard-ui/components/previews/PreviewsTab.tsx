@@ -36,6 +36,31 @@ function formatTimeAgo(dateString: string): string {
   return 'Just now';
 }
 
+// Generate GitHub avatar URL from username
+function getGitHubAvatarUrl(username: string, size: number = 40): string {
+  return `https://github.com/${username}.png?size=${size}`;
+}
+
+// Generate commit URL from PR URL and commit SHA
+function getCommitUrl(prUrl?: string, commitSha?: string): string | undefined {
+  if (!prUrl || !commitSha) return undefined;
+  // PR URL format: https://github.com/owner/repo/pull/123
+  // Commit URL format: https://github.com/owner/repo/commit/sha
+  try {
+    const url = new URL(prUrl);
+    const pathParts = url.pathname.split('/');
+    // pathParts: ['', 'owner', 'repo', 'pull', '123']
+    if (pathParts.length >= 4) {
+      const owner = pathParts[1];
+      const repo = pathParts[2];
+      return `https://github.com/${owner}/${repo}/commit/${commitSha}`;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 export function PreviewsTab({ serviceId, serviceName }: PreviewsTabProps) {
   const [previews, setPreviews] = useState<PreviewEnvironment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -262,8 +287,29 @@ function PreviewCard({ preview, onWake, onClose, onDelete, actionLoading, isHist
               </a>
             </div>
 
-            {/* Branch and Commit */}
-            <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+            {/* Author Avatar and Branch/Commit */}
+            <div className="mt-2 flex items-center gap-3 text-sm text-muted-foreground">
+              {/* Author Avatar */}
+              {preview.pr_author && (
+                <a
+                  href={`https://github.com/${preview.pr_author}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 hover:text-foreground transition-colors"
+                  title={`View ${preview.pr_author} on GitHub`}
+                >
+                  <img
+                    src={preview.pr_author_avatar_url || getGitHubAvatarUrl(preview.pr_author)}
+                    alt={preview.pr_author}
+                    className="h-5 w-5 rounded-full border border-border"
+                  />
+                  <span className="font-medium">{preview.pr_author}</span>
+                </a>
+              )}
+
+              <span className="text-muted-foreground/50">•</span>
+
+              {/* Branch */}
               <span className="flex items-center gap-1">
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="6" y1="3" x2="6" y2="15" />
@@ -271,25 +317,44 @@ function PreviewCard({ preview, onWake, onClose, onDelete, actionLoading, isHist
                   <circle cx="6" cy="18" r="3" />
                   <path d="M18 9a9 9 0 0 1-9 9" />
                 </svg>
-                {preview.pr_branch}
+                <span className="font-mono text-xs">{preview.pr_branch}</span>
               </span>
-              <span className="flex items-center gap-1">
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="4" />
-                  <line x1="1.05" y1="12" x2="7" y2="12" />
-                  <line x1="17.01" y1="12" x2="22.96" y2="12" />
-                </svg>
-                {preview.commit_sha.substring(0, 7)}
-              </span>
-              {preview.pr_author && (
-                <span className="flex items-center gap-1">
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  {preview.pr_author}
-                </span>
-              )}
+
+              <span className="text-muted-foreground/50">•</span>
+
+              {/* Commit SHA with deep link */}
+              {(() => {
+                const commitUrl = preview.commit_url || getCommitUrl(preview.pr_url, preview.commit_sha);
+                return commitUrl ? (
+                  <a
+                    href={commitUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-foreground transition-colors font-mono text-xs"
+                    title="View commit on GitHub"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="4" />
+                      <line x1="1.05" y1="12" x2="7" y2="12" />
+                      <line x1="17.01" y1="12" x2="22.96" y2="12" />
+                    </svg>
+                    {preview.commit_sha.substring(0, 7)}
+                  </a>
+                ) : (
+                  <span className="flex items-center gap-1 font-mono text-xs">
+                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="4" />
+                      <line x1="1.05" y1="12" x2="7" y2="12" />
+                      <line x1="17.01" y1="12" x2="22.96" y2="12" />
+                    </svg>
+                    {preview.commit_sha.substring(0, 7)}
+                  </span>
+                );
+              })()}
+
+              <span className="text-muted-foreground/50">•</span>
+
+              {/* Time ago */}
               <span>{formatTimeAgo(preview.created_at)}</span>
             </div>
 

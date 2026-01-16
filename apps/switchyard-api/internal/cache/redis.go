@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -46,8 +49,9 @@ type CacheService interface {
 }
 
 type RedisCache struct {
-	client *redis.Client
-	config *CacheConfig
+	client      *redis.Client
+	config      *CacheConfig
+	errorCount  atomic.Int64 // Track application-level cache errors
 }
 
 type CacheConfig struct {
@@ -447,17 +451,39 @@ type CacheMetrics struct {
 }
 
 func (r *RedisCache) GetMetrics(ctx context.Context) (*CacheMetrics, error) {
-	_, err := r.client.Info(ctx, "stats").Result()
+	info, err := r.client.Info(ctx, "stats").Result()
 	if err != nil {
+		r.errorCount.Add(1)
 		return nil, err
 	}
 
-	// Parse Redis info for cache metrics
-	// This is a simplified version - in production you'd parse the full stats
-	// TODO: Parse info string to extract actual hit/miss statistics
-	return &CacheMetrics{
-		Hits:   0, // TODO: Parse from info
-		Misses: 0, // TODO: Parse from info
-		Errors: 0, // TODO: Track in application
-	}, nil
+	metrics := &CacheMetrics{
+		Hits:   parseRedisInfoInt(info, "keyspace_hits"),
+		Misses: parseRedisInfoInt(info, "keyspace_misses"),
+		Errors: r.errorCount.Load(),
+	}
+
+	return metrics, nil
+}
+
+// parseRedisInfoInt extracts an integer value from Redis INFO output
+func parseRedisInfoInt(info, key string) int64 {
+	for _, line := range strings.Split(info, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, key+":") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				val, err := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 64)
+				if err == nil {
+					return val
+				}
+			}
+		}
+	}
+	return 0
+}
+
+// IncrementErrorCount increments the application error counter
+func (r *RedisCache) IncrementErrorCount() {
+	r.errorCount.Add(1)
 }

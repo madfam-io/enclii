@@ -313,6 +313,16 @@ func SetActiveServices(project string, count int) {
 	activeServices.WithLabelValues(project).Set(float64(count))
 }
 
+// RecordProjectCreated increments the project creation counter
+func RecordProjectCreated() {
+	deploymentsTotal.WithLabelValues("created", "project").Inc()
+}
+
+// RecordServiceDeployed increments the service deployment counter
+func RecordServiceDeployed(project, environment string) {
+	deploymentsTotal.WithLabelValues("deployed", "service").Inc()
+}
+
 // Background system metrics collection
 func (mc *MetricsCollector) collectSystemMetrics() {
 	ticker := time.NewTicker(15 * time.Second)

@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -273,13 +276,17 @@ func (h *Handler) DeployTemplate(c *gin.Context) {
 		_ = h.repos.Templates.UpdateDeploymentStatus(ctx, deployment.ID, types.TemplateDeploymentStatusInProgress, "")
 	}
 
-	// TODO: Trigger async service creation based on template config
-	// This would create services, databases, env vars based on template.Config
-
-	// For now, mark as completed
-	if deployment.ID != uuid.Nil {
-		_ = h.repos.Templates.UpdateDeploymentStatus(ctx, deployment.ID, types.TemplateDeploymentStatusCompleted, "")
+	// Merge template env vars with request env vars (request takes precedence)
+	mergedEnvVars := make(map[string]string)
+	for k, v := range template.Config.EnvVars {
+		mergedEnvVars[k] = v
 	}
+	for k, v := range req.EnvVars {
+		mergedEnvVars[k] = v
+	}
+
+	// Trigger async service creation based on template config
+	go h.processTemplateDeployment(deployment.ID, project, template, mergedEnvVars)
 
 	c.JSON(http.StatusCreated, DeployTemplateResponse{
 		Deployment: deployment,
@@ -314,6 +321,122 @@ func (h *Handler) GetTemplateDeployment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, deployment)
+}
+
+// processTemplateDeployment handles async creation of services and resources from template config
+func (h *Handler) processTemplateDeployment(
+	deploymentID uuid.UUID,
+	project *types.Project,
+	template *types.Template,
+	envVars map[string]string,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	var deploymentError string
+	var createdServices []*types.Service
+
+	// Create services from template config
+	for _, svcConfig := range template.Config.Services {
+		// Map template build type to SDK BuildType
+		buildType := types.BuildTypeAuto
+		switch svcConfig.Build.Type {
+		case "dockerfile":
+			buildType = types.BuildTypeDockerfile
+		case "buildpack", "nixpacks":
+			buildType = types.BuildTypeBuildpack
+		}
+
+		service := &types.Service{
+			ProjectID: project.ID,
+			Name:      svcConfig.Name,
+			GitRepo:   template.SourceRepo,
+			AppPath:   template.SourcePath,
+			BuildConfig: types.BuildConfig{
+				Type:       buildType,
+				Dockerfile: svcConfig.Build.Dockerfile,
+				Context:    svcConfig.Build.OutputDir,
+			},
+			AutoDeploy:       true,
+			AutoDeployBranch: template.SourceBranch,
+		}
+
+		if err := h.repos.Services.Create(service); err != nil {
+			h.logger.Error(ctx, "Failed to create service from template",
+				logging.String("service_name", svcConfig.Name),
+				logging.String("project_id", project.ID.String()),
+				logging.Error("error", err))
+			deploymentError = fmt.Sprintf("failed to create service %s: %v", svcConfig.Name, err)
+			break
+		}
+
+		createdServices = append(createdServices, service)
+		h.logger.Info(ctx, "Created service from template",
+			logging.String("service_name", service.Name),
+			logging.String("service_id", service.ID.String()))
+
+		// Set service-specific env vars from template config
+		for key, val := range svcConfig.EnvVars {
+			envVar := &types.EnvironmentVariable{
+				ServiceID: service.ID,
+				Key:       key,
+				Value:     val,
+				IsSecret:  false,
+			}
+			if err := h.repos.EnvVars.Create(ctx, envVar); err != nil {
+				h.logger.Warn(ctx, "Failed to create service env var",
+					logging.String("key", key),
+					logging.Error("error", err))
+			}
+		}
+
+		// Add merged project env vars to each service
+		for key, val := range envVars {
+			envVar := &types.EnvironmentVariable{
+				ServiceID: service.ID,
+				Key:       key,
+				Value:     val,
+				IsSecret:  false,
+			}
+			if err := h.repos.EnvVars.Create(ctx, envVar); err != nil {
+				h.logger.Warn(ctx, "Failed to create env var",
+					logging.String("key", key),
+					logging.Error("error", err))
+			}
+		}
+	}
+
+	// Create database addons from template config
+	if deploymentError == "" {
+		for _, dbConfig := range template.Config.Databases {
+			addon := &types.DatabaseAddon{
+				ProjectID: project.ID,
+				Name:      dbConfig.Name,
+				Type:      types.DatabaseAddonType(dbConfig.Type),
+			}
+			if err := h.repos.DatabaseAddons.Create(ctx, addon); err != nil {
+				h.logger.Warn(ctx, "Failed to create database addon",
+					logging.String("name", dbConfig.Name),
+					logging.Error("error", err))
+				// Don't fail deployment for addon errors
+			} else {
+				h.logger.Info(ctx, "Created database addon from template",
+					logging.String("addon_name", addon.Name),
+					logging.String("addon_type", string(addon.Type)))
+			}
+		}
+	}
+
+	// Update deployment status
+	if deploymentError != "" {
+		_ = h.repos.Templates.UpdateDeploymentStatus(ctx, deploymentID, types.TemplateDeploymentStatusFailed, deploymentError)
+	} else {
+		_ = h.repos.Templates.UpdateDeploymentStatus(ctx, deploymentID, types.TemplateDeploymentStatusCompleted, "")
+		h.logger.Info(ctx, "Template deployment completed successfully",
+			logging.String("deployment_id", deploymentID.String()),
+			logging.String("project_id", project.ID.String()),
+			logging.Int("services_created", len(createdServices)))
+	}
 }
 
 // ImportTemplateRequest defines the request for importing a template from GitHub

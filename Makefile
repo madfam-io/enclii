@@ -1,7 +1,8 @@
 .PHONY: bootstrap install-hooks build-all build-api build-cli build-ui build-reconcilers
-.PHONY: test test-integration test-coverage test-benchmark test-all lint 
-.PHONY: run-switchyard run-ui run-reconcilers
-.PHONY: kind-up kind-down infra-dev deploy-staging deploy-prod health-check clean
+.PHONY: test test-integration test-coverage test-benchmark test-all lint
+.PHONY: run-switchyard run-ui run-reconcilers run-all
+.PHONY: kind-up kind-down infra-dev dns-dev deploy-staging deploy-prod health-check clean
+.PHONY: precommit e2e
 
 # Variables
 REGISTRY ?= ghcr.io/madfam
@@ -140,6 +141,34 @@ health-check:
 	kubectl get pods -l app=switchyard-api -n enclii-staging || true
 	@echo "Production:"
 	kubectl get pods -l app=switchyard-api -n enclii-production || true
+
+# Run all services locally (API + UI)
+run-all: build-api build-ui
+	@echo "🚂 Starting all services..."
+	@echo "Starting Switchyard API on :8080..."
+	@./bin/switchyard-api &
+	@echo "Starting UI on :3000..."
+	@cd apps/switchyard-ui && npm run dev
+
+# Configure development DNS entries (requires /etc/hosts or local DNS)
+dns-dev:
+	@echo "🌐 Configuring development DNS..."
+	@echo "Add the following to /etc/hosts (or use dnsmasq):"
+	@echo "127.0.0.1 api.enclii.local"
+	@echo "127.0.0.1 app.enclii.local"
+	@echo ""
+	@echo "Or use nip.io for automatic wildcard DNS:"
+	@echo "  API: http://api.127.0.0.1.nip.io:8080"
+	@echo "  UI:  http://app.127.0.0.1.nip.io:3000"
+
+# Pre-commit checks (lint + test + build)
+precommit: lint test build-all
+	@echo "✅ Pre-commit checks passed"
+
+# End-to-end tests
+e2e:
+	@echo "🧪 Running E2E tests..."
+	cd apps/switchyard-ui && npm run test:e2e
 
 # Clean build artifacts
 clean:

@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -11,13 +12,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
 // TestHelper provides helper functions for integration tests
 type TestHelper struct {
 	clientset *kubernetes.Clientset
+	config    *rest.Config
 	namespace string
 }
 
@@ -35,6 +39,7 @@ func NewTestHelper(namespace string) (*TestHelper, error) {
 
 	return &TestHelper{
 		clientset: clientset,
+		config:    config,
 		namespace: namespace,
 	}, nil
 }
@@ -174,16 +179,73 @@ func (h *TestHelper) WaitForPVCBound(ctx context.Context, name string, timeout t
 	return fmt.Errorf("timeout waiting for PVC %s to be bound", name)
 }
 
-// ExecInPod executes a command in a pod
+// ExecInPod executes a command in a pod and returns stdout
 func (h *TestHelper) ExecInPod(ctx context.Context, podName, containerName string, command []string) (string, error) {
-	// Note: This is a simplified version. Full implementation would use client-go's remotecommand package
-	// For actual integration tests, you would implement this using:
-	// - client-go/tools/remotecommand
-	// - client-go/rest
-	// - Create a SPDY executor and run the command
+	req := h.clientset.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace(h.namespace).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: containerName,
+			Command:   command,
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    true,
+			TTY:       false,
+		}, scheme.ParameterCodec)
 
-	// Placeholder for now
-	return "", fmt.Errorf("exec not implemented - use kubectl exec for manual testing")
+	exec, err := remotecommand.NewSPDYExecutor(h.config, "POST", req.URL())
+	if err != nil {
+		return "", fmt.Errorf("failed to create executor: %w", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		return "", fmt.Errorf("exec failed: %w (stderr: %s)", err, stderr.String())
+	}
+
+	return stdout.String(), nil
+}
+
+// ExecInPodWithStdin executes a command in a pod with stdin input
+func (h *TestHelper) ExecInPodWithStdin(ctx context.Context, podName, containerName string, command []string, stdin string) (string, error) {
+	req := h.clientset.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace(h.namespace).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: containerName,
+			Command:   command,
+			Stdin:     true,
+			Stdout:    true,
+			Stderr:    true,
+			TTY:       false,
+		}, scheme.ParameterCodec)
+
+	exec, err := remotecommand.NewSPDYExecutor(h.config, "POST", req.URL())
+	if err != nil {
+		return "", fmt.Errorf("failed to create executor: %w", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	stdinReader := bytes.NewBufferString(stdin)
+
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
+		Stdin:  stdinReader,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		return "", fmt.Errorf("exec failed: %w (stderr: %s)", err, stderr.String())
+	}
+
+	return stdout.String(), nil
 }
 
 // DeletePod deletes a pod

@@ -1,16 +1,19 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/notifications"
 )
 
 // Team Management API Handlers
@@ -640,7 +643,44 @@ func (h *Handler) InviteTeamMember(c *gin.Context) {
 		return
 	}
 
-	// TODO: Send invitation email with invitation.Token
+	// Send invitation email (non-blocking, log failures)
+	if h.emailService != nil {
+		// Get inviter details for the email
+		inviter, err := h.repos.Users.GetByID(ctx, currentUserID)
+		if err != nil {
+			h.logger.Warn(ctx, "Failed to get inviter details for email",
+				logging.String("inviter_id", currentUserID.String()),
+				logging.Error("error", err))
+		} else {
+			inviterName := inviter.Name
+			if inviterName == "" {
+				inviterName = inviter.Email // Fallback to email if name not set
+			}
+
+			emailData := notifications.TeamInvitationData{
+				InviteeEmail:    invitation.Email,
+				TeamName:        team.Name,
+				TeamSlug:        team.Slug,
+				InviterName:     inviterName,
+				InviterEmail:    inviter.Email,
+				Role:            invitation.Role,
+				InvitationToken: invitation.Token,
+				ExpiresAt:       invitation.ExpiresAt,
+			}
+
+			// Send asynchronously to not block the response
+			go func() {
+				emailCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if err := h.emailService.SendTeamInvitation(emailCtx, emailData); err != nil {
+					h.logger.Error(emailCtx, "Failed to send invitation email",
+						logging.String("email", invitation.Email),
+						logging.String("team", team.Slug),
+						logging.Error("error", err))
+				}
+			}()
+		}
+	}
 
 	c.JSON(http.StatusCreated, TeamInvitationResponse{
 		ID:        invitation.ID,

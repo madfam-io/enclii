@@ -377,6 +377,20 @@ func main() {
 	reconcilerController.SetNotificationService(notificationService)
 	logrus.Info("✓ Notification service wired to API handler and reconciler (Slack/Discord/Telegram)")
 
+	// Initialize email service (team invitations, transactional emails)
+	emailService := notifications.NewEmailService(notifications.EmailConfig{
+		APIKey:    cfg.EmailAPIKey,
+		FromEmail: cfg.EmailFromAddress,
+		FromName:  cfg.EmailFromName,
+		BaseURL:   cfg.AppBaseURL,
+	}, logrus.StandardLogger())
+	apiHandler.SetEmailService(emailService)
+	if emailService.IsEnabled() {
+		logrus.Info("✓ Email service wired to API handler (Resend API)")
+	} else {
+		logrus.Warn("⚠ Email service not configured - invitation emails will be logged only")
+	}
+
 	api.SetupRoutes(router, apiHandler)
 
 	server := &http.Server{

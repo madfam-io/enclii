@@ -7,6 +7,7 @@ import (
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/errors"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/monitoring"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/services"
 )
 
@@ -62,11 +63,15 @@ func (h *Handler) CreateProject(c *gin.Context) {
 		return
 	}
 
-	// TODO: Clear cache (DelByTag not yet implemented)
-	// h.cache.DelByTag(ctx, "projects")
+	// Clear project cache on creation
+	if h.cache != nil {
+		if err := h.cache.InvalidateTags(ctx, "projects"); err != nil {
+			h.logger.Warn(ctx, "Failed to invalidate project cache", logging.Error("error", err))
+		}
+	}
 
-	// TODO: Record metrics (RecordProjectCreated not yet implemented)
-	// h.metrics.RecordProjectCreated()
+	// Record project creation metric
+	monitoring.RecordProjectCreated()
 
 	c.JSON(http.StatusCreated, resp.Project)
 }

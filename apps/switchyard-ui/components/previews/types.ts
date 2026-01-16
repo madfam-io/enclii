@@ -17,9 +17,12 @@ export interface PreviewEnvironment {
   pr_title?: string;
   pr_url?: string;
   pr_author?: string;
+  pr_author_avatar_url?: string;
   pr_branch: string;
   pr_base_branch: string;
   commit_sha: string;
+  commit_url?: string;
+  repository_url?: string;
   preview_subdomain: string;
   preview_url: string;
   status: PreviewEnvironmentStatus;

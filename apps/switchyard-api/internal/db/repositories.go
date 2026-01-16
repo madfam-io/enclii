@@ -43,6 +43,11 @@ type Repositories struct {
 	Functions           *FunctionRepository
 }
 
+// Ping checks database connectivity for health probes
+func (r *Repositories) Ping(ctx context.Context) error {
+	return r.db.PingContext(ctx)
+}
+
 // WithTransaction executes the given function within a database transaction.
 // If the function returns an error, the transaction is rolled back.
 // If the function succeeds, the transaction is committed.

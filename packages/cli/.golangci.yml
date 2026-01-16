@@ -3,11 +3,24 @@ version: "2"
 run:
   timeout: 5m
   go: "1.24"
+  tests: false  # Skip linting test files (many false positives)
 
 linters:
   default: none
   enable:
     - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - ineffassign
 
-# Minimal configuration to unblock CI
-# TODO: Re-enable more linters after addressing code quality issues
+issues:
+  # Exclude staticcheck style suggestions (QF* rules) - these are suggestions, not errors
+  exclude-rules:
+    - linters:
+        - staticcheck
+      text: "^QF"
+
+  # Limit issues to avoid overwhelming output - will still catch new problems
+  max-issues-per-linter: 20
+  max-same-issues: 5
