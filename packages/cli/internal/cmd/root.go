@@ -48,10 +48,8 @@ Learn more at https://enclii.dev`,
 	rootCmd.AddCommand(NewSecretsCommand(cfg))
 	rootCmd.AddCommand(NewDomainsCommand(cfg))
 
-	// Authentication commands
-	rootCmd.AddCommand(NewLoginCommand(cfg))
-	rootCmd.AddCommand(NewLogoutCommand(cfg))
-	rootCmd.AddCommand(NewWhoamiCommand(cfg))
+	// Serverless functions (scale-to-zero)
+	rootCmd.AddCommand(NewFunctionsCommand(cfg))
 
 	// Authentication commands
 	rootCmd.AddCommand(NewLoginCommand(cfg))

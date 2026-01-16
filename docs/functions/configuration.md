@@ -1,0 +1,311 @@
+# Function Configuration Reference
+
+Complete reference for Enclii function configuration options.
+
+## Function Config
+
+### Core Settings
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `runtime` | string | (auto) | Runtime: `go`, `python`, `node`, `rust` |
+| `handler` | string | (varies) | Entry point for the function |
+| `memory` | string | `256Mi` | Memory allocation |
+| `timeout` | int | `30` | Request timeout in seconds (max 900) |
+
+### Scaling Settings
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `minReplicas` | int | `0` | Minimum replicas (0 = scale-to-zero) |
+| `maxReplicas` | int | `10` | Maximum replicas |
+| `cooldownPeriod` | int | `300` | Seconds before scale-down (default 5min) |
+| `concurrency` | int | `100` | Target concurrent requests per replica |
+
+### Environment Variables
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `envVars` | array | `[]` | Environment variables |
+
+## CLI Configuration
+
+### Deploy Command
+
+```bash
+enclii functions deploy [flags]
+```
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--project, -p` | string | Project slug (required) |
+| `--name, -n` | string | Function name (default: directory name) |
+| `--runtime, -r` | string | Runtime (auto-detected if not specified) |
+| `--handler` | string | Handler entry point |
+| `--memory` | string | Memory allocation (e.g., `256Mi`, `1Gi`) |
+| `--timeout` | int | Timeout in seconds |
+| `--min-replicas` | int | Minimum replicas |
+| `--max-replicas` | int | Maximum replicas |
+| `--env` | string | Environment variable (repeatable) |
+
+### Examples
+
+```bash
+# Basic deploy (auto-detect runtime)
+enclii functions deploy --project my-project
+
+# Custom configuration
+enclii functions deploy \
+  --project my-project \
+  --name process-data \
+  --runtime python \
+  --memory 512Mi \
+  --timeout 60 \
+  --min-replicas 1 \
+  --max-replicas 20 \
+  --env DB_HOST=localhost \
+  --env API_KEY=secret
+```
+
+## API Configuration
+
+### Create Function
+
+```http
+POST /v1/projects/{projectSlug}/functions
+Content-Type: application/json
+
+{
+  "name": "my-function",
+  "config": {
+    "runtime": "go",
+    "handler": "main.Handler",
+    "memory": "256Mi",
+    "timeout": 30,
+    "min_replicas": 0,
+    "max_replicas": 10,
+    "cooldown_period": 300,
+    "concurrency": 100,
+    "env_vars": [
+      {"name": "API_KEY", "value": "secret"}
+    ]
+  }
+}
+```
+
+### Response
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "project_id": "project-uuid",
+  "name": "my-function",
+  "config": {
+    "runtime": "go",
+    "handler": "main.Handler",
+    "memory": "256Mi",
+    "timeout": 30,
+    "min_replicas": 0,
+    "max_replicas": 10,
+    "cooldown_period": 300,
+    "concurrency": 100
+  },
+  "status": "pending",
+  "endpoint": "https://my-function.fn.enclii.dev",
+  "created_at": "2026-01-15T10:00:00Z"
+}
+```
+
+## Memory Configuration
+
+### Available Options
+
+| Value | Use Case |
+|-------|----------|
+| `128Mi` | Simple utilities, lightweight APIs |
+| `256Mi` | Standard web functions (default) |
+| `512Mi` | Data processing, moderate workloads |
+| `1Gi` | Heavy computation, ML inference |
+| `2Gi` | Memory-intensive operations |
+
+### Memory Guidelines
+
+**Go/Rust Functions:**
+- Start with `128Mi` for simple handlers
+- Use `256Mi` for JSON processing
+- Increase if handling large payloads
+
+**Python Functions:**
+- Start with `256Mi` (Python baseline)
+- Use `512Mi` for data libraries (pandas, numpy)
+- Use `1Gi+` for ML inference
+
+**Node.js Functions:**
+- Start with `256Mi` for typical APIs
+- Increase for complex processing
+
+## Timeout Configuration
+
+### Guidelines
+
+| Timeout | Use Case |
+|---------|----------|
+| `5-10s` | Simple APIs, quick responses |
+| `30s` | Standard operations (default) |
+| `60-120s` | Data processing, external calls |
+| `300s` | Background tasks, long operations |
+| `900s` | Maximum (15 minutes) |
+
+### Cold Start Considerations
+
+Cold start time counts toward timeout. Recommended minimum timeouts:
+
+| Runtime | Recommended Min |
+|---------|-----------------|
+| Go | `5s` |
+| Rust | `5s` |
+| Node.js | `10s` |
+| Python | `15s` |
+
+## Scaling Configuration
+
+### Scale-to-Zero (Default)
+
+```json
+{
+  "min_replicas": 0,
+  "cooldown_period": 300
+}
+```
+
+- Function scales to 0 after 5 minutes idle
+- Cold start on first request
+- Best for infrequent/bursty workloads
+
+### Always-On (Latency Sensitive)
+
+```json
+{
+  "min_replicas": 1,
+  "max_replicas": 10
+}
+```
+
+- Always keeps 1 replica warm
+- No cold start latency
+- Higher base cost
+
+### High-Traffic Configuration
+
+```json
+{
+  "min_replicas": 2,
+  "max_replicas": 50,
+  "concurrency": 200
+}
+```
+
+- Always ready for traffic
+- Scales aggressively
+- Each replica handles 200 concurrent requests
+
+## KEDA Scaling Details
+
+Enclii uses KEDA HTTP Add-on for scaling:
+
+### ScaledObject Configuration
+
+```yaml
+# Auto-generated by Enclii
+apiVersion: keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: fn-{function-name}
+spec:
+  scaleTargetRef:
+    deployment: fn-{function-name}
+    service: fn-{function-name}
+    port: 80
+  replicas:
+    min: {minReplicas}
+    max: {maxReplicas}
+  scaledownPeriod: {cooldownPeriod}
+  scalingMetric:
+    requestRate:
+      targetValue: {concurrency}
+```
+
+### Scaling Behavior
+
+1. **Scale-Up**: Request arrives → KEDA detects → scales replicas
+2. **Scale-Down**: No requests for `cooldownPeriod` → scales down
+3. **Scale-to-Zero**: `minReplicas: 0` → full scale to zero
+
+## Environment Variables
+
+### Setting Variables
+
+**Via CLI:**
+
+```bash
+enclii functions deploy --env KEY=value --env SECRET=other
+```
+
+**Via API:**
+
+```json
+{
+  "config": {
+    "env_vars": [
+      {"name": "DATABASE_URL", "value": "postgres://..."},
+      {"name": "API_KEY", "value": "sk-..."}
+    ]
+  }
+}
+```
+
+### Reserved Variables
+
+These are set automatically:
+
+| Variable | Description |
+|----------|-------------|
+| `FUNCTION_NAME` | Name of the function |
+| `FUNCTION_VERSION` | Deployment version |
+| `K_SERVICE` | Knative service name |
+| `PORT` | Port to listen on (8080) |
+
+### Secrets
+
+For sensitive values, use Enclii secrets:
+
+```bash
+# Create secret
+enclii secrets set --project my-project DATABASE_PASSWORD=xxx
+
+# Reference in function
+enclii functions deploy --env DATABASE_PASSWORD=@secret/DATABASE_PASSWORD
+```
+
+## Best Practices
+
+### Optimize Cold Start
+
+1. **Use compiled runtimes** (Go/Rust) for <500ms
+2. **Minimize dependencies** in interpreted runtimes
+3. **Defer initialization** to first request if possible
+4. **Use `minReplicas: 1`** for latency-critical functions
+
+### Resource Efficiency
+
+1. **Start small** - increase memory only if needed
+2. **Use scale-to-zero** for infrequent workloads
+3. **Set appropriate timeouts** - don't over-provision
+4. **Monitor metrics** and adjust based on actual usage
+
+### High Availability
+
+1. **Set `maxReplicas` high** for traffic spikes
+2. **Use health checks** for automatic recovery
+3. **Monitor errors** via dashboard or logs
+4. **Configure alerts** for failure rates

@@ -40,6 +40,7 @@ type Repositories struct {
 	Templates           *TemplateRepository
 	Webhooks            *WebhookRepository
 	CIRuns              *CIRunRepository
+	Functions           *FunctionRepository
 }
 
 // WithTransaction executes the given function within a database transaction.
@@ -80,6 +81,7 @@ func (r *Repositories) WithTransaction(ctx context.Context, fn func(txRepos *Rep
 		Templates:           NewTemplateRepositoryWithTx(tx),
 		Webhooks:            NewWebhookRepositoryWithTx(tx),
 		CIRuns:              NewCIRunRepositoryWithTx(tx),
+		Functions:           NewFunctionRepositoryWithTx(tx),
 	}
 
 	// Execute the function with transaction repositories
@@ -126,6 +128,7 @@ func NewRepositories(db *sql.DB) *Repositories {
 		Templates:           NewTemplateRepository(db),
 		Webhooks:            NewWebhookRepository(db),
 		CIRuns:              NewCIRunRepository(db),
+		Functions:           NewFunctionRepository(db),
 	}
 }
 

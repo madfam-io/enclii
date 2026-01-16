@@ -185,6 +185,7 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	// Build callbacks (internal - from Roundhouse worker)
 	// Uses API key authentication instead of user auth
 	router.POST("/v1/callbacks/build-complete", h.BuildCompleteCallback)
+	router.POST("/v1/callbacks/function-build-complete", h.FunctionBuildCompleteCallback)
 
 	// Rate limiters for auth endpoints
 	authRateLimiter := middleware.NewAuthRateLimiter()             // 10 req/min per IP
@@ -412,6 +413,19 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 			protected.POST("/addons/:id/bindings", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateAddonBinding)
 			protected.DELETE("/addons/:id/bindings/:service_id", h.auth.RequireRole(string(types.RoleDeveloper)), h.DeleteAddonBinding)
 			protected.GET("/services/:id/bindings", h.GetServiceBindings)
+
+			// Serverless Functions (Enclii Functions - Scale-to-Zero)
+			// Global function listing (all functions user has access to)
+			protected.GET("/functions", h.ListAllFunctions)
+			// Project-specific function operations
+			protected.POST("/projects/:slug/functions", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateFunction)
+			protected.GET("/projects/:slug/functions", h.ListFunctions)
+			protected.GET("/functions/:id", h.GetFunction)
+			protected.PATCH("/functions/:id", h.auth.RequireRole(string(types.RoleDeveloper)), h.UpdateFunction)
+			protected.DELETE("/functions/:id", h.auth.RequireRole(string(types.RoleAdmin)), h.DeleteFunction)
+			protected.POST("/functions/:id/invoke", h.auth.RequireRole(string(types.RoleDeveloper)), h.InvokeFunction)
+			protected.GET("/functions/:id/logs", h.GetFunctionLogs)
+			protected.GET("/functions/:id/metrics", h.GetFunctionMetrics)
 
 			// Notification Webhooks (Slack/Discord/Telegram/Custom)
 			protected.POST("/projects/:slug/webhooks", h.auth.RequireRole(string(types.RoleDeveloper)), h.CreateWebhook)

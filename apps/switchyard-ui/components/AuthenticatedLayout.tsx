@@ -62,6 +62,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const overflowNav: NavItem[] = [
     { name: 'Templates', href: '/templates' },
     { name: 'Databases', href: '/databases' },
+    { name: 'Functions', href: '/functions' },
     { name: 'Domains', href: '/domains' },
     { name: 'Activity', href: '/activity' },
   ];

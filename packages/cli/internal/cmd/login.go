@@ -24,8 +24,8 @@ import (
 
 // OAuth configuration for Janua
 const (
-	// Janua OAuth endpoints
-	defaultIssuer = "https://auth.madfam.io"
+	// Janua OAuth endpoints - defaults to api.janua.dev (The Product)
+	// Override with ENCLII_OIDC_ISSUER for custom deployments (e.g., auth.madfam.io)
 	authorizePath = "/api/v1/oauth/authorize"
 	tokenPath     = "/api/v1/oauth/token"
 
@@ -36,6 +36,14 @@ const (
 	// Scopes needed for CLI access
 	cliScopes = "openid profile email offline_access"
 )
+
+// getDefaultIssuer returns the OIDC issuer URL from env or default
+func getDefaultIssuer() string {
+	if issuer := os.Getenv("ENCLII_OIDC_ISSUER"); issuer != "" {
+		return issuer
+	}
+	return "https://api.janua.dev"
+}
 
 // Credentials stores the OAuth tokens
 type Credentials struct {
@@ -78,7 +86,7 @@ Example:
 		},
 	}
 
-	cmd.Flags().StringVar(&issuer, "issuer", defaultIssuer, "OAuth issuer URL")
+	cmd.Flags().StringVar(&issuer, "issuer", getDefaultIssuer(), "OAuth issuer URL")
 	cmd.Flags().StringVar(&clientID, "client-id", cliClientID, "OAuth client ID")
 
 	return cmd
@@ -346,8 +354,9 @@ func generateState() (string, error) {
 }
 
 func buildAuthURL(issuer, redirectURI, state, codeChallenge, clientID string) string {
-	// Use the API endpoint for authorization
-	baseURL := strings.Replace(issuer, "auth.madfam.io", "api.janua.dev", 1)
+	// Issuer should be the full API endpoint (e.g., https://api.janua.dev)
+	// No transformation needed - configure ENCLII_OIDC_ISSUER for custom deployments
+	baseURL := issuer
 
 	params := url.Values{
 		"client_id":             {clientID},
@@ -363,8 +372,8 @@ func buildAuthURL(issuer, redirectURI, state, codeChallenge, clientID string) st
 }
 
 func exchangeCodeForTokens(issuer, code, redirectURI, codeVerifier, clientID string) (*TokenResponse, error) {
-	// Use the API endpoint for token exchange
-	tokenURL := strings.Replace(issuer, "auth.madfam.io", "api.janua.dev", 1) + tokenPath
+	// Issuer should be the full API endpoint - no transformation needed
+	tokenURL := issuer + tokenPath
 
 	data := url.Values{
 		"grant_type":    {"authorization_code"},

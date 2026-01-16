@@ -180,6 +180,20 @@ data:
           httpHostHeader: www.madfam.io
 
       # ============================================
+      # Enclii Functions (Scale-to-Zero Serverless)
+      # ============================================
+      # Routes *.fn.enclii.dev to KEDA HTTP Add-on Interceptor
+      # KEDA intercepts requests and scales functions from zero
+      # Functions are deployed as: <function-name>.fn.enclii.dev
+      - hostname: "*.fn.enclii.dev"
+        service: http://keda-add-ons-http-interceptor-proxy.keda.svc.cluster.local:8080
+        originRequest:
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          # Let KEDA interceptor handle cold starts with timeout
+          noHappyEyeballs: true
+
+      # ============================================
       # Catch-all (required by cloudflared)
       # ============================================
       - service: http_status:404

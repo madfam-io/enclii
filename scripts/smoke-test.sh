@@ -7,6 +7,10 @@ set -euo pipefail
 TIMEOUT=60
 INTERVAL=5
 
+# OIDC issuer URL - defaults to api.janua.dev (The Product)
+# Override with ENCLII_OIDC_ISSUER for custom deployments (e.g., auth.madfam.io)
+OIDC_ISSUER_URL="${ENCLII_OIDC_ISSUER:-https://api.janua.dev}"
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -54,16 +58,16 @@ echo ""
 echo "--- Authentication ---"
 echo -n "Testing API login redirect... "
 LOGIN_RESPONSE=$(curl -sI "https://api.enclii.dev/v1/auth/login" 2>/dev/null | grep -i "location:" || echo "")
-if [[ "$LOGIN_RESPONSE" == *"janua"* ]] || [[ "$LOGIN_RESPONSE" == *"auth.madfam.io"* ]]; then
+if [[ "$LOGIN_RESPONSE" == *"janua"* ]] || [[ "$LOGIN_RESPONSE" == *"${OIDC_ISSUER_URL}"* ]]; then
     echo -e "${GREEN}OK${NC} (redirects to OIDC)"
 else
     echo -e "${RED}FAIL${NC}: No OIDC redirect found"
     FAILED=$((FAILED+1))
 fi
 
-echo -n "Testing OIDC discovery... "
-OIDC_ISSUER=$(curl -s "https://auth.madfam.io/.well-known/openid-configuration" 2>/dev/null | grep -o '"issuer":"[^"]*"' || echo "")
-if [[ "$OIDC_ISSUER" == *"auth.madfam.io"* ]]; then
+echo -n "Testing OIDC discovery (${OIDC_ISSUER_URL})... "
+OIDC_ISSUER=$(curl -s "${OIDC_ISSUER_URL}/.well-known/openid-configuration" 2>/dev/null | grep -o '"issuer":"[^"]*"' || echo "")
+if [[ -n "$OIDC_ISSUER" ]]; then
     echo -e "${GREEN}OK${NC}"
 else
     echo -e "${RED}FAIL${NC}: OIDC discovery failed"

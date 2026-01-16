@@ -97,7 +97,7 @@ export default function ImportRepositoryPage() {
 
   // Handle GitHub OAuth linking via Janua
   const handleConnectGitHub = async () => {
-    const januaUrl = process.env.NEXT_PUBLIC_JANUA_URL || 'https://auth.madfam.io';
+    const januaUrl = process.env.NEXT_PUBLIC_JANUA_URL || 'https://api.janua.dev';
     const redirectUri = window.location.href;
 
     setLinkingGitHub(true);

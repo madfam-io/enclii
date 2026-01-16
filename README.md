@@ -57,23 +57,37 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 
 [View infrastructure details →](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 
-### 🔐 Authentication & Security
+### 🔐 Authentication & Security (Production Ready)
 
-**Current Implementation (Production):**
-- ✅ **OIDC/OAuth 2.0** via Janua SSO (RS256 JWT)
-- ✅ **External JWKS validation** for federated identity
-- ✅ **GitHub OAuth integration** for repo imports
-- ✅ **RBAC** with admin/developer/viewer roles
-- ✅ **Secure session management** with Redis
-- ✅ **API key support** for CI/CD integration
+**OIDC/OAuth 2.0 - Full Implementation:**
+- ✅ **Janua SSO Integration** - Self-hosted OAuth 2.0/OIDC provider
+- ✅ **RS256 JWT Signing** - RSA 2048-bit keys with JWKS rotation
+- ✅ **External JWKS Validation** - Federated identity support
+- ✅ **PKCE Support** - Secure authorization code flow
+- ✅ **Token Refresh** - Automatic refresh with rotation
 
-**Janua Integration (Complete):**
-- ✅ Self-hosted OAuth 2.0 / OIDC provider at auth.madfam.io
-- ✅ External JWKS URL configured for token validation
-- ✅ Multi-tenant organization support
-- ✅ No Auth0/Clerk vendor lock-in
-- ✅ No per-MAU costs ($0 vs $220+/month)
-- ✅ GitHub OAuth linked accounts
+**Social & Enterprise Auth:**
+- ✅ **GitHub OAuth** - Repository imports with linked accounts
+- ✅ **Google OAuth** - One-click sign-in
+- ✅ **Microsoft OAuth** - Azure AD integration ready
+- ✅ **SAML 2.0 SSO** - Enterprise IdP support via Janua
+
+**Access Control:**
+- ✅ **RBAC** - Admin/Developer/Viewer roles with granular permissions
+- ✅ **Multi-Tenant Organizations** - Namespace isolation per tenant
+- ✅ **API Keys** - Service accounts for CI/CD pipelines
+- ✅ **Session Management** - Redis-backed with secure cookies
+
+**Security Hardening:**
+- ✅ **Rate Limiting** - 1,000-10,000 req/min tiers
+- ✅ **Security Headers** - HSTS, CSP, X-Frame-Options
+- ✅ **Audit Logging** - Immutable security event trail
+- ✅ **RP-Initiated Logout** - Full SSO session termination
+
+**Cost Advantage:**
+- ✅ **$0/month** vs Auth0 ($220+) or Clerk ($300+)
+- ✅ **No per-MAU pricing** - Unlimited users
+- ✅ **No vendor lock-in** - Own your auth infrastructure
 
 [View auth architecture →](./docs/architecture/ARCHITECTURE.md)
 
@@ -482,10 +496,10 @@ We'll answer with verifiable proof:
 > "We run our entire production on Enclii. Here's our status page showing 99.95% uptime. We deploy 10-20 times per day with zero downtime using our own platform."
 
 **What we're building (service specs ready in `dogfooding/`):**
-- Control Plane API at api.enclii.io
-- Web Dashboard at app.enclii.io
-- Janua Auth at auth.enclii.io
-- Public status page at status.enclii.io
+- Control Plane API at api.enclii.dev
+- Web Dashboard at app.enclii.dev
+- Janua Auth at auth.janua.dev
+- Public status page at status.enclii.dev
 
 **Why this matters:**
 - Customer confidence: "If they trust it, we can too"
@@ -525,14 +539,15 @@ This aligns with the **MADFAM Manifesto Section IV**: protecting open infrastruc
 
 ## Links
 
-- **Documentation:** [docs.enclii.io](https://docs.enclii.io)
-- **Status Page:** [status.enclii.io](https://status.enclii.io)
-- **Janua (Auth):** [github.com/madfam-org/janua](https://github.com/madfam-org/janua)
+- **Website:** [enclii.dev](https://enclii.dev)
+- **Documentation:** [docs.enclii.dev](https://docs.enclii.dev)
+- **Status Page:** [status.enclii.dev](https://status.enclii.dev)
+- **Janua (Auth):** [janua.dev](https://janua.dev) | [GitHub](https://github.com/madfam-org/janua)
 - **Production Roadmap:** [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
 - **Dogfooding Guide:** [DOGFOODING_GUIDE.md](./docs/guides/DOGFOODING_GUIDE.md)
 
 ---
 
-**Questions?** Open an issue or contact the team at [engineering@enclii.io](mailto:engineering@enclii.io)
+**Questions?** Open an issue or contact the team at [engineering@enclii.dev](mailto:engineering@enclii.dev)
 
 **Ready to deploy?** Start with [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_ROADMAP.md) 🚀

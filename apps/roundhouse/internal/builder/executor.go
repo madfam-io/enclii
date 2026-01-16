@@ -98,6 +98,8 @@ func (e *Executor) Execute(ctx context.Context, job *queue.BuildJob) (*queue.Bui
 		imageURI, err = e.buildDockerfile(ctx, job, buildDir)
 	case "buildpack":
 		imageURI, err = e.buildBuildpack(ctx, job, buildDir)
+	case "function":
+		imageURI, err = e.buildFunction(ctx, job, buildDir)
 	default:
 		return e.failResult(result, startTime, "unsupported build type: %s", buildType)
 	}
@@ -195,6 +197,11 @@ func (e *Executor) cloneRepo(ctx context.Context, job *queue.BuildJob, buildDir 
 }
 
 func (e *Executor) detectBuildType(buildDir string, config *queue.BuildConfig) string {
+	// Check for functions/ directory first (serverless functions)
+	if IsFunctionBuild(buildDir) {
+		return "function"
+	}
+
 	// Check for Dockerfile
 	dockerfilePath := config.Dockerfile
 	if dockerfilePath == "" {

@@ -257,6 +257,11 @@ func main() {
 	go addonReconciler.Start(ctx)
 	logrus.Info("✓ Addon reconciler started (syncing database addon status)")
 
+	// Initialize and start function reconciler (scale-to-zero serverless functions)
+	functionReconciler := reconciler.NewFunctionReconciler(repos, k8sClient, logrus.StandardLogger(), cfg.FunctionBaseDomain)
+	go functionReconciler.Start(ctx)
+	logrus.Info("✓ Function reconciler started (serverless functions with KEDA scale-to-zero)")
+
 	// Initialize Roundhouse client (for async builds)
 	var roundhouseClient *clients.RoundhouseClient
 	if cfg.BuildMode == "roundhouse" {
@@ -423,6 +428,10 @@ func main() {
 	// Stop addon reconciler
 	addonReconciler.Stop()
 	logrus.Info("Addon reconciler stopped")
+
+	// Stop function reconciler
+	functionReconciler.Stop()
+	logrus.Info("Function reconciler stopped")
 
 	if cacheService != nil {
 		if err := cacheService.Close(); err != nil {

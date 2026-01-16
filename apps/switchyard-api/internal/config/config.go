@@ -84,6 +84,9 @@ type Config struct {
 	CloudflareAccountID string
 	CloudflareZoneID    string
 	CloudflareTunnelID  string
+
+	// Serverless Functions
+	FunctionBaseDomain string // Base domain for functions (default: fn.enclii.dev)
 }
 
 func Load() (*Config, error) {
@@ -138,6 +141,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("cloudflare-account-id", "")
 	viper.SetDefault("cloudflare-zone-id", "")
 	viper.SetDefault("cloudflare-tunnel-id", "")
+	viper.SetDefault("function-base-domain", "fn.enclii.dev")
 
 	// Parse log level
 	logLevelStr := viper.GetString("log-level")
@@ -193,6 +197,7 @@ func Load() (*Config, error) {
 		CloudflareAccountID:       viper.GetString("cloudflare-account-id"),
 		CloudflareZoneID:          viper.GetString("cloudflare-zone-id"),
 		CloudflareTunnelID:        viper.GetString("cloudflare-tunnel-id"),
+		FunctionBaseDomain:        viper.GetString("function-base-domain"),
 	}
 
 	// SEC-001: Validate required configuration
