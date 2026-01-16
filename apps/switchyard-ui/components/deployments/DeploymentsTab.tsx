@@ -21,7 +21,8 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { apiGet, apiPost } from '@/lib/api';
-import { GitBranch, GitCommit, ExternalLink, RefreshCw, RotateCcw } from 'lucide-react';
+import { GitBranch, ExternalLink, RefreshCw, RotateCcw } from 'lucide-react';
+import { AuthorAvatar, CommitLink } from '@/components/git';
 import type { Deployment, DeploymentsListResponse, RollbackResponse } from './types';
 
 interface DeploymentsTabProps {
@@ -234,7 +235,7 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
                             {deployment.pr_title}
                           </span>
                         )}
-                        {/* Git info */}
+                        {/* Git info with clickable commit link */}
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {deployment.git_branch && (
                             <span className="inline-flex items-center gap-1">
@@ -245,10 +246,11 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
                             </span>
                           )}
                           {deployment.git_sha && (
-                            <span className="inline-flex items-center gap-1 font-mono">
-                              <GitCommit className="h-3 w-3" />
-                              {deployment.git_sha.substring(0, 7)}
-                            </span>
+                            <CommitLink
+                              sha={deployment.git_sha}
+                              repoUrl={deployment.repo_url}
+                              message={deployment.commit_message}
+                            />
                           )}
                         </div>
                         {/* Fallback if no git info */}
@@ -260,14 +262,23 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
                     <TableCell>{getHealthBadge(deployment.health)}</TableCell>
                     <TableCell>{deployment.replicas}</TableCell>
                     <TableCell>
-                      <div className="flex flex-col">
+                      <div className="flex flex-col gap-1">
                         <span title={formatDate(deployment.created_at)}>
                           {formatRelativeTime(deployment.created_at)}
                         </span>
                         {deployment.commit_author && (
-                          <span className="text-xs text-muted-foreground">
-                            by {deployment.commit_author}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground">by</span>
+                            <AuthorAvatar
+                              name={deployment.commit_author}
+                              username={deployment.commit_author_username}
+                              email={deployment.commit_author_email}
+                              avatarUrl={deployment.commit_author_avatar_url}
+                              size="xs"
+                              showName
+                              linkToProfile={!!deployment.commit_author_username}
+                            />
+                          </div>
                         )}
                       </div>
                     </TableCell>

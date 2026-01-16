@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  darkMode: 'class',
+  darkMode: ['class', '[data-theme="solarpunk"]'],
   content: [
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -11,13 +11,13 @@ module.exports = {
       fontFamily: {
         sans: ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-geist-mono)', 'monospace'],
+        // Solarpunk-specific: JetBrains Mono for headers
+        display: ['var(--font-display)', 'var(--font-geist-mono)', 'monospace'],
       },
       colors: {
-        'enclii-blue': '#0070f3',
-        'enclii-green': '#00b894',
-        'enclii-orange': '#e17055',
-        'enclii-red': '#d63031',
-        // shadcn/ui compatible colors
+        // =================================================================
+        // SEMANTIC COLORS (Theme-Aware via CSS Variables)
+        // =================================================================
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -51,13 +51,77 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+
+        // =================================================================
+        // BRAND COLORS (Static, not theme-dependent)
+        // =================================================================
+        'enclii-blue': '#0070f3',
+        'enclii-green': '#00b894',
+        'enclii-orange': '#e17055',
+        'enclii-red': '#d63031',
+
+        // =================================================================
+        // SOLARPUNK PALETTE (Available globally, activated via theme)
+        // =================================================================
+        solarpunk: {
+          // Bioluminescent accent
+          glow: 'hsl(var(--solarpunk-glow))',
+          'glow-muted': 'hsl(var(--solarpunk-glow-muted))',
+          // Deep organic backgrounds
+          substrate: 'hsl(var(--solarpunk-substrate))',
+          'substrate-elevated': 'hsl(var(--solarpunk-substrate-elevated))',
+          // Living system colors
+          chlorophyll: '#00ff9d',
+          amber: '#ffb347',
+          coral: '#ff6b6b',
+          moss: '#2d5a27',
+        },
+
+        // =================================================================
+        // TRELLIS VISUALIZATION COLORS
+        // =================================================================
+        trellis: {
+          node: 'hsl(var(--trellis-node))',
+          'node-hover': 'hsl(var(--trellis-node-hover))',
+          connector: 'hsl(var(--trellis-connector))',
+          'connector-active': 'hsl(var(--trellis-connector-active))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
+      boxShadow: {
+        // Solarpunk bioluminescent glow effects
+        'glow-sm': '0 0 10px hsl(var(--solarpunk-glow) / 0.3)',
+        glow: '0 0 20px hsl(var(--solarpunk-glow) / 0.4)',
+        'glow-lg': '0 0 40px hsl(var(--solarpunk-glow) / 0.5)',
+        // Enterprise subtle shadows
+        'enterprise-sm': '0 1px 2px rgba(0, 0, 0, 0.05)',
+        enterprise: '0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06)',
+        'enterprise-lg': '0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06)',
+      },
+      animation: {
+        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'trellis-grow': 'trellis-grow 0.5s ease-out forwards',
+        'node-appear': 'node-appear 0.3s ease-out forwards',
+      },
+      keyframes: {
+        'pulse-glow': {
+          '0%, 100%': { opacity: '1', filter: 'brightness(1)' },
+          '50%': { opacity: '0.8', filter: 'brightness(1.2)' },
+        },
+        'trellis-grow': {
+          '0%': { strokeDashoffset: '100%', opacity: '0' },
+          '100%': { strokeDashoffset: '0%', opacity: '1' },
+        },
+        'node-appear': {
+          '0%': { transform: 'scale(0.8)', opacity: '0' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
+      },
     },
   },
   plugins: [],
-}
+};

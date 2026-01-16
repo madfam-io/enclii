@@ -15,6 +15,12 @@ export interface Deployment {
   pr_url?: string;
   commit_message?: string;
   commit_author?: string;
+  // Extended author information (GitOps Humanity)
+  commit_author_username?: string;
+  commit_author_email?: string;
+  commit_author_avatar_url?: string;
+  // Repository information for commit links
+  repo_url?: string;
 }
 
 export interface Release {
