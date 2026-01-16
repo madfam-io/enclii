@@ -77,6 +77,12 @@ secrets.*.yaml
 !*.TEMPLATE
 !secrets.yaml.TEMPLATE
 
+# Enclii credentials (local credential storage)
+.enclii/
+~/.enclii/
+credentials
+**/credentials
+
 # Terraform
 terraform.tfvars
 *.tfstate
