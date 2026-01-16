@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM ghcr.io/madfam-org/base/golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -36,7 +36,7 @@ WORKDIR /app/apps/switchyard-api
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/switchyard-api ./cmd/api
 
 # Final stage - includes build tooling for CI/CD pipeline
-FROM alpine:3.20
+FROM ghcr.io/madfam-org/base/alpine:3.20
 
 # Install required packages:
 # - ca-certificates: for HTTPS connections

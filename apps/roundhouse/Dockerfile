@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM ghcr.io/madfam-org/base/golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /roundhouse-api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -o /roundhouse-worker ./cmd/worker
 
 # API runtime stage
-FROM alpine:3.19 AS api
+FROM ghcr.io/madfam-org/base/alpine:3.19 AS api
 
 RUN apk add --no-cache ca-certificates tzdata
 
@@ -31,7 +31,7 @@ EXPOSE 8081
 ENTRYPOINT ["/usr/local/bin/roundhouse-api"]
 
 # Worker runtime stage - use Docker 27 for API version 1.44+ compatibility
-FROM docker:27-dind AS worker
+FROM ghcr.io/madfam-org/base/docker:27-dind AS worker
 
 # Install additional tools for building
 RUN apk add --no-cache \
