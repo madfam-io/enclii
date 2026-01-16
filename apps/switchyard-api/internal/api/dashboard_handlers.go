@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
@@ -49,230 +52,377 @@ type DashboardResponse struct {
 	Services   []ServiceOverview `json:"services"`
 }
 
+// dashboardCache provides in-memory caching for dashboard data
+type dashboardCache struct {
+	mu         sync.RWMutex
+	data       *DashboardResponse
+	expiry     time.Time
+	ttl        time.Duration
+	inProgress bool
+}
+
+var dashboardStatsCache = &dashboardCache{
+	ttl: 5 * time.Second, // Cache for 5 seconds - balances freshness with performance
+}
+
 // GetDashboardStats returns public dashboard statistics
 // This endpoint does not require authentication for local development
 func (h *Handler) GetDashboardStats(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	// Get stats from database
-	stats, err := h.getDashboardStats(ctx)
+	// Check cache first (fast path)
+	dashboardStatsCache.mu.RLock()
+	if dashboardStatsCache.data != nil && time.Now().Before(dashboardStatsCache.expiry) {
+		data := dashboardStatsCache.data
+		dashboardStatsCache.mu.RUnlock()
+		c.JSON(http.StatusOK, data)
+		return
+	}
+	dashboardStatsCache.mu.RUnlock()
+
+	// Cache miss - fetch fresh data
+	response, err := h.fetchDashboardData(ctx)
 	if err != nil {
-		h.logger.Error(ctx, "Failed to get dashboard stats")
+		h.logger.Error(ctx, "Failed to get dashboard data", logging.Error("error", err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get dashboard stats"})
 		return
 	}
 
-	// Get recent activities
-	activities, err := h.getRecentActivities(ctx)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to get recent activities")
-		activities = []RecentActivity{} // Return empty array on error
+	// Update cache
+	dashboardStatsCache.mu.Lock()
+	dashboardStatsCache.data = response
+	dashboardStatsCache.expiry = time.Now().Add(dashboardStatsCache.ttl)
+	dashboardStatsCache.mu.Unlock()
+
+	c.JSON(http.StatusOK, response)
+}
+
+// fetchDashboardData fetches all dashboard data with parallel queries
+func (h *Handler) fetchDashboardData(ctx context.Context) (*DashboardResponse, error) {
+	var (
+		stats      DashboardStats
+		activities []RecentActivity
+		services   []ServiceOverview
+	)
+
+	// Fetch all three data sets in parallel using errgroup
+	g, ctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		var err error
+		stats, err = h.getDashboardStatsOptimized(ctx)
+		return err
+	})
+
+	g.Go(func() error {
+		var err error
+		activities, err = h.getRecentActivitiesOptimized(ctx)
+		if err != nil {
+			h.logger.Warn(ctx, "Failed to get activities, returning empty", logging.Error("error", err))
+			activities = []RecentActivity{}
+			return nil // Don't fail the entire request for activities
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		services, err = h.getServicesOverviewOptimized(ctx)
+		if err != nil {
+			h.logger.Warn(ctx, "Failed to get services overview, returning empty", logging.Error("error", err))
+			services = []ServiceOverview{}
+			return nil // Don't fail the entire request for services
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
-	// Get services overview
-	services, err := h.getServicesOverview(ctx)
-	if err != nil {
-		h.logger.Error(ctx, "Failed to get services overview")
-		services = []ServiceOverview{} // Return empty array on error
-	}
-
-	c.JSON(http.StatusOK, DashboardResponse{
+	return &DashboardResponse{
 		Stats:      stats,
 		Activities: activities,
 		Services:   services,
-	})
+	}, nil
 }
 
-// getDashboardStats retrieves dashboard statistics from the database
-func (h *Handler) getDashboardStats(ctx context.Context) (DashboardStats, error) {
+// getDashboardStatsOptimized retrieves dashboard statistics with optimized queries
+func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStats, error) {
 	stats := DashboardStats{
 		AvgDeployTime: "N/A",
 	}
 
-	// Count active projects
+	// Fetch projects once (single query)
 	projects, err := h.projectService.ListProjects(ctx)
-	if err == nil {
-		stats.ActiveProjects = len(projects)
+	if err != nil {
+		return stats, err
+	}
+	stats.ActiveProjects = len(projects)
+
+	if len(projects) == 0 {
+		return stats, nil
 	}
 
-	// Count services and their health status
-	healthyCount := 0
+	// Use a simpler approach - collect service IDs first, then batch query
+	var (
+		allServiceIDs []string
+		serviceToProject = make(map[string]string) // serviceID -> projectSlug
+		mu sync.Mutex
+	)
+
+	// Parallel service fetching per project
+	g, ctx := errgroup.WithContext(ctx)
 	for _, project := range projects {
-		services, err := h.projectService.ListServices(ctx, project.Slug)
-		if err != nil {
-			continue
-		}
-		for _, svc := range services {
-			// Get latest deployment status for each service
-			deployment, err := h.repos.Deployments.GetLatestByService(ctx, svc.ID.String())
+		project := project // capture loop variable
+		g.Go(func() error {
+			services, err := h.projectService.ListServices(ctx, project.Slug)
+			if err != nil {
+				return nil // Skip errors for individual projects
+			}
+			mu.Lock()
+			for _, svc := range services {
+				allServiceIDs = append(allServiceIDs, svc.ID.String())
+				serviceToProject[svc.ID.String()] = project.Slug
+			}
+			mu.Unlock()
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	// Now batch query deployments for all services
+	todayStart := time.Now().Truncate(24 * time.Hour)
+	healthyCount := 0
+	deploymentsToday := 0
+
+	// Process services in parallel batches
+	g2, ctx := errgroup.WithContext(ctx)
+	var countMu sync.Mutex
+
+	for _, svcID := range allServiceIDs {
+		svcID := svcID
+		projectSlug := serviceToProject[svcID]
+		g2.Go(func() error {
+			// Check deployment health
+			deployment, err := h.repos.Deployments.GetLatestByService(ctx, svcID)
 			if err == nil && deployment != nil {
+				countMu.Lock()
 				if deployment.Health == types.HealthStatusHealthy {
 					healthyCount++
 				}
+				if deployment.CreatedAt.After(todayStart) {
+					deploymentsToday++
+				}
+				countMu.Unlock()
 			} else {
-				// Fallback: Query Kubernetes directly for services without deployment records
-				namespace := strings.ToLower(project.Slug)
-				k8sStatus, err := h.k8sClient.GetDeploymentStatusInfo(ctx, namespace, svc.Name)
-				if err == nil && k8sStatus != nil {
-					if k8sStatus.AvailableReplicas == k8sStatus.Replicas && k8sStatus.Replicas > 0 {
-						healthyCount++
+				// Fallback to K8s only if DB lookup fails
+				// Note: This is still slow but necessary for manually deployed services
+				namespace := strings.ToLower(projectSlug)
+				// Get service name from ID - we need to look it up
+				services, _ := h.projectService.ListServices(ctx, projectSlug)
+				for _, svc := range services {
+					if svc.ID.String() == svcID {
+						k8sStatus, err := h.k8sClient.GetDeploymentStatusInfo(ctx, namespace, svc.Name)
+						if err == nil && k8sStatus != nil {
+							countMu.Lock()
+							if k8sStatus.AvailableReplicas == k8sStatus.Replicas && k8sStatus.Replicas > 0 {
+								healthyCount++
+							}
+							countMu.Unlock()
+						}
+						break
 					}
 				}
 			}
-		}
+			return nil
+		})
 	}
+	_ = g2.Wait()
+
 	stats.HealthyServices = healthyCount
-
-	// Count deployments today
-	todayStart := time.Now().Truncate(24 * time.Hour)
-	deploymentsToday := 0
-
-	// Iterate through all projects and services to count deployments
-	for _, project := range projects {
-		services, err := h.projectService.ListServices(ctx, project.Slug)
-		if err != nil {
-			continue
-		}
-		for _, svc := range services {
-			releases, err := h.repos.Releases.ListByService(svc.ID)
-			if err != nil {
-				continue
-			}
-			for _, release := range releases {
-				deployments, err := h.repos.Deployments.ListByRelease(ctx, release.ID.String())
-				if err != nil {
-					continue
-				}
-				for _, d := range deployments {
-					if d.CreatedAt.After(todayStart) {
-						deploymentsToday++
-					}
-				}
-			}
-		}
-	}
 	stats.DeploymentsToday = deploymentsToday
 
-	// Calculate average deploy time (simplified - using recent deployments)
-	// In a real implementation, this would query deployment metrics
 	if deploymentsToday > 0 {
-		stats.AvgDeployTime = "2.3m" // Placeholder - would calculate from actual data
+		stats.AvgDeployTime = "2.3m" // Placeholder - would calculate from actual metrics
 	}
 
 	return stats, nil
 }
 
-// getRecentActivities retrieves recent deployment activities
-func (h *Handler) getRecentActivities(ctx context.Context) ([]RecentActivity, error) {
-	activities := []RecentActivity{}
-
-	// Get all projects
+// getRecentActivitiesOptimized retrieves recent activities with optimized queries
+func (h *Handler) getRecentActivitiesOptimized(ctx context.Context) ([]RecentActivity, error) {
+	// Fetch projects once
 	projects, err := h.projectService.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect activities from all projects in parallel
+	var (
+		allActivities []RecentActivity
+		mu            sync.Mutex
+	)
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	for _, project := range projects {
+		project := project
+		g.Go(func() error {
+			projectActivities, err := h.getProjectActivities(ctx, project)
+			if err != nil {
+				h.logger.Warn(ctx, "Failed to get activities for project",
+					logging.String("project", project.Slug),
+					logging.Error("error", err))
+				return nil // Don't fail for individual project errors
+			}
+			mu.Lock()
+			allActivities = append(allActivities, projectActivities...)
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	_ = g.Wait()
+
+	// Use efficient sort.Slice instead of bubble sort - O(n log n) vs O(n²)
+	sort.Slice(allActivities, func(i, j int) bool {
+		return allActivities[i].Timestamp.After(allActivities[j].Timestamp)
+	})
+
+	// Limit to 10 most recent
+	if len(allActivities) > 10 {
+		allActivities = allActivities[:10]
+	}
+
+	return allActivities, nil
+}
+
+// getProjectActivities fetches activities for a single project
+func (h *Handler) getProjectActivities(ctx context.Context, project *types.Project) ([]RecentActivity, error) {
+	var activities []RecentActivity
+
+	services, err := h.projectService.ListServices(ctx, project.Slug)
 	if err != nil {
 		return activities, err
 	}
 
-	// Collect recent deployments from all services
-	for _, project := range projects {
-		services, err := h.projectService.ListServices(ctx, project.Slug)
+	// Only fetch recent deployments (last 24 hours) to reduce data
+	cutoff := time.Now().Add(-24 * time.Hour)
+
+	for _, svc := range services {
+		releases, err := h.repos.Releases.ListByService(svc.ID)
 		if err != nil {
-			h.logger.Warn(ctx, "Failed to list services for project, skipping",
-				logging.String("project", project.Slug),
-				logging.Error("error", err))
 			continue
 		}
 
-		for _, svc := range services {
-			releases, err := h.repos.Releases.ListByService(svc.ID)
+		for _, release := range releases {
+			deployments, err := h.repos.Deployments.ListByRelease(ctx, release.ID.String())
 			if err != nil {
-				h.logger.Warn(ctx, "Failed to list releases for service, skipping",
-					logging.String("service_id", svc.ID.String()),
-					logging.String("service_name", svc.Name),
-					logging.Error("error", err))
 				continue
 			}
 
-			for _, release := range releases {
-				deployments, err := h.repos.Deployments.ListByRelease(ctx, release.ID.String())
-				if err != nil {
-					h.logger.Warn(ctx, "Failed to list deployments for release, skipping",
-						logging.String("release_id", release.ID.String()),
-						logging.Error("error", err))
+			for _, d := range deployments {
+				// Skip old deployments early
+				if d.CreatedAt.Before(cutoff) {
 					continue
 				}
 
-				for _, d := range deployments {
-					status := "pending"
-					switch d.Status {
-					case types.DeploymentStatusRunning:
-						status = "success"
-					case types.DeploymentStatusFailed:
-						status = "failed"
-					case types.DeploymentStatusPending:
-						status = "pending"
-					default:
-						// Handle any unexpected status values gracefully
-						h.logger.Debug(ctx, "Unexpected deployment status, defaulting to pending",
-							logging.String("deployment_id", d.ID.String()),
-							logging.String("status", string(d.Status)))
-						status = string(d.Status) // Use the actual status value for transparency
-					}
+				status := mapDeploymentStatus(d.Status)
 
-					activities = append(activities, RecentActivity{
-						ID:        d.ID.String(),
-						Type:      "deployment",
-						Message:   "Deployed " + svc.Name + " to " + project.Name,
-						Timestamp: d.CreatedAt,
-						Status:    status,
-						Metadata: map[string]interface{}{
-							"version":     release.Version,
-							"environment": "production",
-						},
-					})
-				}
+				activities = append(activities, RecentActivity{
+					ID:        d.ID.String(),
+					Type:      "deployment",
+					Message:   "Deployed " + svc.Name + " to " + project.Name,
+					Timestamp: d.CreatedAt,
+					Status:    status,
+					Metadata: map[string]interface{}{
+						"version":     release.Version,
+						"environment": "production",
+					},
+				})
 			}
 		}
-	}
-
-	// Sort by timestamp (most recent first) and limit to 10
-	// Simple bubble sort for small lists
-	for i := 0; i < len(activities)-1; i++ {
-		for j := 0; j < len(activities)-i-1; j++ {
-			if activities[j].Timestamp.Before(activities[j+1].Timestamp) {
-				activities[j], activities[j+1] = activities[j+1], activities[j]
-			}
-		}
-	}
-
-	if len(activities) > 10 {
-		activities = activities[:10]
 	}
 
 	return activities, nil
 }
 
-// getServicesOverview retrieves an overview of all services
-func (h *Handler) getServicesOverview(ctx context.Context) ([]ServiceOverview, error) {
-	overview := []ServiceOverview{}
+// mapDeploymentStatus converts deployment status to display status
+func mapDeploymentStatus(status types.DeploymentStatus) string {
+	switch status {
+	case types.DeploymentStatusRunning:
+		return "success"
+	case types.DeploymentStatusFailed:
+		return "failed"
+	case types.DeploymentStatusPending:
+		return "pending"
+	default:
+		return string(status)
+	}
+}
 
-	// Get all projects
+// getServicesOverviewOptimized retrieves service overview with parallel queries
+func (h *Handler) getServicesOverviewOptimized(ctx context.Context) ([]ServiceOverview, error) {
 	projects, err := h.projectService.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		overview []ServiceOverview
+		mu       sync.Mutex
+	)
+
+	g, ctx := errgroup.WithContext(ctx)
+
+	for _, project := range projects {
+		project := project
+		g.Go(func() error {
+			projectServices, err := h.getProjectServicesOverview(ctx, project)
+			if err != nil {
+				return nil // Don't fail for individual project errors
+			}
+			mu.Lock()
+			overview = append(overview, projectServices...)
+			mu.Unlock()
+			return nil
+		})
+	}
+
+	_ = g.Wait()
+
+	return overview, nil
+}
+
+// getProjectServicesOverview fetches service overview for a single project
+func (h *Handler) getProjectServicesOverview(ctx context.Context, project *types.Project) ([]ServiceOverview, error) {
+	var overview []ServiceOverview
+
+	services, err := h.projectService.ListServices(ctx, project.Slug)
 	if err != nil {
 		return overview, err
 	}
 
-	for _, project := range projects {
-		services, err := h.projectService.ListServices(ctx, project.Slug)
-		if err != nil {
-			continue
-		}
+	namespace := strings.ToLower(project.Slug)
 
-		for _, svc := range services {
+	// Process services in parallel within the project
+	var (
+		svcMu sync.Mutex
+		wg    sync.WaitGroup
+	)
+
+	for _, svc := range services {
+		svc := svc
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
 			status := "unknown"
 			version := "N/A"
 			replicas := "0/0"
 
-			// Get latest deployment from database
+			// Try database first (fast)
 			deployment, err := h.repos.Deployments.GetLatestByService(ctx, svc.ID.String())
 			if err == nil && deployment != nil {
 				switch deployment.Health {
@@ -283,44 +433,42 @@ func (h *Handler) getServicesOverview(ctx context.Context) ([]ServiceOverview, e
 				default:
 					status = "unknown"
 				}
-				replicas = "1/1" // Simplified - would get from K8s in production
+				replicas = "1/1"
 
-				// Get release for version
 				release, err := h.repos.Releases.GetByID(deployment.ReleaseID)
 				if err == nil {
 					version = release.Version
 				}
 			} else {
-				// Fallback: Query Kubernetes directly for services without deployment records
-				// This handles services deployed manually via kubectl
-				namespace := strings.ToLower(project.Slug)
+				// Fallback to K8s only when necessary
 				k8sStatus, err := h.k8sClient.GetDeploymentStatusInfo(ctx, namespace, svc.Name)
 				if err == nil && k8sStatus != nil {
-					// Determine health from K8s replica counts
 					if k8sStatus.AvailableReplicas == k8sStatus.Replicas && k8sStatus.Replicas > 0 {
 						status = "healthy"
 					} else if k8sStatus.AvailableReplicas > 0 {
 						status = "unhealthy"
 					}
 					replicas = fmt.Sprintf("%d/%d", k8sStatus.AvailableReplicas, k8sStatus.Replicas)
-					// Use image tag as version fallback
 					if k8sStatus.ImageTag != "" {
 						version = k8sStatus.ImageTag
 					}
 				}
 			}
 
+			svcMu.Lock()
 			overview = append(overview, ServiceOverview{
 				ID:          svc.ID.String(),
 				Name:        svc.Name,
 				ProjectName: project.Name,
-				Environment: "production", // Simplified
+				Environment: "production",
 				Status:      status,
 				Version:     version,
 				Replicas:    replicas,
 			})
-		}
+			svcMu.Unlock()
+		}()
 	}
 
+	wg.Wait()
 	return overview, nil
 }
