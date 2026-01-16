@@ -140,11 +140,12 @@ data:
 
       # ============================================
       # Janua Identity Services (namespace: janua)
+      # Note: Services managed by Enclii Switchyard use port 80
       # ============================================
 
       # Janua API (Authentication) - Primary domain
       - hostname: api.janua.dev
-        service: http://janua-api.janua.svc.cluster.local:4100
+        service: http://janua-api.janua.svc.cluster.local:80
         originRequest:
           connectTimeout: 30s
           keepAliveTimeout: 90s
@@ -152,7 +153,7 @@ data:
 
       # Janua API (Authentication) - MADFAM alias
       - hostname: auth.madfam.io
-        service: http://janua-api.janua.svc.cluster.local:4100
+        service: http://janua-api.janua.svc.cluster.local:80
         originRequest:
           connectTimeout: 30s
           keepAliveTimeout: 90s
@@ -160,59 +161,59 @@ data:
 
       # Janua Dashboard - janua.dev domain
       - hostname: app.janua.dev
-        service: http://janua-dashboard.janua.svc.cluster.local:4101
+        service: http://janua-dashboard.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: app.janua.dev
 
       # Janua Dashboard - madfam.io alias
       - hostname: dashboard.madfam.io
-        service: http://janua-dashboard.janua.svc.cluster.local:4101
+        service: http://janua-dashboard.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: dashboard.madfam.io
 
       # Janua Admin - janua.dev domain
       - hostname: admin.janua.dev
-        service: http://janua-admin.janua.svc.cluster.local:4102
+        service: http://janua-admin.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: admin.janua.dev
 
       # Janua Admin - madfam.io alias
       - hostname: admin.madfam.io
-        service: http://janua-admin.janua.svc.cluster.local:4102
+        service: http://janua-admin.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: admin.madfam.io
 
       # Janua Documentation - janua.dev domain
       - hostname: docs.janua.dev
-        service: http://janua-docs.janua.svc.cluster.local:4103
+        service: http://janua-docs.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: docs.janua.dev
 
       # Janua Documentation - madfam.io alias
       - hostname: docs.madfam.io
-        service: http://janua-docs.janua.svc.cluster.local:4103
+        service: http://janua-docs.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: docs.madfam.io
 
       # Janua Website - janua.dev domain (apex + www)
       - hostname: janua.dev
-        service: http://janua-website.janua.svc.cluster.local:4104
+        service: http://janua-website.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: janua.dev
 
       - hostname: www.janua.dev
-        service: http://janua-website.janua.svc.cluster.local:4104
+        service: http://janua-website.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: www.janua.dev
 
       # Janua Website - madfam.io alias
       - hostname: madfam.io
-        service: http://janua-website.janua.svc.cluster.local:4104
+        service: http://janua-website.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: madfam.io
 
       - hostname: www.madfam.io
-        service: http://janua-website.janua.svc.cluster.local:4104
+        service: http://janua-website.janua.svc.cluster.local:80
         originRequest:
           httpHostHeader: www.madfam.io
 
