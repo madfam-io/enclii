@@ -69,6 +69,12 @@ data:
           connectTimeout: 10s
           httpHostHeader: app.enclii.dev
 
+      # Admin UI (Dispatch - temporary redirect to Switchyard UI until Dispatch is deployed)
+      - hostname: admin.enclii.dev
+        service: http://switchyard-ui.enclii.svc.cluster.local:80
+        originRequest:
+          httpHostHeader: admin.enclii.dev
+
       # Landing Page (apex domain)
       - hostname: enclii.dev
         service: http://landing-page.enclii.svc.cluster.local:80
