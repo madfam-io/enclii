@@ -238,6 +238,18 @@ data:
           noHappyEyeballs: true
 
       # ============================================
+      # NPM Registry (Verdaccio on Docker host)
+      # ============================================
+      # Routes to Verdaccio running in Docker on the host machine
+      # Host IP: 95.217.198.239 (foundry-core)
+      - hostname: npm.madfam.io
+        service: http://95.217.198.239:4873
+        originRequest:
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          httpHostHeader: npm.madfam.io
+
+      # ============================================
       # Catch-all (required by cloudflared)
       # ============================================
       - service: http_status:404
