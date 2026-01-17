@@ -23,6 +23,7 @@ Per [PORT_ALLOCATION.md](https://github.com/madfam-org/solarpunk-foundry/blob/ma
 | Switchyard API | 4200 | enclii-api | api.enclii.dev |
 | Web UI | 4201 | enclii-ui | app.enclii.dev |
 | Agent | 4202 | enclii-agent | - |
+| Dispatch | 4203 | dispatch | admin.enclii.dev |
 | Metrics | 4290 | enclii-metrics | - |
 
 ### Quick Start (Production Deployment)
@@ -236,6 +237,36 @@ See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_R
 - **Protocol:** OAuth 2.0 / OIDC with RS256 JWT
 - **Features:** Multi-tenant orgs, GitHub OAuth, JWKS rotation
 
+### Dispatch (Infrastructure Control Tower)
+
+Dispatch is the superuser admin interface for managing Enclii infrastructure - domains, tunnels, and ecosystem resources.
+
+**Access:** https://admin.enclii.dev
+
+**Authorization Model:**
+Access to Dispatch requires BOTH:
+1. **Email Domain**: Must be from an allowed domain (default: `@madfam.io`)
+2. **User Role**: Must have an operator role (`superadmin`, `admin`, or `operator`)
+
+**Configuration (Environment Variables):**
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ALLOWED_ADMIN_DOMAINS` | Comma-separated allowed email domains | `@madfam.io` |
+| `ALLOWED_ADMIN_ROLES` | Comma-separated allowed roles | `superadmin,admin,operator` |
+
+**Adding New Operators:**
+1. Create user in Janua with appropriate role (`superadmin`, `admin`, or `operator`)
+2. Ensure their email domain is in `ALLOWED_ADMIN_DOMAINS` (or add it)
+3. No code changes required - configuration-driven authorization
+
+**Key Files:**
+| Purpose | Location |
+|---------|----------|
+| Middleware (server-side auth) | `apps/dispatch/middleware.ts` |
+| Auth Context (client-side) | `apps/dispatch/contexts/AuthContext.tsx` |
+| K8s Deployment | `apps/dispatch/k8s/deployment.yaml` |
+| Dockerfile | `apps/dispatch/Dockerfile` |
+
 ### Dogfooding Status (In Progress)
 
 **Goal:** Run our entire platform on Enclii, authenticated by Janua.
@@ -245,6 +276,7 @@ See [PRODUCTION_DEPLOYMENT_ROADMAP.md](./docs/production/PRODUCTION_DEPLOYMENT_R
 **Production Services** (running at enclii.dev):
 - ✅ `switchyard-api` → api.enclii.dev (control plane)
 - ✅ `switchyard-ui` → app.enclii.dev (web dashboard)
+- ✅ `dispatch` → admin.enclii.dev (infrastructure control tower)
 - ✅ `janua` → auth.madfam.io (SSO authentication)
 - ✅ `docs-site` → docs.enclii.dev (documentation)
 - ✅ `landing-page` → enclii.dev (deployed)
