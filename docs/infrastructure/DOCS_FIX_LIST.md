@@ -47,11 +47,34 @@ The Enclii switchyard-api now uses K8s internal DNS (`redis.data.svc.cluster.loc
 **Resolution**: Updated Cloudflare tunnel route from `ssh://localhost:22` to `ssh://95.217.198.239:22` via dashboard.
 **Verification**: `ssh solarpunk@ssh.madfam.io` now works correctly.
 
-### NEW: Kyverno Configuration Issue
+### NEW: Kyverno Configuration Issue (FIXED 2026-01-17 21:15 UTC)
 
 **Problem**: CronJobs use non-existent image `bitnami/kubectl:1.28.5`
-**Status**: CronJobs suspended
-**Action**: Update Kyverno helm values to use valid kubectl image
+**Resolution**: Patched to `bitnami/kubectl:latest`, unsuspended, verified working.
+```bash
+kubectl patch cronjob kyverno-cleanup-admission-reports -n kyverno --type=json \
+  -p='[{"op": "replace", "path": "/spec/jobTemplate/spec/template/spec/containers/0/image", "value": "bitnami/kubectl:latest"}]'
+kubectl patch cronjob kyverno-cleanup-admission-reports -n kyverno --type=json \
+  -p='[{"op": "replace", "path": "/spec/suspend", "value": false}]'
+```
+
+### NEW: Operation FORTRESS (2026-01-17 21:00-21:30 UTC)
+
+**Phase 1 - janua-api CrashLoopBackOff**:
+- Root cause: DATABASE_URL and REDIS_URL pointed to external IPs (blocked by localhost binding)
+- Fix: Patched deployment to use K8s internal DNS (`postgres-0.postgres.data.svc.cluster.local`, `redis.data.svc.cluster.local`)
+- Additional fix: Added `Host: localhost` header to health probes (app validates host header)
+- Port corrected: 8000 (container runs Uvicorn on 8000, not 4100)
+
+**Phase 2 - K8s Redis CrashLoopBackOff**:
+- Root cause: Memory limit (512Mi) insufficient for 489MB RDB file, 1s probe timeout
+- Fix: Increased memory to 1Gi, probe timeout to 5s, initial delay to 60s
+
+**Phase 3 - claudecodeui CrashLoopBackOff**:
+- Root cause: Missing `JWT_SECRET` environment variable
+- Fix: Created secret and patched deployments in both `enclii-madfam-automation-prod` and `enclii-madfam-automation-production` namespaces
+
+**Phase 4 - Alembic Migrations**: ✅ Aligned (DB version 001 = Code heads 001)
 
 ---
 
@@ -207,12 +230,21 @@ These 21 files reference `auth.madfam.io` or `api.janua.dev` and are **CURRENT**
 4. [x] ~~Fix ssh.madfam.io tunnel~~ → **Route updated to host IP** (2026-01-17 21:42)
 
 ### Short-term (P1)
-5. [ ] Synchronize all port references (8080) in docs
-6. [ ] Add "Intended vs Actual" section to INFRA_ANATOMY.md
+5. [x] ~~Synchronize all port references (8080) in docs~~ → **janua K8s manifests updated to port 8000** (2026-01-17 21:30)
+6. [x] ~~Add ENCLII_REDIS_URL to production patch~~ → **Added K8s internal DNS** (2026-01-17 21:30)
+7. [ ] Add "Intended vs Actual" section to INFRA_ANATOMY.md
 
 ### Medium-term (P2)
-7. [ ] Create automated docs validation in CI
-8. [ ] Add port consistency check to diagnose-prod.sh
+8. [ ] Create automated docs validation in CI
+9. [ ] Add port consistency check to diagnose-prod.sh
+
+### Backported Files (2026-01-17 21:30 UTC)
+| Repository | File | Change |
+|------------|------|--------|
+| enclii | `infra/k8s/production/environment-patch.yaml` | Added ENCLII_REDIS_URL with K8s internal DNS |
+| janua | `k8s/base/deployments/janua-api.yaml` | Port 4100 → 8000, added Host header to probes |
+| janua | `k8s/base/services/janua-api.yaml` | Service port 80 → targetPort 8000 |
+| janua | `docker-compose.production.yml` | Already had 127.0.0.1 bindings (verified) |
 
 ---
 
