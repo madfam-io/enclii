@@ -1,7 +1,7 @@
 # Documentation Fix List
 
 > **Generated**: 2026-01-17 | **Audit Type**: Full-Stack Recovery Docs Sync
-> **Updated**: 2026-01-17 20:30 UTC | **Phase 3 Sanitation Protocol**
+> **Updated**: 2026-01-17 21:45 UTC | **Final Lockdown & Repo Sync**
 
 ---
 
@@ -24,18 +24,28 @@
 kubectl patch svc janua-api -n janua -p '{"spec":{"ports":[{"name":"http","port":80,"targetPort":4100}]}}'
 ```
 
-### NEW: Database Access Configuration
+### NEW: Database Access Configuration (FIXED 2026-01-17 21:44 UTC)
 
-**Current State** (2026-01-17):
-- PostgreSQL: `0.0.0.0:5432` (exposed for K8s pod access)
-- Redis: `0.0.0.0:6379` (exposed for K8s pod access)
+**Current State** (2026-01-17 21:44 UTC):
+- PostgreSQL: `127.0.0.1:5432` ✅ **SECURED** (localhost only)
+- Redis: `127.0.0.1:6379` ✅ **SECURED** (localhost only)
 
-**Issue**: K8s pods need to access Docker-hosted databases. Current workaround exposes ports publicly.
+**Resolution Applied**:
+```bash
+# Changed in /opt/solarpunk/janua/docker-compose.production.yml
+# PostgreSQL: "0.0.0.0:5432:5432" → "127.0.0.1:5432:5432"
+# Redis: "0.0.0.0:6379:6379" → "127.0.0.1:6379:6379"
+sudo docker compose -f docker-compose.production.yml up -d postgres-shared redis-shared
+```
 
-**Recommended Architecture**:
-1. Create K8s ExternalName Service for Docker databases
-2. Or migrate databases to K8s StatefulSet
-3. Or use host network mode for pods needing DB access
+**Note**: K8s pods using Docker databases must use host network or ExternalName services.
+The Enclii switchyard-api now uses K8s internal DNS (`redis.data.svc.cluster.local`).
+
+### NEW: SSH Tunnel Fix (FIXED 2026-01-17 21:42 UTC)
+
+**Problem**: `ssh.madfam.io` failing with "connection refused" - cloudflared pods tried `localhost:22` which refers to pod loopback, not host SSH.
+**Resolution**: Updated Cloudflare tunnel route from `ssh://localhost:22` to `ssh://95.217.198.239:22` via dashboard.
+**Verification**: `ssh solarpunk@ssh.madfam.io` now works correctly.
 
 ### NEW: Kyverno Configuration Issue
 
@@ -191,16 +201,18 @@ These 21 files reference `auth.madfam.io` or `api.janua.dev` and are **CURRENT**
 ## Action Items
 
 ### Immediate (P0)
-1. [ ] Decide on port strategy: 4200 (docs) vs 8080 (implementation)
-2. [ ] Update INFRA_ANATOMY.md to mark Redis URL as bug, not feature
+1. [x] ~~Decide on port strategy: 4200 (docs) vs 8080 (implementation)~~ → **Option B: Docs reflect 8080 (implementation)**
+2. [x] ~~Update INFRA_ANATOMY.md to mark Redis URL as bug~~ → **Switchyard now uses K8s internal DNS**
+3. [x] ~~Fix database port exposure~~ → **127.0.0.1 binding applied** (2026-01-17 21:44)
+4. [x] ~~Fix ssh.madfam.io tunnel~~ → **Route updated to host IP** (2026-01-17 21:42)
 
 ### Short-term (P1)
-3. [ ] Synchronize all port references after decision
-4. [ ] Add "Intended vs Actual" section to INFRA_ANATOMY.md
+5. [ ] Synchronize all port references (8080) in docs
+6. [ ] Add "Intended vs Actual" section to INFRA_ANATOMY.md
 
 ### Medium-term (P2)
-5. [ ] Create automated docs validation in CI
-6. [ ] Add port consistency check to diagnose-prod.sh
+7. [ ] Create automated docs validation in CI
+8. [ ] Add port consistency check to diagnose-prod.sh
 
 ---
 
