@@ -100,8 +100,8 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
 
   const getHealthBadge = (health: string) => {
     const colors: Record<string, string> = {
-      healthy: 'bg-green-100 text-green-800',
-      unhealthy: 'bg-red-100 text-red-800',
+      healthy: 'bg-status-success-muted text-status-success-foreground',
+      unhealthy: 'bg-status-error-muted text-status-error-foreground',
       unknown: 'bg-gray-100 text-gray-800',
     };
     return (
@@ -150,14 +150,14 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
 
   if (error) {
     return (
-      <Card className="border-red-200">
+      <Card className="border-status-error/30">
         <CardHeader>
           <CardTitle>Deployments</CardTitle>
           <CardDescription>Deployment history for {serviceName}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8">
-            <p className="text-red-600 mb-4">{error}</p>
+            <p className="text-status-error mb-4">{error}</p>
             <Button variant="outline" onClick={fetchDeployments}>
               Try Again
             </Button>
@@ -182,8 +182,8 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
         </CardHeader>
         <CardContent>
           {rollbackSuccess && (
-            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-green-800 text-sm">
+            <div className="mb-4 p-4 bg-status-success-muted border border-status-success/30 rounded-md">
+              <p className="text-status-success-foreground text-sm">
                 <svg className="inline w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
@@ -305,7 +305,7 @@ export function DeploymentsTab({ serviceId, serviceName }: DeploymentsTabProps) 
                         </Button>
                       )}
                       {index === 0 && deployment.status === 'running' && (
-                        <Badge variant="outline" className="text-green-600 border-green-600">
+                        <Badge variant="outline" className="text-status-success border-status-success">
                           Current
                         </Badge>
                       )}

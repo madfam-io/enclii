@@ -97,9 +97,9 @@ export default function ProjectsPage() {
   if (error) {
     return (
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        <div className="bg-status-error-muted border border-status-error/30 rounded-md p-4">
           <div className="flex">
-            <div className="text-red-800">
+            <div className="text-status-error-foreground">
               <h3 className="text-sm font-medium">Error loading projects</h3>
               <div className="mt-2 text-sm">{error}</div>
             </div>
@@ -227,10 +227,10 @@ export default function ProjectsPage() {
                             <span
                               key={service.id}
                               className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                service.health === 'healthy' 
-                                  ? 'bg-green-100 text-green-800'
+                                service.health === 'healthy'
+                                  ? 'bg-status-success-muted text-status-success-foreground'
                                   : service.health === 'unhealthy'
-                                  ? 'bg-red-100 text-red-800'
+                                  ? 'bg-status-error-muted text-status-error-foreground'
                                   : 'bg-gray-100 text-gray-800'
                               }`}
                             >

@@ -208,10 +208,10 @@ export default function TemplatesPage() {
             Start your project with a pre-configured template
           </p>
         </div>
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-status-error/30 bg-status-error-muted">
           <CardContent className="py-8">
             <div className="text-center">
-              <p className="text-red-600 font-medium mb-4">{error}</p>
+              <p className="text-status-error font-medium mb-4">{error}</p>
               <Button variant="outline" onClick={fetchTemplates}>
                 Try Again
               </Button>

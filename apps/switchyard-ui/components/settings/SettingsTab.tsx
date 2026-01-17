@@ -135,10 +135,10 @@ export function SettingsTab({ serviceId, serviceName }: SettingsTabProps) {
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
+      <Card className="border-status-error/30 bg-status-error-muted">
         <CardContent className="py-8">
           <div className="text-center">
-            <p className="text-red-600 font-medium mb-4">{error}</p>
+            <p className="text-status-error font-medium mb-4">{error}</p>
             <Button onClick={fetchSettings} variant="outline">
               Try Again
             </Button>
@@ -302,11 +302,11 @@ export function SettingsTab({ serviceId, serviceName }: SettingsTabProps) {
               </Button>
             </div>
           ) : (
-            <div className="space-y-4 p-4 bg-red-50 rounded-lg">
-              <p className="text-red-600 font-medium">
+            <div className="space-y-4 p-4 bg-status-error-muted rounded-lg">
+              <p className="text-status-error font-medium">
                 Are you sure you want to delete &quot;{settings?.name}&quot;?
               </p>
-              <p className="text-sm text-red-600">
+              <p className="text-sm text-status-error">
                 Type <strong>{settings?.name}</strong> to confirm:
               </p>
               <Input

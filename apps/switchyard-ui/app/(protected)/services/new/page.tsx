@@ -164,7 +164,7 @@ function CreateServiceContent() {
         </CardHeader>
         <CardContent>
           {error && (
-            <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+            <div className="mb-6 p-3 bg-status-error-muted border border-status-error/30 rounded-md text-status-error-foreground text-sm">
               {error}
             </div>
           )}
@@ -191,7 +191,7 @@ function CreateServiceContent() {
               {loading ? (
                 <div className="h-10 bg-gray-100 animate-pulse rounded-md" />
               ) : projects.length === 0 ? (
-                <div className="text-sm text-muted-foreground p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <div className="text-sm text-muted-foreground p-3 bg-status-warning-muted border border-status-warning/30 rounded-md">
                   No projects found. <Link href="/projects/new" className="text-blue-600 hover:underline">Create a project first</Link>.
                 </div>
               ) : (

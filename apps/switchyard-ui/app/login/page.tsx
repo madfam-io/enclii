@@ -110,11 +110,11 @@ export default function LoginPage() {
 
         {/* Error message */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+          <div className="bg-status-error-muted border border-status-error/30 rounded-md p-4">
             <div className="flex">
               <div className="flex-shrink-0">
                 <svg
-                  className="h-5 w-5 text-red-400"
+                  className="h-5 w-5 text-status-error"
                   viewBox="0 0 20 20"
                   fill="currentColor"
                 >
@@ -126,7 +126,7 @@ export default function LoginPage() {
                 </svg>
               </div>
               <div className="ml-3">
-                <p className="text-sm text-red-700">{error}</p>
+                <p className="text-sm text-status-error-foreground">{error}</p>
               </div>
             </div>
           </div>

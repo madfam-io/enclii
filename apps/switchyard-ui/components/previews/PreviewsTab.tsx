@@ -14,11 +14,11 @@ interface PreviewsTabProps {
 
 const statusConfig: Record<PreviewEnvironmentStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className: string }> = {
   pending: { label: 'Pending', variant: 'secondary', className: 'bg-gray-100 text-gray-800' },
-  building: { label: 'Building', variant: 'default', className: 'bg-blue-100 text-blue-800 animate-pulse' },
-  deploying: { label: 'Deploying', variant: 'default', className: 'bg-blue-100 text-blue-800 animate-pulse' },
-  active: { label: 'Active', variant: 'default', className: 'bg-green-100 text-green-800' },
-  sleeping: { label: 'Sleeping', variant: 'secondary', className: 'bg-yellow-100 text-yellow-800' },
-  failed: { label: 'Failed', variant: 'destructive', className: 'bg-red-100 text-red-800' },
+  building: { label: 'Building', variant: 'default', className: 'bg-status-info-muted text-status-info-foreground animate-pulse' },
+  deploying: { label: 'Deploying', variant: 'default', className: 'bg-status-info-muted text-status-info-foreground animate-pulse' },
+  active: { label: 'Active', variant: 'default', className: 'bg-status-success-muted text-status-success-foreground' },
+  sleeping: { label: 'Sleeping', variant: 'secondary', className: 'bg-status-warning-muted text-status-warning-foreground' },
+  failed: { label: 'Failed', variant: 'destructive', className: 'bg-status-error-muted text-status-error-foreground' },
   closed: { label: 'Closed', variant: 'outline', className: 'bg-gray-100 text-gray-500' },
 };
 
@@ -143,10 +143,10 @@ export function PreviewsTab({ serviceId, serviceName }: PreviewsTabProps) {
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
+      <Card className="border-status-error/30 bg-status-error-muted">
         <CardContent className="py-8">
           <div className="text-center">
-            <p className="text-red-600 font-medium mb-4">{error}</p>
+            <p className="text-status-error font-medium mb-4">{error}</p>
             <Button variant="outline" onClick={fetchPreviews}>
               Try Again
             </Button>
@@ -177,15 +177,15 @@ export function PreviewsTab({ serviceId, serviceName }: PreviewsTabProps) {
         <CardContent>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+              <span className="inline-block w-2 h-2 rounded-full bg-status-success"></span>
               <span>{activePreviews.filter(p => p.status === 'active').length} Active</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+              <span className="inline-block w-2 h-2 rounded-full bg-status-info animate-pulse"></span>
               <span>{activePreviews.filter(p => ['building', 'deploying', 'pending'].includes(p.status)).length} In Progress</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="inline-block w-2 h-2 rounded-full bg-yellow-500"></span>
+              <span className="inline-block w-2 h-2 rounded-full bg-status-warning"></span>
               <span>{activePreviews.filter(p => p.status === 'sleeping').length} Sleeping</span>
             </div>
           </div>
@@ -386,7 +386,7 @@ function PreviewCard({ preview, onWake, onClose, onDelete, actionLoading, isHist
 
             {/* Sleeping Info */}
             {preview.status === 'sleeping' && preview.sleeping_since && (
-              <p className="mt-2 text-sm text-yellow-600">
+              <p className="mt-2 text-sm text-status-warning">
                 Sleeping since {formatTimeAgo(preview.sleeping_since)} (auto-sleep after {preview.auto_sleep_after} minutes of inactivity)
               </p>
             )}
@@ -427,7 +427,7 @@ function PreviewCard({ preview, onWake, onClose, onDelete, actionLoading, isHist
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-red-600 hover:text-red-700"
+                className="text-status-error hover:text-status-error/80"
                 onClick={() => onDelete(preview)}
                 disabled={actionLoading}
               >

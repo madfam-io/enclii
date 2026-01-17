@@ -100,8 +100,8 @@ export function DeployTemplateModal({ isOpen, onClose, onSubmit, template }: Dep
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-4">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-sm text-red-600">{error}</p>
+            <div className="mb-4 p-3 bg-status-error-muted border border-status-error/30 rounded-md">
+              <p className="text-sm text-status-error">{error}</p>
             </div>
           )}
 
@@ -141,9 +141,9 @@ export function DeployTemplateModal({ isOpen, onClose, onSubmit, template }: Dep
           </div>
 
           {/* What will be created */}
-          <div className="mt-4 p-3 bg-blue-50 rounded-md">
-            <p className="text-sm font-medium text-blue-800 mb-2">This will create:</p>
-            <ul className="text-sm text-blue-700 space-y-1">
+          <div className="mt-4 p-3 bg-status-info-muted rounded-md">
+            <p className="text-sm font-medium text-status-info-foreground mb-2">This will create:</p>
+            <ul className="text-sm text-status-info space-y-1">
               <li className="flex items-center">
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

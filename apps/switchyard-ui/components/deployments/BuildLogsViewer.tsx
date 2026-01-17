@@ -220,14 +220,14 @@ export function BuildLogsViewer({ serviceId, serviceName }: BuildLogsViewerProps
   };
 
   const getLogLineColor = (type: LogMessage['type'], message: string): string => {
-    if (type === 'error') return 'text-red-400';
-    if (type === 'info' || type === 'connected') return 'text-blue-400';
-    if (type === 'disconnected') return 'text-yellow-400';
+    if (type === 'error') return 'text-status-error';
+    if (type === 'info' || type === 'connected') return 'text-status-info';
+    if (type === 'disconnected') return 'text-status-warning';
 
     const lowerMsg = message.toLowerCase();
-    if (lowerMsg.includes('error') || lowerMsg.includes('failed')) return 'text-red-400';
-    if (lowerMsg.includes('warning') || lowerMsg.includes('warn')) return 'text-yellow-400';
-    if (lowerMsg.includes('success') || lowerMsg.includes('completed')) return 'text-green-400';
+    if (lowerMsg.includes('error') || lowerMsg.includes('failed')) return 'text-status-error';
+    if (lowerMsg.includes('warning') || lowerMsg.includes('warn')) return 'text-status-warning';
+    if (lowerMsg.includes('success') || lowerMsg.includes('completed')) return 'text-status-success';
     return 'text-gray-200';
   };
 
@@ -250,14 +250,14 @@ export function BuildLogsViewer({ serviceId, serviceName }: BuildLogsViewerProps
 
   if (error) {
     return (
-      <Card className="border-red-200">
+      <Card className="border-status-error/30">
         <CardHeader>
           <CardTitle>Builds</CardTitle>
           <CardDescription>Build history for {serviceName}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-center py-8">
-            <p className="text-red-600 mb-4">{error}</p>
+            <p className="text-status-error mb-4">{error}</p>
             <Button variant="outline" onClick={fetchReleases}>
               Try Again
             </Button>
@@ -386,7 +386,7 @@ export function BuildLogsViewer({ serviceId, serviceName }: BuildLogsViewerProps
                   </>
                 ) : selectedRelease?.status === 'ready' ? (
                   <>
-                    <svg className="mx-auto h-12 w-12 mb-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="mx-auto h-12 w-12 mb-4 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <p>Build completed successfully</p>
@@ -394,7 +394,7 @@ export function BuildLogsViewer({ serviceId, serviceName }: BuildLogsViewerProps
                   </>
                 ) : selectedRelease?.status === 'failed' ? (
                   <>
-                    <svg className="mx-auto h-12 w-12 mb-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="mx-auto h-12 w-12 mb-4 text-status-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <p>Build failed</p>

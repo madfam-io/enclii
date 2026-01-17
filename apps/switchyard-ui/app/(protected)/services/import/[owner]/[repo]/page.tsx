@@ -25,7 +25,7 @@ const FolderIcon = () => (
 );
 
 const CheckCircleIcon = () => (
-  <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="h-5 w-5 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
@@ -215,8 +215,8 @@ export default function AnalyzeRepositoryPage({ params }: PageProps) {
   };
 
   const getConfidenceBadge = (confidence: number) => {
-    if (confidence >= 0.9) return <Badge className="bg-green-100 text-green-800">High confidence</Badge>;
-    if (confidence >= 0.7) return <Badge className="bg-yellow-100 text-yellow-800">Good confidence</Badge>;
+    if (confidence >= 0.9) return <Badge className="bg-status-success-muted text-status-success-foreground">High confidence</Badge>;
+    if (confidence >= 0.7) return <Badge className="bg-status-warning-muted text-status-warning-foreground">Good confidence</Badge>;
     return <Badge className="bg-orange-100 text-orange-800">Low confidence</Badge>;
   };
 
@@ -259,9 +259,9 @@ export default function AnalyzeRepositoryPage({ params }: PageProps) {
             Back to Repositories
           </Link>
         </div>
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-status-error/30 bg-status-error-muted">
           <CardContent className="py-8 text-center">
-            <p className="text-red-600 mb-4">{error}</p>
+            <p className="text-status-error mb-4">{error}</p>
             <Button onClick={() => analyzeRepository(selectedBranch)}>
               Retry Analysis
             </Button>

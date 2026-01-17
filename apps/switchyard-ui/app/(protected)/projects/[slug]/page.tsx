@@ -163,9 +163,9 @@ export default function ProjectDetailPage() {
   if (error || !project) {
     return (
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        <div className="bg-status-error-muted border border-status-error/30 rounded-md p-4">
           <div className="flex">
-            <div className="text-red-800">
+            <div className="text-status-error-foreground">
               <h3 className="text-sm font-medium">Error loading project</h3>
               <div className="mt-2 text-sm">{error || 'Project not found'}</div>
             </div>
@@ -353,11 +353,11 @@ export default function ProjectDetailPage() {
                                 </td>
                                 <td className="px-3 py-2 whitespace-nowrap">
                                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    release.status === 'ready' 
-                                      ? 'bg-green-100 text-green-800'
+                                    release.status === 'ready'
+                                      ? 'bg-status-success-muted text-status-success-foreground'
                                       : release.status === 'building'
-                                      ? 'bg-yellow-100 text-yellow-800'
-                                      : 'bg-red-100 text-red-800'
+                                      ? 'bg-status-warning-muted text-status-warning-foreground'
+                                      : 'bg-status-error-muted text-status-error-foreground'
                                   }`}>
                                     {release.status}
                                   </span>

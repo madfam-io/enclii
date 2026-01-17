@@ -47,10 +47,10 @@ interface FunctionCardProps {
 
 const STATUS_COLORS: Record<FunctionStatus, string> = {
   pending: 'bg-gray-100 text-gray-800',
-  building: 'bg-blue-100 text-blue-800',
-  deploying: 'bg-yellow-100 text-yellow-800',
-  ready: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
+  building: 'bg-status-info-muted text-status-info-foreground',
+  deploying: 'bg-status-warning-muted text-status-warning-foreground',
+  ready: 'bg-status-success-muted text-status-success-foreground',
+  failed: 'bg-status-error-muted text-status-error-foreground',
   deleting: 'bg-orange-100 text-orange-800',
 };
 

@@ -205,12 +205,12 @@ export default function Dashboard() {
                       <div
                         className={`w-2 h-2 rounded-full mr-3 ${
                           activity.status === "success"
-                            ? "bg-green-500"
+                            ? "bg-status-success"
                             : activity.status === "running"
-                              ? "bg-blue-500"
+                              ? "bg-status-info"
                               : activity.status === "failed"
-                                ? "bg-red-500"
-                                : "bg-yellow-500"
+                                ? "bg-status-error"
+                                : "bg-status-warning"
                         }`}
                       ></div>
                       <div>
@@ -228,12 +228,12 @@ export default function Dashboard() {
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         activity.status === "success"
-                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                          ? "bg-status-success-muted text-status-success-foreground"
                           : activity.status === "running"
-                            ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                            ? "bg-status-info-muted text-status-info-foreground"
                             : activity.status === "failed"
-                              ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              ? "bg-status-error-muted text-status-error-foreground"
+                              : "bg-status-warning-muted text-status-warning-foreground"
                       }`}
                     >
                       {activity.status.charAt(0).toUpperCase() +
@@ -307,10 +307,10 @@ export default function Dashboard() {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             service.environment === "production"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                              ? "bg-status-success-muted text-status-success-foreground"
                               : service.environment === "staging"
-                                ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                                : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                                ? "bg-status-warning-muted text-status-warning-foreground"
+                                : "bg-status-info-muted text-status-info-foreground"
                           }`}
                         >
                           {service.environment}
@@ -320,9 +320,9 @@ export default function Dashboard() {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             service.status === "healthy"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                              ? "bg-status-success-muted text-status-success-foreground"
                               : service.status === "unhealthy"
-                                ? "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                                ? "bg-status-error-muted text-status-error-foreground"
                                 : "bg-muted text-muted-foreground"
                           }`}
                         >

@@ -59,21 +59,21 @@ function getColorClasses(
   switch (effectiveVariant) {
     case 'success':
       return {
-        stroke: 'stroke-green-500',
-        text: 'text-green-500',
-        bg: 'stroke-green-500/20',
+        stroke: 'stroke-status-success',
+        text: 'text-status-success',
+        bg: 'stroke-status-success/20',
       };
     case 'warning':
       return {
-        stroke: 'stroke-yellow-500',
-        text: 'text-yellow-500',
-        bg: 'stroke-yellow-500/20',
+        stroke: 'stroke-status-warning',
+        text: 'text-status-warning',
+        bg: 'stroke-status-warning/20',
       };
     case 'danger':
       return {
-        stroke: 'stroke-red-500',
-        text: 'text-red-500',
-        bg: 'stroke-red-500/20',
+        stroke: 'stroke-status-error',
+        text: 'text-status-error',
+        bg: 'stroke-status-error/20',
       };
     default:
       return {

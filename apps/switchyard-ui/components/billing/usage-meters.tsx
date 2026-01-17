@@ -51,9 +51,9 @@ const iconMap: Record<string, React.ReactNode> = {
 };
 
 function getProgressColor(percentage: number): string {
-  if (percentage >= 90) return "bg-red-500";
-  if (percentage >= 75) return "bg-yellow-500";
-  return "bg-green-500";
+  if (percentage >= 90) return "bg-status-error";
+  if (percentage >= 75) return "bg-status-warning";
+  return "bg-status-success";
 }
 
 function formatNumber(num: number): string {
@@ -108,14 +108,14 @@ export function UsageMeters({
 
   if (error) {
     return (
-      <Card className={cn("border-red-200", className)}>
+      <Card className={cn("border-status-error/30", className)}>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-sm font-medium">
             Current Period Usage
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-status-error">{error}</p>
         </CardContent>
       </Card>
     );
@@ -157,7 +157,7 @@ export function UsageMeters({
                 <div className="flex items-center gap-2">
                   <span className={cn(
                     "font-mono",
-                    overLimit && "text-red-500"
+                    overLimit && "text-status-error"
                   )}>
                     {formatNumber(metric.used)}
                   </span>
@@ -186,7 +186,7 @@ export function UsageMeters({
                   />
                   {overLimit && (
                     <div
-                      className="absolute top-0 h-2 bg-red-500/30 rounded-r-full"
+                      className="absolute top-0 h-2 bg-status-error/30 rounded-r-full"
                       style={{
                         left: "100%",
                         width: `${((metric.used - metric.included) / metric.included) * 100}%`,

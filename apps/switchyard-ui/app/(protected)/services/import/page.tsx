@@ -179,7 +179,7 @@ export default function ImportRepositoryPage() {
             Back to Services
           </Link>
         </div>
-        <Card className="border-yellow-200 bg-yellow-50">
+        <Card className="border-status-warning/30 bg-status-warning-muted">
           <CardContent className="py-12 text-center">
             <div className="mx-auto mb-4 h-16 w-16 text-gray-400">
               <GithubIcon />
@@ -209,7 +209,7 @@ export default function ImportRepositoryPage() {
               )}
             </Button>
             {error && (
-              <p className="text-red-600 text-sm mt-4">{error}</p>
+              <p className="text-status-error text-sm mt-4">{error}</p>
             )}
           </CardContent>
         </Card>
@@ -238,7 +238,7 @@ export default function ImportRepositoryPage() {
         </div>
         {githubStatus?.provider_email && (
           <Badge variant="outline" className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <div className="w-2 h-2 bg-status-success rounded-full" />
             {githubStatus.provider_email}
           </Badge>
         )}
@@ -273,9 +273,9 @@ export default function ImportRepositoryPage() {
 
       {/* Error State */}
       {error && (
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-status-error/30 bg-status-error-muted">
           <CardContent className="py-6 text-center">
-            <p className="text-red-600">{error}</p>
+            <p className="text-status-error">{error}</p>
             <Button variant="outline" onClick={fetchRepositories} className="mt-4">
               Retry
             </Button>

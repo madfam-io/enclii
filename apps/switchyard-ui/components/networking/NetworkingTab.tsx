@@ -54,10 +54,10 @@ export function NetworkingTab({ serviceId, serviceName }: NetworkingTabProps) {
 
   if (error) {
     return (
-      <Card className="border-red-200 bg-red-50">
+      <Card className="border-status-error/30 bg-status-error-muted">
         <CardContent className="py-8">
           <div className="text-center">
-            <p className="text-red-600 font-medium mb-4">{error}</p>
+            <p className="text-status-error font-medium mb-4">{error}</p>
             <Button variant="outline" onClick={fetchNetworking}>
               Try Again
             </Button>
@@ -149,11 +149,11 @@ function TunnelStatusCard({ status }: { status: TunnelStatusInfo }) {
   const getStatusColor = (tunnelStatus: string) => {
     switch (tunnelStatus) {
       case 'active':
-        return 'bg-green-100 text-green-800 border-green-200';
+        return 'bg-status-success-muted text-status-success-foreground border-status-success/30';
       case 'degraded':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        return 'bg-status-warning-muted text-status-warning-foreground border-status-warning/30';
       default:
-        return 'bg-red-100 text-red-800 border-red-200';
+        return 'bg-status-error-muted text-status-error-foreground border-status-error/30';
     }
   };
 
@@ -205,13 +205,13 @@ function DomainsList({ domains, onViewInstructions, onRefresh }: DomainsListProp
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Active</Badge>;
+        return <Badge className="bg-status-success-muted text-status-success-foreground border-status-success/30">Active</Badge>;
       case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending</Badge>;
+        return <Badge className="bg-status-warning-muted text-status-warning-foreground border-status-warning/30">Pending</Badge>;
       case 'verifying':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Verifying</Badge>;
+        return <Badge className="bg-status-info-muted text-status-info-foreground border-status-info/30">Verifying</Badge>;
       case 'failed':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Failed</Badge>;
+        return <Badge className="bg-status-error-muted text-status-error-foreground border-status-error/30">Failed</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -221,7 +221,7 @@ function DomainsList({ domains, onViewInstructions, onRefresh }: DomainsListProp
     switch (tlsStatus) {
       case 'active':
         return (
-          <span className="flex items-center text-green-600 text-xs">
+          <span className="flex items-center text-status-success text-xs">
             <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
             </svg>
@@ -230,7 +230,7 @@ function DomainsList({ domains, onViewInstructions, onRefresh }: DomainsListProp
         );
       case 'provisioning':
         return (
-          <span className="flex items-center text-yellow-600 text-xs">
+          <span className="flex items-center text-status-warning text-xs">
             <svg className="w-3 h-3 mr-1 animate-spin" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>

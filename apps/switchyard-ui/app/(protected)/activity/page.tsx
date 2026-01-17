@@ -89,11 +89,11 @@ export default function ActivityPage() {
 
   const getActionBadge = (action: string) => {
     const colors: Record<string, string> = {
-      create: 'bg-green-100 text-green-800',
-      update: 'bg-blue-100 text-blue-800',
-      delete: 'bg-red-100 text-red-800',
+      create: 'bg-status-success-muted text-status-success-foreground',
+      update: 'bg-status-info-muted text-status-info-foreground',
+      delete: 'bg-status-error-muted text-status-error-foreground',
       deploy: 'bg-purple-100 text-purple-800',
-      rollback: 'bg-yellow-100 text-yellow-800',
+      rollback: 'bg-status-warning-muted text-status-warning-foreground',
       build: 'bg-indigo-100 text-indigo-800',
       login: 'bg-gray-100 text-gray-800',
       logout: 'bg-gray-100 text-gray-800',
@@ -239,7 +239,7 @@ export default function ActivityPage() {
             </div>
           ) : error ? (
             <div className="text-center py-12">
-              <p className="text-red-600 mb-4">{error}</p>
+              <p className="text-status-error mb-4">{error}</p>
               <Button variant="outline" onClick={() => fetchActivities(true)}>
                 Try Again
               </Button>

@@ -69,7 +69,7 @@ export function DNSInstructionsCard({ domain, onClose }: DNSInstructionsCardProp
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             DNS Configuration
-            <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
+            <Badge className="bg-status-warning-muted text-status-warning-foreground border-status-warning/30">
               {domain.status}
             </Badge>
           </DialogTitle>
@@ -143,7 +143,7 @@ export function DNSInstructionsCard({ domain, onClose }: DNSInstructionsCardProp
           <div className="rounded-lg border p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-green-100 text-green-700 flex items-center justify-center text-xs font-medium">
+                <span className="w-6 h-6 rounded-full bg-status-success-muted text-status-success-foreground flex items-center justify-center text-xs font-medium">
                   2
                 </span>
                 <span className="font-medium">Routing Record</span>
@@ -197,8 +197,8 @@ export function DNSInstructionsCard({ domain, onClose }: DNSInstructionsCardProp
             <div
               className={`rounded-lg p-3 text-sm ${
                 verificationResult.success
-                  ? 'bg-green-50 border border-green-200 text-green-700'
-                  : 'bg-red-50 border border-red-200 text-red-700'
+                  ? 'bg-status-success-muted border border-status-success/30 text-status-success-foreground'
+                  : 'bg-status-error-muted border border-status-error/30 text-status-error-foreground'
               }`}
             >
               <div className="flex items-center gap-2">

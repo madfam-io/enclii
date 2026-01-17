@@ -40,11 +40,11 @@ interface SystemHealthProps {
 function getStatusColor(status: HealthStatus["status"]) {
   switch (status) {
     case "healthy":
-      return "text-green-500";
+      return "text-status-success";
     case "degraded":
-      return "text-yellow-500";
+      return "text-status-warning";
     case "unhealthy":
-      return "text-red-500";
+      return "text-status-error";
     default:
       return "text-muted-foreground";
   }
@@ -53,11 +53,11 @@ function getStatusColor(status: HealthStatus["status"]) {
 function getStatusBgColor(status: HealthStatus["status"]) {
   switch (status) {
     case "healthy":
-      return "bg-green-500";
+      return "bg-status-success";
     case "degraded":
-      return "bg-yellow-500";
+      return "bg-status-warning";
     case "unhealthy":
-      return "bg-red-500";
+      return "bg-status-error";
     default:
       return "bg-muted-foreground";
   }
@@ -66,11 +66,11 @@ function getStatusBgColor(status: HealthStatus["status"]) {
 function StatusIcon({ status }: { status: HealthStatus["status"] }) {
   switch (status) {
     case "healthy":
-      return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+      return <CheckCircle2 className="w-4 h-4 text-status-success" />;
     case "degraded":
-      return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+      return <AlertTriangle className="w-4 h-4 text-status-warning" />;
     case "unhealthy":
-      return <XCircle className="w-4 h-4 text-red-500" />;
+      return <XCircle className="w-4 h-4 text-status-error" />;
     default:
       return <Activity className="w-4 h-4 text-muted-foreground" />;
   }
@@ -280,7 +280,7 @@ export function SystemHealth({ className, compact = false }: SystemHealthProps) 
       {/* Error State */}
       {error && (
         <div className="px-4 pb-4">
-          <p className="text-xs text-red-500">{error}</p>
+          <p className="text-xs text-status-error">{error}</p>
         </div>
       )}
     </div>
@@ -329,11 +329,11 @@ export function SystemHealthBadge({ className }: { className?: string }) {
         className={cn(
           "w-2 h-2 rounded-full",
           status === "healthy"
-            ? "bg-green-500"
+            ? "bg-status-success"
             : status === "degraded"
-              ? "bg-yellow-500"
+              ? "bg-status-warning"
               : status === "unhealthy"
-                ? "bg-red-500"
+                ? "bg-status-error"
                 : "bg-gray-400"
         )}
       />

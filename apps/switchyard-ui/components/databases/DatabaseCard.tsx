@@ -14,10 +14,10 @@ interface DatabaseCardProps {
 
 const STATUS_COLORS: Record<DatabaseAddonStatus, string> = {
   pending: 'bg-gray-100 text-gray-800',
-  provisioning: 'bg-yellow-100 text-yellow-800',
-  ready: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  deleting: 'bg-orange-100 text-orange-800',
+  provisioning: 'bg-status-warning-muted text-status-warning-foreground',
+  ready: 'bg-status-success-muted text-status-success-foreground',
+  failed: 'bg-status-error-muted text-status-error-foreground',
+  deleting: 'bg-status-warning-muted text-status-warning-foreground',
   deleted: 'bg-gray-100 text-gray-500',
 };
 

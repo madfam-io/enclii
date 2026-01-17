@@ -110,13 +110,13 @@ const READ_NOTIFICATIONS_KEY = 'enclii_read_notifications';
 function getNotificationIcon(type: Notification['type']) {
   switch (type) {
     case 'deployment':
-      return <Rocket className="h-4 w-4 text-green-500" />;
+      return <Rocket className="h-4 w-4 text-status-success" />;
     case 'build':
-      return <Clock className="h-4 w-4 text-blue-500" />;
+      return <Clock className="h-4 w-4 text-status-info" />;
     case 'error':
-      return <AlertCircle className="h-4 w-4 text-red-500" />;
+      return <AlertCircle className="h-4 w-4 text-status-error" />;
     case 'info':
-      return <CheckCircle2 className="h-4 w-4 text-blue-500" />;
+      return <CheckCircle2 className="h-4 w-4 text-status-info" />;
   }
 }
 
@@ -223,7 +223,7 @@ export function NotificationBell() {
         <Button variant="ghost" size="icon" className="h-9 w-9 relative">
           <Bell className="h-4 w-4" />
           {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium">
+            <span className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full bg-status-error text-white text-xs font-medium">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
@@ -254,8 +254,8 @@ export function NotificationBell() {
             </div>
           ) : error ? (
             <div className="py-8 text-center text-muted-foreground">
-              <AlertCircle className="h-8 w-8 mx-auto mb-2 text-red-500 opacity-70" />
-              <p className="text-sm text-red-600">{error}</p>
+              <AlertCircle className="h-8 w-8 mx-auto mb-2 text-status-error opacity-70" />
+              <p className="text-sm text-status-error">{error}</p>
               <button
                 onClick={() => fetchNotifications()}
                 className="mt-2 text-xs text-blue-600 hover:underline"
@@ -301,7 +301,7 @@ export function NotificationBell() {
                   </div>
                   {!notification.read && (
                     <div className="flex-shrink-0">
-                      <span className="h-2 w-2 rounded-full bg-blue-500 block" />
+                      <span className="h-2 w-2 rounded-full bg-status-info block" />
                     </div>
                   )}
                 </div>

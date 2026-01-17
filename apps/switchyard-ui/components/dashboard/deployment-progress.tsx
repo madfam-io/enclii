@@ -72,11 +72,11 @@ function StepIcon({
 }) {
   switch (status) {
     case "completed":
-      return <CheckCircle2 className="w-5 h-5 text-green-500" />;
+      return <CheckCircle2 className="w-5 h-5 text-status-success" />;
     case "active":
-      return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
+      return <Loader2 className="w-5 h-5 text-status-info animate-spin" />;
     case "failed":
-      return <XCircle className="w-5 h-5 text-red-500" />;
+      return <XCircle className="w-5 h-5 text-status-error" />;
     default:
       return <Circle className="w-5 h-5 text-muted-foreground" />;
   }
@@ -186,11 +186,11 @@ export function DeploymentProgress({
                   className={cn(
                     "text-xs mt-1 whitespace-nowrap",
                     status === "active"
-                      ? "text-blue-500 font-medium"
+                      ? "text-status-info font-medium"
                       : status === "completed"
-                        ? "text-green-500"
+                        ? "text-status-success"
                         : status === "failed"
-                          ? "text-red-500"
+                          ? "text-status-error"
                           : "text-muted-foreground"
                   )}
                 >
@@ -202,9 +202,9 @@ export function DeploymentProgress({
                   className={cn(
                     "flex-1 h-0.5 mx-2 mt-[-1rem]",
                     status === "completed"
-                      ? "bg-green-500"
+                      ? "bg-status-success"
                       : status === "active"
-                        ? "bg-blue-500"
+                        ? "bg-status-info"
                         : "bg-muted"
                   )}
                 />
@@ -216,15 +216,15 @@ export function DeploymentProgress({
 
       {/* Error Message */}
       {error && currentStage === "failed" && (
-        <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-md">
-          <p className="text-sm text-red-500">{error}</p>
+        <div className="mt-4 p-3 bg-status-error-muted border border-status-error/30 rounded-md">
+          <p className="text-sm text-status-error">{error}</p>
         </div>
       )}
 
       {/* Success Message */}
       {currentStage === "completed" && (
-        <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
-          <p className="text-sm text-green-500">
+        <div className="mt-4 p-3 bg-status-success-muted border border-status-success/30 rounded-md">
+          <p className="text-sm text-status-success">
             Deployment completed successfully!
           </p>
         </div>

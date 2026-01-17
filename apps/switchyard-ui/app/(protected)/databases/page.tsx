@@ -161,10 +161,10 @@ export default function DatabasesPage() {
             Managed database add-ons for your projects
           </p>
         </div>
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-status-error/30 bg-status-error-muted">
           <CardContent className="py-8">
             <div className="text-center">
-              <p className="text-red-600 font-medium mb-4">{error}</p>
+              <p className="text-status-error font-medium mb-4">{error}</p>
               <Button variant="outline" onClick={fetchDatabases}>
                 Try Again
               </Button>

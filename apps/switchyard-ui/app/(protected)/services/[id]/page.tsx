@@ -77,9 +77,9 @@ export default function ServiceDetailPage() {
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case "healthy":
-        return "bg-green-100 text-green-800";
+        return "bg-status-success-muted text-status-success-foreground";
       case "unhealthy":
-        return "bg-red-100 text-red-800";
+        return "bg-status-error-muted text-status-error-foreground";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -88,11 +88,11 @@ export default function ServiceDetailPage() {
   const getEnvironmentBadgeClass = (env: string) => {
     switch (env) {
       case "production":
-        return "bg-green-100 text-green-800";
+        return "bg-status-success-muted text-status-success-foreground";
       case "staging":
-        return "bg-yellow-100 text-yellow-800";
+        return "bg-status-warning-muted text-status-warning-foreground";
       default:
-        return "bg-blue-100 text-blue-800";
+        return "bg-status-info-muted text-status-info-foreground";
     }
   };
 
@@ -130,14 +130,14 @@ export default function ServiceDetailPage() {
             Back to Services
           </Link>
         </div>
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-status-error/30 bg-status-error-muted">
           <CardContent className="py-8">
             <div className="text-center">
-              <p className="text-red-600 font-medium mb-4">{error}</p>
+              <p className="text-status-error font-medium mb-4">{error}</p>
               <div className="space-x-4">
                 <button
                   onClick={fetchService}
-                  className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50"
+                  className="inline-flex items-center px-4 py-2 border border-status-error/30 rounded-md shadow-sm text-sm font-medium text-status-error-foreground bg-white hover:bg-status-error-muted"
                 >
                   Try Again
                 </button>

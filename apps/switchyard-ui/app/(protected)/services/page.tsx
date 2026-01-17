@@ -143,13 +143,13 @@ export default function ServicesPage() {
             Manage and monitor your deployed services
           </p>
         </div>
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-status-error/30 bg-status-error-muted">
           <CardContent className="py-8">
             <div className="text-center">
-              <p className="text-red-600 font-medium mb-4">{error}</p>
+              <p className="text-status-error font-medium mb-4">{error}</p>
               <button
                 onClick={fetchServices}
-                className="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50"
+                className="inline-flex items-center px-4 py-2 border border-status-error/30 rounded-md shadow-sm text-sm font-medium text-status-error-foreground bg-white hover:bg-status-error-muted"
               >
                 Try Again
               </button>
@@ -289,10 +289,10 @@ export default function ServicesPage() {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             service.environment === "production"
-                              ? "bg-green-100 text-green-800"
+                              ? "bg-status-success-muted text-status-success-foreground"
                               : service.environment === "staging"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-blue-100 text-blue-800"
+                                ? "bg-status-warning-muted text-status-warning-foreground"
+                                : "bg-status-info-muted text-status-info-foreground"
                           }`}
                         >
                           {service.environment}
@@ -302,9 +302,9 @@ export default function ServicesPage() {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             service.status === "healthy"
-                              ? "bg-green-100 text-green-800"
+                              ? "bg-status-success-muted text-status-success-foreground"
                               : service.status === "unhealthy"
-                                ? "bg-red-100 text-red-800"
+                                ? "bg-status-error-muted text-status-error-foreground"
                                 : "bg-gray-100 text-gray-800"
                           }`}
                         >

@@ -132,7 +132,7 @@ export function ProjectSearch({
             onCheckedChange={() => handleStatusToggle('healthy')}
           >
             <span className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="w-2 h-2 rounded-full bg-status-success" />
               Healthy
             </span>
           </DropdownMenuCheckboxItem>
@@ -141,7 +141,7 @@ export function ProjectSearch({
             onCheckedChange={() => handleStatusToggle('unhealthy')}
           >
             <span className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-red-500" />
+              <span className="w-2 h-2 rounded-full bg-status-error" />
               Unhealthy
             </span>
           </DropdownMenuCheckboxItem>

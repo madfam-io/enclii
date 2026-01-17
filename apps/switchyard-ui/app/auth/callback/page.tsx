@@ -133,9 +133,9 @@ function AuthCallbackContent() {
 
       {status === "success" && (
         <div className="space-y-4">
-          <div className="rounded-full h-12 w-12 bg-green-100 mx-auto flex items-center justify-center">
+          <div className="rounded-full h-12 w-12 bg-status-success-muted mx-auto flex items-center justify-center">
             <svg
-              className="h-6 w-6 text-green-600"
+              className="h-6 w-6 text-status-success"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -148,7 +148,7 @@ function AuthCallbackContent() {
               />
             </svg>
           </div>
-          <p className="text-green-600 font-medium">
+          <p className="text-status-success font-medium">
             Authentication successful!
           </p>
           <p className="text-gray-400 text-sm">Redirecting to dashboard...</p>
@@ -157,9 +157,9 @@ function AuthCallbackContent() {
 
       {status === "error" && (
         <div className="space-y-4">
-          <div className="rounded-full h-12 w-12 bg-red-100 mx-auto flex items-center justify-center">
+          <div className="rounded-full h-12 w-12 bg-status-error-muted mx-auto flex items-center justify-center">
             <svg
-              className="h-6 w-6 text-red-600"
+              className="h-6 w-6 text-status-error"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -172,7 +172,7 @@ function AuthCallbackContent() {
               />
             </svg>
           </div>
-          <p className="text-red-600 font-medium">Authentication failed</p>
+          <p className="text-status-error font-medium">Authentication failed</p>
           <p className="text-gray-500 text-sm">{errorMessage}</p>
 
           <div className="pt-4 space-y-2">

@@ -191,8 +191,8 @@ export function ImportTemplateModal({ isOpen, onClose, onSuccess }: ImportTempla
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-4 max-h-[70vh] overflow-y-auto">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-              <p className="text-sm text-red-600">{error}</p>
+            <div className="mb-4 p-3 bg-status-error-muted border border-status-error/30 rounded-md">
+              <p className="text-sm text-status-error">{error}</p>
             </div>
           )}
 

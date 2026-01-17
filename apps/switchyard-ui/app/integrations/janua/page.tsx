@@ -332,7 +332,7 @@ export default function JanuaIntegrationPage() {
                   {tier.features.map((feature, fidx) => (
                     <li key={fidx} className="flex items-start gap-3">
                       <CheckCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                        tier.highlighted ? 'text-blue-200' : 'text-green-500'
+                        tier.highlighted ? 'text-blue-200' : 'text-status-success'
                       }`} />
                       <span className={tier.highlighted ? 'text-white' : 'text-gray-700'}>
                         {feature}

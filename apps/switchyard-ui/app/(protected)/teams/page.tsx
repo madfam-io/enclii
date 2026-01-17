@@ -144,13 +144,13 @@ export default function TeamsPage() {
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
+          <div className="mb-6 bg-status-error-muted border border-status-error/30 rounded-md p-4">
             <div className="flex">
-              <div className="text-red-800">
+              <div className="text-status-error-foreground">
                 <h3 className="text-sm font-medium">Error</h3>
                 <div className="mt-2 text-sm">{error}</div>
               </div>
-              <button onClick={() => setError(null)} className="ml-auto text-red-600 hover:text-red-800">
+              <button onClick={() => setError(null)} className="ml-auto text-status-error hover:text-status-error-foreground">
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
@@ -165,7 +165,7 @@ export default function TeamsPage() {
             <h2 className="text-lg font-medium text-gray-900 mb-4">Pending Invitations</h2>
             <div className="space-y-4">
               {invitations.map((invitation) => (
-                <div key={invitation.id} className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div key={invitation.id} className="bg-status-warning-muted border border-status-warning/30 rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-medium text-gray-900">{invitation.team_name}</h3>
@@ -179,7 +179,7 @@ export default function TeamsPage() {
                     <div className="flex space-x-2">
                       <button
                         onClick={() => acceptInvitation(invitation.id)}
-                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700"
+                        className="px-4 py-2 text-sm font-medium text-white bg-status-success rounded-md hover:bg-status-success-foreground"
                       >
                         Accept
                       </button>

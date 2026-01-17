@@ -421,11 +421,11 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="pt-4 border-t">
-                  <h3 className="text-sm font-medium text-red-600 mb-2">Danger Zone</h3>
-                  <div className="flex items-center justify-between py-3 bg-red-50 px-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-status-error mb-2">Danger Zone</h3>
+                  <div className="flex items-center justify-between py-3 bg-status-error-muted px-4 rounded-lg">
                     <div>
-                      <p className="font-medium text-red-600">Delete Account</p>
-                      <p className="text-sm text-red-500">Permanently delete your account and all data</p>
+                      <p className="font-medium text-status-error">Delete Account</p>
+                      <p className="text-sm text-status-error-foreground">Permanently delete your account and all data</p>
                     </div>
                     <Button variant="destructive">Delete Account</Button>
                   </div>
@@ -453,21 +453,21 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 {/* Error message */}
                 {tokensError && (
-                  <div className="p-4 border border-red-200 rounded-lg bg-red-50 text-red-700">
+                  <div className="p-4 border border-status-error/30 rounded-lg bg-status-error-muted text-status-error-foreground">
                     <p className="text-sm">{tokensError}</p>
                   </div>
                 )}
 
                 {/* Newly created token display */}
                 {newlyCreatedToken && (
-                  <div className="p-4 border border-green-200 rounded-lg bg-green-50 space-y-3">
+                  <div className="p-4 border border-status-success/30 rounded-lg bg-status-success-muted space-y-3">
                     <div className="flex items-center gap-2">
-                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-5 h-5 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <p className="font-medium text-green-700">Token created successfully!</p>
+                      <p className="font-medium text-status-success-foreground">Token created successfully!</p>
                     </div>
-                    <p className="text-sm text-green-600">
+                    <p className="text-sm text-status-success">
                       Copy this token now. You won&apos;t be able to see it again.
                     </p>
                     <div className="flex items-center gap-2">

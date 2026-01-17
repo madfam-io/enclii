@@ -73,33 +73,33 @@ interface ProjectCardProps {
 const deploymentStatusConfig = {
   success: {
     icon: CheckCircle2,
-    color: "text-green-500",
-    bgColor: "bg-green-500/10",
-    borderColor: "border-green-500/20",
+    color: "text-status-success",
+    bgColor: "bg-status-success-muted",
+    borderColor: "border-status-success/30",
     label: "Deployed",
     badgeVariant: "default" as const,
   },
   failed: {
     icon: XCircle,
-    color: "text-red-500",
-    bgColor: "bg-red-500/10",
-    borderColor: "border-red-500/20",
+    color: "text-status-error",
+    bgColor: "bg-status-error-muted",
+    borderColor: "border-status-error/30",
     label: "Failed",
     badgeVariant: "destructive" as const,
   },
   pending: {
     icon: Clock,
-    color: "text-yellow-500",
-    bgColor: "bg-yellow-500/10",
-    borderColor: "border-yellow-500/20",
+    color: "text-status-warning",
+    bgColor: "bg-status-warning-muted",
+    borderColor: "border-status-warning/30",
     label: "Pending",
     badgeVariant: "secondary" as const,
   },
   building: {
     icon: Loader2,
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-    borderColor: "border-blue-500/20",
+    color: "text-status-info",
+    bgColor: "bg-status-info-muted",
+    borderColor: "border-status-info/30",
     label: "Building",
     badgeVariant: "secondary" as const,
   },
@@ -107,7 +107,7 @@ const deploymentStatusConfig = {
 
 const serviceStatusConfig = {
   running: {
-    color: "bg-green-500",
+    color: "bg-status-success",
     label: "Running",
   },
   stopped: {
@@ -115,15 +115,15 @@ const serviceStatusConfig = {
     label: "Stopped",
   },
   deploying: {
-    color: "bg-blue-500 animate-pulse",
+    color: "bg-status-info animate-pulse",
     label: "Deploying",
   },
   failed: {
-    color: "bg-red-500",
+    color: "bg-status-error",
     label: "Failed",
   },
   pending: {
-    color: "bg-yellow-500",
+    color: "bg-status-warning",
     label: "Pending",
   },
 };
@@ -310,7 +310,7 @@ export function ProjectCard({ project, className, onDelete }: ProjectCardProps) 
           {/* Services Summary */}
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <div className="flex items-center gap-1.5">
-              <Circle className="h-3 w-3 fill-current text-green-500" />
+              <Circle className="h-3 w-3 fill-current text-status-success" />
               <span>
                 {activeServices}/{project.services.length} services
               </span>

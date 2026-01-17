@@ -46,24 +46,24 @@ function getStatusConfig(status: OverallPipelineStatus) {
     case "running":
       return {
         icon: CheckCircle2,
-        color: "text-green-500",
-        bgColor: "bg-green-100 dark:bg-green-900/30",
+        color: "text-status-success",
+        bgColor: "bg-status-success-muted",
         label: "Running",
         animate: false,
       };
     case "ready":
       return {
         icon: CheckCircle2,
-        color: "text-blue-500",
-        bgColor: "bg-blue-100 dark:bg-blue-900/30",
+        color: "text-status-info",
+        bgColor: "bg-status-info-muted",
         label: "Ready",
         animate: false,
       };
     case "building":
       return {
         icon: Loader2,
-        color: "text-yellow-500",
-        bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
+        color: "text-status-warning",
+        bgColor: "bg-status-warning-muted",
         label: "Building",
         animate: true,
       };
@@ -78,8 +78,8 @@ function getStatusConfig(status: OverallPipelineStatus) {
     case "failed":
       return {
         icon: XCircle,
-        color: "text-red-500",
-        bgColor: "bg-red-100 dark:bg-red-900/30",
+        color: "text-status-error",
+        bgColor: "bg-status-error-muted",
         label: "Failed",
         animate: false,
       };
@@ -238,9 +238,9 @@ export function PipelineStatusBadge({
                   <span>{stage.name}</span>
                   <span
                     className={cn(
-                      stage.status === "success" && "text-green-500",
-                      stage.status === "failure" && "text-red-500",
-                      stage.status === "in_progress" && "text-blue-500"
+                      stage.status === "success" && "text-status-success",
+                      stage.status === "failure" && "text-status-error",
+                      stage.status === "in_progress" && "text-status-info"
                     )}
                   >
                     {stage.status}

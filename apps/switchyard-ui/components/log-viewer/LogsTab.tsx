@@ -41,14 +41,14 @@ function getLogLevelFromMessage(message: string): LogLevel {
 }
 
 function getLogLevelColor(type: LogMessage['type'], message: string): string {
-  if (type === 'error') return 'text-red-500';
-  if (type === 'info' || type === 'connected') return 'text-blue-500';
-  if (type === 'disconnected') return 'text-yellow-500';
+  if (type === 'error') return 'text-status-error';
+  if (type === 'info' || type === 'connected') return 'text-status-info';
+  if (type === 'disconnected') return 'text-status-warning';
 
   const level = getLogLevelFromMessage(message);
   switch (level) {
-    case 'error': return 'text-red-500';
-    case 'warn': return 'text-yellow-500';
+    case 'error': return 'text-status-error';
+    case 'warn': return 'text-status-warning';
     case 'debug': return 'text-gray-400';
     default: return 'text-gray-200';
   }
@@ -291,9 +291,9 @@ export function LogsTab({ serviceId, serviceName, deploymentId, env = 'developme
               <Badge
                 className={
                   connectionStatus === 'connected'
-                    ? 'bg-green-100 text-green-800'
+                    ? 'bg-status-success-muted text-status-success-foreground'
                     : connectionStatus === 'connecting'
-                    ? 'bg-yellow-100 text-yellow-800 animate-pulse'
+                    ? 'bg-status-warning-muted text-status-warning-foreground animate-pulse'
                     : 'bg-gray-100 text-gray-800'
                 }
               >
@@ -460,7 +460,7 @@ export function LogsTab({ serviceId, serviceName, deploymentId, env = 'developme
               </div>
               <div className="max-h-40 overflow-auto bg-gray-900 rounded p-2 font-mono text-xs">
                 {searchResults.map((line, idx) => (
-                  <div key={idx} className="text-yellow-400 py-0.5">
+                  <div key={idx} className="text-status-warning py-0.5">
                     {line}
                   </div>
                 ))}
@@ -472,7 +472,7 @@ export function LogsTab({ serviceId, serviceName, deploymentId, env = 'developme
 
       {/* Error display */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4 text-red-800">
+        <div className="bg-status-error-muted border border-status-error/30 rounded-md p-4 text-status-error-foreground">
           <div className="flex items-center gap-2">
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />

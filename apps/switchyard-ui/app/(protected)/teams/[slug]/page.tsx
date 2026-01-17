@@ -246,12 +246,12 @@ export default function TeamDetailPage({ params }: { params: Promise<{ slug: str
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-md p-4">
+          <div className="mb-6 bg-status-error-muted border border-status-error/30 rounded-md p-4">
             <div className="flex">
-              <div className="text-red-800">
+              <div className="text-status-error-foreground">
                 <div className="text-sm">{error}</div>
               </div>
-              <button onClick={() => setError(null)} className="ml-auto text-red-600 hover:text-red-800">
+              <button onClick={() => setError(null)} className="ml-auto text-status-error hover:text-status-error-foreground">
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
@@ -341,7 +341,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ slug: str
                           </button>
                           <button
                             onClick={() => removeMember(member.id)}
-                            className="text-red-400 hover:text-red-600"
+                            className="text-status-error/60 hover:text-status-error"
                             title="Remove member"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -378,7 +378,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ slug: str
                       </div>
                       <button
                         onClick={() => cancelInvitation(invitation.id)}
-                        className="text-red-600 hover:text-red-800 text-sm font-medium"
+                        className="text-status-error hover:text-status-error-foreground text-sm font-medium"
                       >
                         Cancel
                       </button>
@@ -408,16 +408,16 @@ export default function TeamDetailPage({ params }: { params: Promise<{ slug: str
             </div>
 
             {isOwner && (
-              <div className="bg-red-50 shadow sm:rounded-lg">
+              <div className="bg-status-error-muted shadow sm:rounded-lg">
                 <div className="px-4 py-5 sm:p-6">
-                  <h3 className="text-lg font-medium text-red-900">Danger Zone</h3>
-                  <p className="mt-2 text-sm text-red-700">
+                  <h3 className="text-lg font-medium text-status-error-foreground">Danger Zone</h3>
+                  <p className="mt-2 text-sm text-status-error">
                     Once you delete a team, there is no going back. Please be certain.
                   </p>
                   <div className="mt-4">
                     <button
                       onClick={() => setShowDeleteModal(true)}
-                      className="inline-flex items-center px-4 py-2 border border-red-300 text-sm font-medium rounded-md text-red-700 bg-white hover:bg-red-50"
+                      className="inline-flex items-center px-4 py-2 border border-status-error/30 text-sm font-medium rounded-md text-status-error bg-white hover:bg-status-error-muted"
                     >
                       Delete Team
                     </button>
@@ -571,7 +571,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ slug: str
         {showDeleteModal && (
           <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
             <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-              <h3 className="text-lg font-medium text-red-900 mb-4">Delete Team</h3>
+              <h3 className="text-lg font-medium text-status-error-foreground mb-4">Delete Team</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Are you sure you want to delete "{team.name}"? This action cannot be undone.
                 All team members will lose access.
@@ -585,7 +585,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ slug: str
                 </button>
                 <button
                   onClick={deleteTeam}
-                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
+                  className="px-4 py-2 text-sm font-medium text-white bg-status-error rounded-md hover:bg-status-error-foreground"
                 >
                   Delete Team
                 </button>

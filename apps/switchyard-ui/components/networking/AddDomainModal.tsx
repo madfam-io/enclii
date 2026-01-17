@@ -154,7 +154,7 @@ export function AddDomainModal({
             <div className="rounded-lg border p-4 bg-muted/50">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Step 2: Routing Record</span>
-                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">CNAME</span>
+                <span className="text-xs bg-status-success-muted text-status-success-foreground px-2 py-0.5 rounded">CNAME</span>
               </div>
               <div className="space-y-2 text-sm">
                 <div>
@@ -306,7 +306,7 @@ export function AddDomainModal({
 
             {/* Error Display */}
             {error && (
-              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600">
+              <div className="rounded-lg bg-status-error-muted border border-status-error/30 p-3 text-sm text-status-error">
                 {error}
               </div>
             )}

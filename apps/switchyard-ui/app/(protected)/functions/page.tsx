@@ -143,7 +143,7 @@ export default function FunctionsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">{readyCount}</div>
+            <div className="text-3xl font-bold text-status-success">{readyCount}</div>
           </CardContent>
         </Card>
         <Card>

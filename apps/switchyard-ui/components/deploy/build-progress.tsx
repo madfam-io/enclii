@@ -9,13 +9,13 @@ import type { Release, BuildStage, BuildStep } from "@/lib/types";
 
 // Icons as SVG components
 const CheckCircleIcon = () => (
-  <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="h-5 w-5 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 
 const XCircleIcon = () => (
-  <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+  <svg className="h-5 w-5 text-status-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
@@ -164,10 +164,10 @@ export function BuildProgress({ serviceId, releaseId, onComplete, onError }: Bui
       return <Badge variant="destructive">Failed</Badge>;
     }
     if (release?.status === 'ready') {
-      return <Badge className="bg-green-100 text-green-800">Completed</Badge>;
+      return <Badge className="bg-status-success-muted text-status-success-foreground">Completed</Badge>;
     }
     if (release?.status === 'building') {
-      return <Badge className="bg-blue-100 text-blue-800">Building</Badge>;
+      return <Badge className="bg-status-info-muted text-status-info-foreground">Building</Badge>;
     }
     return <Badge variant="secondary">Pending</Badge>;
   };
@@ -212,9 +212,9 @@ export function BuildProgress({ serviceId, releaseId, onComplete, onError }: Bui
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   <span className={`text-sm font-medium ${
-                    step.status === 'completed' ? 'text-green-600' :
-                    step.status === 'failed' ? 'text-red-600' :
-                    step.status === 'running' ? 'text-blue-600' :
+                    step.status === 'completed' ? 'text-status-success' :
+                    step.status === 'failed' ? 'text-status-error' :
+                    step.status === 'running' ? 'text-status-info' :
                     'text-gray-400'
                   }`}>
                     {step.name}
@@ -233,7 +233,7 @@ export function BuildProgress({ serviceId, releaseId, onComplete, onError }: Bui
 
         {/* Error Message */}
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+          <div className="mb-4 p-3 bg-status-error-muted border border-status-error/30 rounded-md text-status-error-foreground text-sm">
             {error}
           </div>
         )}
@@ -265,9 +265,9 @@ export function BuildProgress({ serviceId, releaseId, onComplete, onError }: Bui
 
         {/* Release Info */}
         {release && release.status === 'ready' && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-            <p className="text-sm text-green-700 font-medium">Build Successful!</p>
-            <div className="mt-2 space-y-1 text-xs text-green-600">
+          <div className="mt-4 p-3 bg-status-success-muted border border-status-success/30 rounded-md">
+            <p className="text-sm text-status-success-foreground font-medium">Build Successful!</p>
+            <div className="mt-2 space-y-1 text-xs text-status-success">
               <p>Version: {release.version}</p>
               {release.git_sha && <p>Commit: {release.git_sha.substring(0, 8)}</p>}
               {release.image_tag && <p>Image: {release.image_tag}</p>}

@@ -29,11 +29,11 @@ interface RecentPreviewsProps {
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   pending: { label: 'Pending', className: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200' },
-  building: { label: 'Building', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 animate-pulse' },
-  deploying: { label: 'Deploying', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 animate-pulse' },
-  active: { label: 'Active', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
-  sleeping: { label: 'Sleeping', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
-  failed: { label: 'Failed', className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
+  building: { label: 'Building', className: 'bg-status-info-muted text-status-info-foreground animate-pulse' },
+  deploying: { label: 'Deploying', className: 'bg-status-info-muted text-status-info-foreground animate-pulse' },
+  active: { label: 'Active', className: 'bg-status-success-muted text-status-success-foreground' },
+  sleeping: { label: 'Sleeping', className: 'bg-status-warning-muted text-status-warning-foreground' },
+  failed: { label: 'Failed', className: 'bg-status-error-muted text-status-error-foreground' },
   closed: { label: 'Closed', className: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' },
 };
 

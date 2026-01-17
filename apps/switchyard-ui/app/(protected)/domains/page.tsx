@@ -127,15 +127,15 @@ export default function DomainsPage() {
 
   const getStatusBadge = (domain: CustomDomain) => {
     if (domain.verified) {
-      return <Badge variant="default" className="bg-green-100 text-green-800">Verified</Badge>;
+      return <Badge variant="default" className="bg-status-success-muted text-status-success-foreground">Verified</Badge>;
     }
-    return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
+    return <Badge variant="secondary" className="bg-status-warning-muted text-status-warning-foreground">Pending</Badge>;
   };
 
   const getTLSBadge = (domain: CustomDomain) => {
     if (domain.tls_enabled) {
       return (
-        <Badge variant="outline" className="text-green-600 border-green-600">
+        <Badge variant="outline" className="text-status-success border-status-success">
           <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
@@ -216,36 +216,36 @@ export default function DomainsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Verified</CardTitle>
-              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.verified_domains}</div>
+              <div className="text-2xl font-bold text-status-success">{stats.verified_domains}</div>
               <p className="text-xs text-muted-foreground">Active and serving traffic</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pending</CardTitle>
-              <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-status-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{stats.pending_domains}</div>
+              <div className="text-2xl font-bold text-status-warning">{stats.pending_domains}</div>
               <p className="text-xs text-muted-foreground">Awaiting DNS verification</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">TLS Enabled</CardTitle>
-              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 text-status-info" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{stats.tls_enabled}</div>
+              <div className="text-2xl font-bold text-status-info">{stats.tls_enabled}</div>
               <p className="text-xs text-muted-foreground">HTTPS secured</p>
             </CardContent>
           </Card>
@@ -293,7 +293,7 @@ export default function DomainsPage() {
             </div>
           ) : error ? (
             <div className="text-center py-12">
-              <p className="text-red-600 mb-4">{error}</p>
+              <p className="text-status-error mb-4">{error}</p>
               <Button variant="outline" onClick={() => fetchDomains(true)}>
                 Try Again
               </Button>

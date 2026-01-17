@@ -74,9 +74,9 @@ interface RealtimeMetrics {
 }
 
 function getProgressColor(percentage: number): string {
-  if (percentage >= 90) return 'bg-red-500';
-  if (percentage >= 75) return 'bg-yellow-500';
-  return 'bg-green-500';
+  if (percentage >= 90) return 'bg-status-error';
+  if (percentage >= 75) return 'bg-status-warning';
+  return 'bg-status-success';
 }
 
 function formatNumber(num: number): string {
@@ -167,7 +167,7 @@ export default function UsagePage() {
   if (error) {
     return (
       <div className="text-center py-24">
-        <p className="text-red-600 mb-4">{error}</p>
+        <p className="text-status-error mb-4">{error}</p>
         <Button variant="outline" onClick={fetchData}>
           Try Again
         </Button>
@@ -264,8 +264,8 @@ export default function UsagePage() {
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-status-success opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-status-success"></span>
                   </span>
                   Live Resource Usage
                 </CardTitle>
@@ -279,7 +279,7 @@ export default function UsagePage() {
                 </CardDescription>
               </div>
               {!realtime.metrics_enabled && (
-                <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
+                <span className="text-xs bg-status-warning-muted text-status-warning-foreground px-2 py-1 rounded">
                   Metrics server unavailable
                 </span>
               )}
@@ -310,9 +310,9 @@ export default function UsagePage() {
                       Across all services
                     </div>
                   </div>
-                  <div className="bg-green-50 dark:bg-green-950 rounded-lg p-4">
+                  <div className="bg-status-success-muted rounded-lg p-4">
                     <div className="text-sm text-muted-foreground">Running Pods</div>
-                    <div className="text-2xl font-bold text-green-600">
+                    <div className="text-2xl font-bold text-status-success">
                       {realtime.total_pods}
                     </div>
                     <div className="text-xs text-muted-foreground">
@@ -333,8 +333,8 @@ export default function UsagePage() {
                         >
                           <div className="flex items-center gap-3">
                             <div className={`w-2 h-2 rounded-full ${
-                              svc.status === 'running' ? 'bg-green-500' :
-                              svc.status === 'unknown' ? 'bg-yellow-500' : 'bg-red-500'
+                              svc.status === 'running' ? 'bg-status-success' :
+                              svc.status === 'unknown' ? 'bg-status-warning' : 'bg-status-error'
                             }`} />
                             <div>
                               <div className="font-medium">{svc.service_name}</div>
@@ -402,7 +402,7 @@ export default function UsagePage() {
                       <span className="font-medium">{metric.label}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`font-mono ${overLimit ? 'text-red-500' : ''}`}>
+                      <span className={`font-mono ${overLimit ? 'text-status-error' : ''}`}>
                         {formatNumber(metric.used)}
                       </span>
                       <span className="text-muted-foreground">/</span>
@@ -422,7 +422,7 @@ export default function UsagePage() {
                       />
                       {overLimit && (
                         <div
-                          className="absolute top-0 h-2 bg-red-500/30 rounded-r-full"
+                          className="absolute top-0 h-2 bg-status-error/30 rounded-r-full"
                           style={{
                             left: '100%',
                             width: `${((metric.used - metric.included) / metric.included) * 100}%`,
@@ -477,7 +477,7 @@ export default function UsagePage() {
             ) : (
               <div className="flex items-center justify-center h-64 text-muted-foreground">
                 <div className="text-center">
-                  <svg className="w-12 h-12 mx-auto mb-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-12 h-12 mx-auto mb-4 text-status-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <p className="font-medium">No overage charges</p>
@@ -554,16 +554,16 @@ export default function UsagePage() {
                       </td>
                       <td className="text-right py-3 px-4 font-mono">
                         {overage > 0 ? (
-                          <span className="text-red-500">+{formatNumber(overage)} {metric.unit}</span>
+                          <span className="text-status-error">+{formatNumber(overage)} {metric.unit}</span>
                         ) : (
-                          <span className="text-green-500">-</span>
+                          <span className="text-status-success">-</span>
                         )}
                       </td>
                       <td className="text-right py-3 px-4 font-mono font-medium">
                         {metric.cost > 0 ? (
-                          <span className="text-red-500">${metric.cost.toFixed(2)}</span>
+                          <span className="text-status-error">${metric.cost.toFixed(2)}</span>
                         ) : (
-                          <span className="text-green-500">$0.00</span>
+                          <span className="text-status-success">$0.00</span>
                         )}
                       </td>
                     </tr>
