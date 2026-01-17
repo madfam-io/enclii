@@ -40,9 +40,12 @@ export default function AccessDeniedPage() {
           <h3 className="font-medium text-foreground mb-2">What is Dispatch?</h3>
           <p className="text-sm text-muted-foreground">
             Dispatch is the Control Tower for managing Enclii infrastructure - domains,
-            tunnels, and ecosystem resources. Access is limited to authorized operators
-            with <span className="font-mono text-primary">admin@madfam.io</span> credentials.
+            tunnels, and ecosystem resources. Access requires:
           </p>
+          <ul className="mt-2 text-sm text-muted-foreground list-disc list-inside space-y-1">
+            <li>Email from an authorized domain (e.g., <span className="font-mono text-primary">@madfam.io</span>)</li>
+            <li>Operator role (<span className="font-mono text-primary">superadmin</span>, <span className="font-mono text-primary">admin</span>, or <span className="font-mono text-primary">operator</span>)</li>
+          </ul>
         </div>
 
         {/* Actions */}

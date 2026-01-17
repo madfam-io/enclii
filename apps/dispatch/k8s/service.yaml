@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dispatch
+  namespace: enclii
+  labels:
+    app: dispatch
+spec:
+  type: ClusterIP
+  selector:
+    app: dispatch
+  ports:
+  - name: http
+    port: 80
+    targetPort: 4203
+    protocol: TCP

@@ -2,22 +2,55 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 /**
- * Dispatch Middleware - Superuser Access Control
+ * Dispatch Middleware - Infrastructure Operator Access Control
  *
- * SECURITY: This middleware enforces strict access control.
- * Only admin@madfam.io is allowed to access Dispatch.
+ * SECURITY: This middleware enforces strict access control for Dispatch.
+ * Only authorized infrastructure operators can access the Control Tower.
  *
- * The Control Tower is for infrastructure operators only.
+ * Authorization is based on:
+ * 1. Email domain - must be from an allowed domain (@madfam.io by default)
+ * 2. User role - must have an operator-level role (superadmin, admin, operator)
+ *
+ * Configure via environment variables:
+ * - ALLOWED_ADMIN_DOMAINS: Comma-separated list of allowed email domains (default: @madfam.io)
+ * - ALLOWED_ADMIN_ROLES: Comma-separated list of allowed roles (default: superadmin,admin,operator)
  */
 
-// Allowed superuser email (hardcoded for security)
-const ALLOWED_SUPERUSER = 'admin@madfam.io'
+// Allowed email domains (configurable via env, default to @madfam.io)
+const DEFAULT_DOMAINS = ['@madfam.io']
+const ALLOWED_DOMAINS = process.env.ALLOWED_ADMIN_DOMAINS
+  ? process.env.ALLOWED_ADMIN_DOMAINS.split(',').map((d) => d.trim())
+  : DEFAULT_DOMAINS
+
+// Allowed roles (configurable via env)
+const DEFAULT_ROLES = ['superadmin', 'admin', 'operator']
+const ALLOWED_ROLES = process.env.ALLOWED_ADMIN_ROLES
+  ? process.env.ALLOWED_ADMIN_ROLES.split(',').map((r) => r.trim())
+  : DEFAULT_ROLES
+
+/**
+ * Check if an email is from an allowed domain
+ */
+function isAllowedDomain(email: string): boolean {
+  return ALLOWED_DOMAINS.some((domain) => email.toLowerCase().endsWith(domain.toLowerCase()))
+}
+
+/**
+ * Check if user has an allowed role
+ * Roles are stored as comma-separated string in cookie
+ */
+function hasAllowedRole(rolesString: string | undefined): boolean {
+  if (!rolesString) return false
+  const userRoles = rolesString.split(',').map((r) => r.trim())
+  return userRoles.some((role) => ALLOWED_ROLES.includes(role))
+}
 
 // Public paths that don't require authentication
 const publicPaths = [
   '/login',
   '/auth/callback',
   '/api/auth',
+  '/api/health',
   '/_next',
   '/favicon.ico',
   '/public',
@@ -37,9 +70,10 @@ export function middleware(request: NextRequest) {
     return addSecurityHeaders(NextResponse.next())
   }
 
-  // Check for authentication token
+  // Check for authentication token and user info
   const token = request.cookies.get('dispatch_auth')?.value
   const userEmail = request.cookies.get('dispatch_user_email')?.value
+  const userRoles = request.cookies.get('dispatch_user_roles')?.value
 
   // If no token, redirect to login
   if (!token) {
@@ -52,15 +86,21 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // SUPERUSER CHECK: Only admin@madfam.io is allowed
-  if (userEmail !== ALLOWED_SUPERUSER) {
-    console.warn(`[DISPATCH SECURITY] Unauthorized access attempt by: ${userEmail}`)
+  // OPERATOR CHECK: Must have allowed domain AND allowed role
+  const domainAllowed = userEmail ? isAllowedDomain(userEmail) : false
+  const roleAllowed = hasAllowedRole(userRoles)
+
+  if (!domainAllowed || !roleAllowed) {
+    const reason = !domainAllowed
+      ? `email domain not allowed: ${userEmail}`
+      : `insufficient role: ${userRoles || 'none'}`
+    console.warn(`[DISPATCH SECURITY] Unauthorized access attempt - ${reason}`)
 
     if (pathname.startsWith('/api/')) {
       return new NextResponse(
         JSON.stringify({
           error: 'Forbidden',
-          message: 'Dispatch access is restricted to infrastructure operators.',
+          message: 'Dispatch access is restricted to authorized infrastructure operators.',
         }),
         {
           status: 403,
@@ -69,7 +109,7 @@ export function middleware(request: NextRequest) {
       )
     }
 
-    // Redirect non-superusers to an access denied page
+    // Redirect unauthorized users to access denied page
     return NextResponse.redirect(new URL('/access-denied', request.url))
   }
 
