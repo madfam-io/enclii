@@ -1,6 +1,11 @@
 # Infrastructure Anatomy - Production State
 
-> **Generated**: 2026-01-17 | **Host**: foundry-core | **Audit Type**: Deep Metal Forensic
+> **Generated**: 2026-01-17 | **Last Updated**: 2026-01-17 | **Host**: foundry-core | **Audit Type**: Deep Metal Forensic
+>
+> **Live Status Check** (2026-01-17):
+> - auth.madfam.io OIDC: ✅ 200 OK
+> - api.enclii.dev/health: ❌ 502 Bad Gateway
+> - app.enclii.dev: ⚠️ Loading (API connection issues)
 
 ## Executive Summary
 
@@ -9,7 +14,10 @@
 | **Architecture Conflict** | Triple tunnel + dual-stack | CRITICAL |
 | **Disk Pressure** | 87% usage | CRITICAL |
 | **Database Exposure** | 0.0.0.0 binding | CRITICAL |
-| **OIDC Endpoints** | 502 errors | CRITICAL |
+| **OIDC Endpoints** | auth.madfam.io ✅ 200 OK | RESOLVED |
+| **Switchyard API** | api.enclii.dev ❌ 502 | CRITICAL |
+| **Redis URL Drift** | External IP instead of K8s DNS | CRITICAL |
+| **Port Mismatch** | Docs say 4200, K8s uses 8080 | HIGH |
 | **ImagePullBackOff** | 8+ pods | HIGH |
 | **Pod Evictions** | 10+ pods | HIGH |
 
@@ -209,7 +217,7 @@ LISTEN 0.0.0.0:6379 (docker-proxy)
 | janua-api | DATABASE_URL | K8s internal | ✅ |
 | janua-api | REDIS_URL | K8s internal | ✅ |
 | janua-api | JWT_ALGORITHM | RS256 | ✅ |
-| switchyard-api | ENCLII_REDIS_URL | **95.217.198.239:6379** | EXTERNAL |
+| switchyard-api | ENCLII_REDIS_URL | **95.217.198.239:6379** | **BUG** - Should be `redis://redis.data.svc.cluster.local:6379` |
 | dispatch | NEXT_PUBLIC_JANUA_URL | https://auth.madfam.io | ✅ |
 
 ---
@@ -258,6 +266,43 @@ Failed to list functions: sql: converting argument $1 type: unsupported type []s
 
 **Type**: Code bug in function listing.
 
+### 5. Port Mismatch (4200 vs 8080)
+
+**Problem**: Documentation and source code specify port 4200, but K8s manifests use 8080.
+
+**Evidence**:
+| Source | Port |
+|--------|------|
+| `config.go` default | 4200 |
+| `Dockerfile` EXPOSE | 4200 |
+| `CLAUDE.md` port allocation | 4200 |
+| `switchyard-api.yaml` ENCLII_PORT | 8080 |
+| `cloudflared.yaml` tunnel route | 8080 |
+
+**Root Cause**: K8s manifest `ENCLII_PORT` environment variable overrides the application default.
+
+**Impact**: Confusion in documentation and potential routing issues if not consistently applied.
+
+**Resolution**: Either update K8s manifests to 4200 (align with docs) or update docs to 8080 (align with K8s).
+
+### 6. External Redis URL in Cluster
+
+**Problem**: switchyard-api using external IP for Redis instead of internal K8s DNS.
+
+**Evidence**:
+```
+ENCLII_REDIS_URL=95.217.198.239:6379  # Current (WRONG)
+```
+
+**Expected**:
+```
+ENCLII_REDIS_URL=redis://redis.data.svc.cluster.local:6379  # Correct
+```
+
+**Root Cause**: Runtime drift - manifests are correct but cluster state diverged.
+
+**Fix**: Force ArgoCD sync or apply `kubectl set env` patch.
+
 ---
 
 ## Recommended Actions
@@ -280,6 +325,16 @@ Failed to list functions: sql: converting argument $1 type: unsupported type []s
 3. **Secure database ports**:
    - Modify Docker compose to bind 127.0.0.1 instead of 0.0.0.0
    - Or migrate to K8s-only database access
+
+4. **Fix Redis URL** (Issue #6):
+   ```bash
+   # Option A: Force ArgoCD sync
+   kubectl -n argocd patch application core-services --type merge -p '{"operation":{"sync":{"force":true}}}'
+
+   # Option B: Direct patch
+   kubectl set env deployment/switchyard-api -n enclii \
+       ENCLII_REDIS_URL="redis://redis.data.svc.cluster.local:6379"
+   ```
 
 ### Short-term (P1)
 
