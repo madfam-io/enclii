@@ -533,8 +533,3 @@ function TrellisConnectorSVG({ projects, expandedProjects }: TrellisConnectorSVG
   );
 }
 
-// -----------------------------------------------------------------------------
-// EXPORTS
-// -----------------------------------------------------------------------------
-
-export type { TrellisOrganization, TrellisProject, TrellisService };

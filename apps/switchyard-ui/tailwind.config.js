@@ -78,6 +78,44 @@ module.exports = {
         },
 
         // =================================================================
+        // SEMANTIC STATUS COLORS (Theme-aware)
+        // Use these for all status indicators instead of raw colors
+        // Examples: bg-status-success, text-status-error-foreground
+        // =================================================================
+        status: {
+          success: {
+            DEFAULT: 'hsl(var(--status-success))',
+            foreground: 'hsl(var(--status-success-foreground))',
+            muted: 'hsl(var(--status-success-muted))',
+            'muted-foreground': 'hsl(var(--status-success-muted-foreground))',
+          },
+          warning: {
+            DEFAULT: 'hsl(var(--status-warning))',
+            foreground: 'hsl(var(--status-warning-foreground))',
+            muted: 'hsl(var(--status-warning-muted))',
+            'muted-foreground': 'hsl(var(--status-warning-muted-foreground))',
+          },
+          error: {
+            DEFAULT: 'hsl(var(--status-error))',
+            foreground: 'hsl(var(--status-error-foreground))',
+            muted: 'hsl(var(--status-error-muted))',
+            'muted-foreground': 'hsl(var(--status-error-muted-foreground))',
+          },
+          info: {
+            DEFAULT: 'hsl(var(--status-info))',
+            foreground: 'hsl(var(--status-info-foreground))',
+            muted: 'hsl(var(--status-info-muted))',
+            'muted-foreground': 'hsl(var(--status-info-muted-foreground))',
+          },
+          neutral: {
+            DEFAULT: 'hsl(var(--status-neutral))',
+            foreground: 'hsl(var(--status-neutral-foreground))',
+            muted: 'hsl(var(--status-neutral-muted))',
+            'muted-foreground': 'hsl(var(--status-neutral-muted-foreground))',
+          },
+        },
+
+        // =================================================================
         // TRELLIS VISUALIZATION COLORS
         // =================================================================
         trellis: {

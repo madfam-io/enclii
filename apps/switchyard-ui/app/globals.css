@@ -56,6 +56,40 @@
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
 
+    /* ===========================================
+       SEMANTIC STATUS COLORS (Theme-aware)
+       =========================================== */
+
+    /* Success - Green */
+    --status-success: 142 76% 36%;
+    --status-success-foreground: 0 0% 100%;
+    --status-success-muted: 142 76% 96%;
+    --status-success-muted-foreground: 142 76% 30%;
+
+    /* Warning - Amber/Yellow */
+    --status-warning: 38 92% 50%;
+    --status-warning-foreground: 0 0% 100%;
+    --status-warning-muted: 48 96% 89%;
+    --status-warning-muted-foreground: 32 95% 30%;
+
+    /* Error - Red */
+    --status-error: 0 84% 60%;
+    --status-error-foreground: 0 0% 100%;
+    --status-error-muted: 0 93% 94%;
+    --status-error-muted-foreground: 0 84% 40%;
+
+    /* Info - Blue */
+    --status-info: 221 83% 53%;
+    --status-info-foreground: 0 0% 100%;
+    --status-info-muted: 214 95% 93%;
+    --status-info-muted-foreground: 221 83% 40%;
+
+    /* Neutral - Gray */
+    --status-neutral: 220 9% 46%;
+    --status-neutral-foreground: 0 0% 100%;
+    --status-neutral-muted: 220 14% 96%;
+    --status-neutral-muted-foreground: 220 9% 35%;
+
     /* Solarpunk variables (inactive in enterprise, but defined) */
     --solarpunk-glow: 160 100% 50%;
     --solarpunk-glow-muted: 160 60% 40%;
@@ -92,6 +126,32 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+
+    /* Semantic Status Colors - Dark Mode */
+    --status-success: 142 71% 45%;
+    --status-success-foreground: 0 0% 100%;
+    --status-success-muted: 142 76% 11%;
+    --status-success-muted-foreground: 142 71% 65%;
+
+    --status-warning: 38 92% 50%;
+    --status-warning-foreground: 0 0% 0%;
+    --status-warning-muted: 32 95% 10%;
+    --status-warning-muted-foreground: 48 96% 70%;
+
+    --status-error: 0 72% 51%;
+    --status-error-foreground: 0 0% 100%;
+    --status-error-muted: 0 84% 12%;
+    --status-error-muted-foreground: 0 72% 70%;
+
+    --status-info: 217 91% 60%;
+    --status-info-foreground: 0 0% 100%;
+    --status-info-muted: 221 83% 12%;
+    --status-info-muted-foreground: 217 91% 75%;
+
+    --status-neutral: 215 20% 65%;
+    --status-neutral-foreground: 0 0% 100%;
+    --status-neutral-muted: 217 33% 17%;
+    --status-neutral-muted-foreground: 215 20% 75%;
 
     /* Trellis dark */
     --trellis-node: 217 33% 17%;
@@ -150,6 +210,32 @@
     --solarpunk-glow-muted: 160 60% 35%;
     --solarpunk-substrate: 220 20% 6%;
     --solarpunk-substrate-elevated: 220 18% 10%;
+
+    /* Semantic Status Colors - Solarpunk (Bioluminescent) */
+    --status-success: 160 100% 50%;
+    --status-success-foreground: 220 20% 6%;
+    --status-success-muted: 160 80% 12%;
+    --status-success-muted-foreground: 160 100% 70%;
+
+    --status-warning: 45 100% 50%;
+    --status-warning-foreground: 220 20% 6%;
+    --status-warning-muted: 45 80% 12%;
+    --status-warning-muted-foreground: 45 100% 70%;
+
+    --status-error: 0 75% 55%;
+    --status-error-foreground: 160 10% 92%;
+    --status-error-muted: 0 65% 12%;
+    --status-error-muted-foreground: 0 75% 70%;
+
+    --status-info: 180 70% 50%;
+    --status-info-foreground: 220 20% 6%;
+    --status-info-muted: 180 60% 12%;
+    --status-info-muted-foreground: 180 70% 70%;
+
+    --status-neutral: 160 10% 55%;
+    --status-neutral-foreground: 160 10% 92%;
+    --status-neutral-muted: 180 10% 15%;
+    --status-neutral-muted-foreground: 160 10% 70%;
 
     /* Trellis: Organic growth visualization */
     --trellis-node: 180 15% 12%;

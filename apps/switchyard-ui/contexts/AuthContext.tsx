@@ -1,5 +1,21 @@
 "use client";
 
+/**
+ * Authentication Context for Enclii Switchyard UI
+ *
+ * Supports both local authentication and OIDC/OAuth via Janua.
+ *
+ * Authentication Modes:
+ * - Local: Email/password directly to Switchyard API
+ * - OIDC: OAuth 2.0 flow via external identity provider (Janua)
+ *
+ * The auth mode is determined by NEXT_PUBLIC_AUTH_MODE environment variable.
+ *
+ * Split structure:
+ * - auth-types.ts: Type definitions
+ * - auth-storage.ts: Storage and JWT utilities
+ */
+
 import React, {
   createContext,
   useContext,
@@ -8,193 +24,32 @@ import React, {
   useCallback,
   ReactNode,
 } from "react";
-
-/**
- * Authentication Context for Enclii Switchyard UI
- *
- * Supports both local authentication and OIDC/OAuth via Janua/Janua.
- *
- * Authentication Modes:
- * - Local: Email/password directly to Switchyard API
- * - OIDC: OAuth 2.0 flow via external identity provider (Janua)
- *
- * The auth mode is determined by NEXT_PUBLIC_AUTH_MODE environment variable.
- */
-
-// =============================================================================
-// TYPES
-// =============================================================================
-
-interface User {
-  id: string;
-  email: string;
-  name?: string;
-  roles?: string[];
-  avatarUrl?: string;
-}
-
-interface TokenInfo {
-  accessToken: string;
-  refreshToken?: string;
-  expiresAt: number; // Unix timestamp
-  tokenType: string;
-  // IDP token from identity provider (e.g., Janua) for calling IDP-specific APIs
-  idpToken?: string;
-  idpTokenExpiresAt?: number; // Unix timestamp
-}
-
-interface AuthContextType {
-  // State
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  authMode: "local" | "oidc";
-
-  // Local auth methods
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string) => Promise<void>;
-
-  // OIDC methods
-  loginWithOIDC: () => void;
-  handleOAuthCallback: (code: string, state?: string) => Promise<void>;
-  storeTokensFromRedirect: (tokens: {
-    accessToken: string;
-    refreshToken: string;
-    expiresAt: Date;
-    tokenType: string;
-    idpToken?: string;
-    idpTokenExpiresAt?: Date;
-  }) => Promise<void>;
-
-  // Common methods
-  logout: () => Promise<void>;
-  refreshTokens: () => Promise<boolean>;
-
-  // Token access (for API calls)
-  getAccessToken: () => string | null;
-  // IDP token access (for calling IDP-specific APIs like OAuth account linking)
-  getIDPToken: () => string | null;
-}
+import type {
+  User,
+  TokenInfo,
+  AuthContextType,
+  AuthMode,
+  RedirectTokens,
+} from "./auth-types";
+import {
+  storage,
+  parseJwt,
+  isTokenExpired,
+  parseErrorResponse,
+} from "./auth-storage";
 
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4200";
-const AUTH_MODE = (process.env.NEXT_PUBLIC_AUTH_MODE || "local") as
-  | "local"
-  | "oidc";
-
-// Token refresh buffer - refresh 5 minutes before expiry
-const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
-
-/**
- * Safely parse error response, handling both JSON and plain text responses.
- * Returns the error message from the response body.
- */
-async function parseErrorResponse(
-  response: Response,
-  fallbackMessage: string,
-): Promise<string> {
-  const contentType = response.headers.get("content-type");
-  const text = await response.text();
-
-  // Try to parse as JSON if content-type suggests it or if it looks like JSON
-  if (contentType?.includes("application/json") || text.startsWith("{")) {
-    try {
-      const json = JSON.parse(text);
-      return json.error || json.message || json.detail || fallbackMessage;
-    } catch {
-      // JSON parsing failed, fall through to use text
-    }
-  }
-
-  // Return plain text error if not empty, otherwise fallback
-  return text.trim() || fallbackMessage;
-}
+const AUTH_MODE = (process.env.NEXT_PUBLIC_AUTH_MODE || "local") as AuthMode;
 
 // =============================================================================
 // CONTEXT
 // =============================================================================
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-// =============================================================================
-// STORAGE HELPERS
-// =============================================================================
-
-const storage = {
-  getTokens(): TokenInfo | null {
-    if (typeof window === "undefined") return null;
-    const stored = localStorage.getItem("enclii_tokens");
-    if (!stored) return null;
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return null;
-    }
-  },
-
-  setTokens(tokens: TokenInfo): void {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("enclii_tokens", JSON.stringify(tokens));
-  },
-
-  clearTokens(): void {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem("enclii_tokens");
-  },
-
-  getUser(): User | null {
-    if (typeof window === "undefined") return null;
-    const stored = localStorage.getItem("enclii_user");
-    if (!stored) return null;
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return null;
-    }
-  },
-
-  setUser(user: User): void {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("enclii_user", JSON.stringify(user));
-  },
-
-  clearUser(): void {
-    if (typeof window === "undefined") return;
-    localStorage.removeItem("enclii_user");
-  },
-
-  clear(): void {
-    this.clearTokens();
-    this.clearUser();
-  },
-};
-
-// =============================================================================
-// JWT HELPERS
-// =============================================================================
-
-function parseJwt(token: string): Record<string, unknown> | null {
-  try {
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join(""),
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-}
-
-function isTokenExpired(expiresAt: number): boolean {
-  return Date.now() >= expiresAt - TOKEN_REFRESH_BUFFER_MS;
-}
 
 // =============================================================================
 // PROVIDER
@@ -209,6 +64,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [tokens, setTokens] = useState<TokenInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshTimer, setRefreshTimer] = useState<NodeJS.Timeout | null>(null);
+
+  // ==========================================================================
+  // TOKEN REFRESH SCHEDULING
+  // ==========================================================================
+
+  const scheduleTokenRefresh = useCallback(
+    (expiresAt: number) => {
+      // Clear existing timer
+      if (refreshTimer) {
+        clearTimeout(refreshTimer);
+      }
+
+      // Calculate when to refresh (5 minutes before expiry)
+      const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+      const refreshIn = expiresAt - Date.now() - TOKEN_REFRESH_BUFFER_MS;
+
+      if (refreshIn > 0) {
+        const timer = setTimeout(() => {
+          refreshTokens();
+        }, refreshIn);
+        setRefreshTimer(timer);
+      }
+    },
+    [refreshTimer]
+  );
 
   // ==========================================================================
   // INITIALIZATION
@@ -237,30 +117,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setIsLoading(false);
   }, []);
 
-  // ==========================================================================
-  // TOKEN REFRESH SCHEDULING
-  // ==========================================================================
-
-  const scheduleTokenRefresh = useCallback(
-    (expiresAt: number) => {
-      // Clear existing timer
-      if (refreshTimer) {
-        clearTimeout(refreshTimer);
-      }
-
-      // Calculate when to refresh (5 minutes before expiry)
-      const refreshIn = expiresAt - Date.now() - TOKEN_REFRESH_BUFFER_MS;
-
-      if (refreshIn > 0) {
-        const timer = setTimeout(() => {
-          refreshTokens();
-        }, refreshIn);
-        setRefreshTimer(timer);
-      }
-    },
-    [refreshTimer],
-  );
-
   // Cleanup timer on unmount
   useEffect(() => {
     return () => {
@@ -276,7 +132,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const apiRequest = async (
     endpoint: string,
-    options: RequestInit = {},
+    options: RequestInit = {}
   ): Promise<Response> => {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -340,7 +196,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const register = async (
     email: string,
     password: string,
-    name: string,
+    name: string
   ): Promise<void> => {
     setIsLoading(true);
 
@@ -353,7 +209,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (!response.ok) {
         const errorMessage = await parseErrorResponse(
           response,
-          "Registration failed",
+          "Registration failed"
         );
         throw new Error(errorMessage);
       }
@@ -396,19 +252,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Redirect to backend OIDC login endpoint
     // The backend will redirect to the OIDC provider (Janua)
-    // Note: In OIDC mode, the API registers GET /v1/auth/login for OIDC redirect
     window.location.href = `${API_BASE_URL}/v1/auth/login`;
   };
 
   const handleOAuthCallback = async (
     code: string,
-    state?: string,
+    state?: string
   ): Promise<void> => {
     setIsLoading(true);
 
     try {
-      // The backend handles the code exchange, we just need to hit the callback
-      // endpoint with the code and state
       const params = new URLSearchParams({ code });
       if (state) {
         params.append("state", state);
@@ -418,14 +271,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         `${API_BASE_URL}/v1/auth/callback?${params.toString()}`,
         {
           method: "GET",
-          credentials: "include", // Include cookies for state verification
-        },
+          credentials: "include",
+        }
       );
 
       if (!response.ok) {
         const errorMessage = await parseErrorResponse(
           response,
-          "OAuth callback failed",
+          "OAuth callback failed"
         );
         throw new Error(errorMessage);
       }
@@ -437,14 +290,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         refreshToken: data.refresh_token,
         expiresAt: new Date(data.expires_at).getTime(),
         tokenType: data.token_type || "Bearer",
-        // Store IDP token for calling IDP-specific APIs (e.g., Janua OAuth linking)
         idpToken: data.idp_token,
         idpTokenExpiresAt: data.idp_token_expires_at
           ? new Date(data.idp_token_expires_at).getTime()
           : undefined,
       };
 
-      // Extract user info from token
       const claims = parseJwt(data.access_token);
       const userData: User = {
         id: (claims?.sub as string) || (claims?.user_id as string) || "",
@@ -463,18 +314,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
-  /**
-   * Store tokens received via redirect (backend redirect flow).
-   * This is used when the API callback redirects to UI with tokens in query params.
-   */
-  const storeTokensFromRedirect = async (redirectTokens: {
-    accessToken: string;
-    refreshToken: string;
-    expiresAt: Date;
-    tokenType: string;
-    idpToken?: string;
-    idpTokenExpiresAt?: Date;
-  }): Promise<void> => {
+  const storeTokensFromRedirect = async (
+    redirectTokens: RedirectTokens
+  ): Promise<void> => {
     setIsLoading(true);
 
     try {
@@ -487,7 +329,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         idpTokenExpiresAt: redirectTokens.idpTokenExpiresAt?.getTime(),
       };
 
-      // Extract user info from token
       const claims = parseJwt(redirectTokens.accessToken);
       const userData: User = {
         id: (claims?.sub as string) || (claims?.user_id as string) || "",
@@ -514,13 +355,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     let logoutUrl: string | null = null;
 
     try {
-      // Call backend logout endpoint to revoke session
       if (tokens?.accessToken) {
         const response = await apiRequest("/v1/auth/logout", {
           method: "POST",
         }).catch(() => null);
 
-        // Capture IdP logout URL if provided (for SSO logout)
         if (response?.ok) {
           try {
             const data = await response.json();
@@ -533,7 +372,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       }
     } finally {
-      // Clear local state regardless of API call result
       setTokens(null);
       setUser(null);
       storage.clear();
@@ -543,7 +381,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setRefreshTimer(null);
       }
 
-      // If we have an IdP logout URL, redirect to terminate SSO session
       if (logoutUrl) {
         const returnUrl = encodeURIComponent(`${window.location.origin}/login`);
         window.location.href = `${logoutUrl}?return_url=${returnUrl}`;
@@ -577,7 +414,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const newTokenInfo: TokenInfo = {
         accessToken: data.access_token,
-        refreshToken: currentTokens.refreshToken, // Keep existing refresh token
+        refreshToken: currentTokens.refreshToken,
         expiresAt: new Date(data.expires_at).getTime(),
         tokenType: data.token_type || "Bearer",
       };
@@ -589,7 +426,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return true;
     } catch (error) {
       console.error("Token refresh failed:", error);
-      // Clear auth state on refresh failure
       await logout();
       return false;
     }
@@ -602,10 +438,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return null;
     }
 
-    // Check if token is expired
     if (isTokenExpired(currentTokens.expiresAt)) {
-      // Trigger refresh but return current token
-      // (the API call might still work if server has grace period)
       refreshTokens();
     }
 
@@ -619,12 +452,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return null;
     }
 
-    // Check if IDP token is expired
     if (
       currentTokens.idpTokenExpiresAt &&
       Date.now() >= currentTokens.idpTokenExpiresAt
     ) {
-      // IDP token expired - user needs to re-authenticate
       return null;
     }
 
