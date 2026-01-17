@@ -8,11 +8,32 @@ import { Radio, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
  * OAuth Callback Page
  *
  * Handles the redirect from Janua SSO after authentication.
- * Validates the user and stores the token.
+ * Validates the user (domain + role) and stores the token.
  */
 
-const JANUA_URL = process.env.NEXT_PUBLIC_JANUA_URL || 'https://api.janua.dev'
-const ALLOWED_SUPERUSER = 'admin@madfam.io'
+const JANUA_URL = process.env.NEXT_PUBLIC_JANUA_URL || 'https://auth.madfam.io'
+const OAUTH_CLIENT_ID = process.env.NEXT_PUBLIC_OAUTH_CLIENT_ID || 'jnc_lofqyf9LQXG_OwENAIw89p_XvngkWMi-'
+
+// Allowed email domains (must match middleware configuration)
+const DEFAULT_DOMAINS = ['@madfam.io']
+const ALLOWED_DOMAINS = process.env.NEXT_PUBLIC_ALLOWED_ADMIN_DOMAINS
+  ? process.env.NEXT_PUBLIC_ALLOWED_ADMIN_DOMAINS.split(',').map((d) => d.trim())
+  : DEFAULT_DOMAINS
+
+// Allowed roles (must match middleware configuration)
+const DEFAULT_ROLES = ['superadmin', 'admin', 'operator']
+const ALLOWED_ROLES = process.env.NEXT_PUBLIC_ALLOWED_ADMIN_ROLES
+  ? process.env.NEXT_PUBLIC_ALLOWED_ADMIN_ROLES.split(',').map((r) => r.trim())
+  : DEFAULT_ROLES
+
+function isAllowedDomain(email: string): boolean {
+  return ALLOWED_DOMAINS.some((domain) => email.toLowerCase().endsWith(domain.toLowerCase()))
+}
+
+function hasAllowedRole(roles: string[] | undefined): boolean {
+  if (!roles || roles.length === 0) return false
+  return roles.some((role) => ALLOWED_ROLES.includes(role))
+}
 
 type CallbackStatus = 'processing' | 'success' | 'error'
 
@@ -39,19 +60,30 @@ function AuthCallbackContent() {
         throw new Error('No authorization code received')
       }
 
-      // Exchange code for token
-      const response = await fetch(`${JANUA_URL}/api/v1/auth/token`, {
+      // Retrieve PKCE code_verifier from session storage
+      const codeVerifier = sessionStorage.getItem('dispatch_code_verifier')
+      if (!codeVerifier) {
+        throw new Error('PKCE verification failed - no code verifier found')
+      }
+      // Clear the code verifier (single use)
+      sessionStorage.removeItem('dispatch_code_verifier')
+
+      // Exchange code for token via OAuth token endpoint (with PKCE)
+      const response = await fetch(`${JANUA_URL}/api/v1/oauth/token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
           code,
           redirect_uri: `${window.location.origin}/auth/callback`,
-          client_id: 'dispatch',
+          client_id: OAUTH_CLIENT_ID,
+          code_verifier: codeVerifier,
         }),
       })
 
       if (!response.ok) {
-        throw new Error('Failed to exchange authorization code')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.detail || 'Failed to exchange authorization code')
       }
 
       const { access_token } = await response.json()
@@ -67,14 +99,27 @@ function AuthCallbackContent() {
 
       const user = await meResponse.json()
 
-      // SECURITY: Only allow admin@madfam.io
-      if (user.email !== ALLOWED_SUPERUSER) {
+      // Extract roles from user data
+      const userRoles: string[] = user.roles || []
+      if (user.is_admin && !userRoles.includes('admin')) {
+        userRoles.push('admin')
+      }
+
+      // SECURITY: Validate domain AND role
+      const domainOk = isAllowedDomain(user.email)
+      const roleOk = hasAllowedRole(userRoles)
+
+      if (!domainOk || !roleOk) {
         // Clear any stored data
         localStorage.removeItem('dispatch_token')
         document.cookie = 'dispatch_auth=; Max-Age=0; path=/'
         document.cookie = 'dispatch_user_email=; Max-Age=0; path=/'
+        document.cookie = 'dispatch_user_roles=; Max-Age=0; path=/'
 
-        setError('Access denied. Dispatch is restricted to infrastructure operators.')
+        const reason = !domainOk
+          ? 'Your email domain is not authorized.'
+          : 'You do not have the required operator role.'
+        setError(`Access denied. ${reason}`)
         setStatus('error')
 
         // Redirect to access denied after delay
@@ -84,10 +129,11 @@ function AuthCallbackContent() {
         return
       }
 
-      // Store token
+      // Store token and set cookies for middleware
       localStorage.setItem('dispatch_token', access_token)
       document.cookie = `dispatch_auth=${access_token}; path=/; max-age=86400; SameSite=Strict`
       document.cookie = `dispatch_user_email=${user.email}; path=/; max-age=86400; SameSite=Strict`
+      document.cookie = `dispatch_user_roles=${userRoles.join(',')}; path=/; max-age=86400; SameSite=Strict`
 
       setStatus('success')
 

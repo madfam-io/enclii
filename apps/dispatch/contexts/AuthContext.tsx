@@ -7,12 +7,30 @@ import { useRouter } from 'next/navigation'
  * AuthContext for Dispatch
  *
  * Handles Janua SSO authentication with infrastructure operator validation.
+ * Uses PKCE (Proof Key for Code Exchange) for secure OAuth 2.0 flow.
  * Access is restricted based on:
  * 1. Email domain - must be from an allowed domain (@madfam.io by default)
  * 2. User role - must have an operator-level role (superadmin, admin, operator)
  */
 
-const JANUA_URL = process.env.NEXT_PUBLIC_JANUA_URL || 'https://api.janua.dev'
+const JANUA_URL = process.env.NEXT_PUBLIC_JANUA_URL || 'https://auth.madfam.io'
+const OAUTH_CLIENT_ID = process.env.NEXT_PUBLIC_OAUTH_CLIENT_ID || 'jnc_lofqyf9LQXG_OwENAIw89p_XvngkWMi-'
+
+// PKCE helpers for secure OAuth 2.0 flow
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(verifier)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(digest)))
+  // Base64URL encoding (replace + with -, / with _, remove =)
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 
 // Allowed email domains (must match middleware configuration)
 const DEFAULT_DOMAINS = ['@madfam.io']
@@ -137,10 +155,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const login = useCallback(() => {
-    // Redirect to Janua login with Dispatch as the redirect target
-    const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`)
-    window.location.href = `${JANUA_URL}/oauth/authorize?redirect_uri=${redirectUri}&client_id=dispatch`
+  const login = useCallback(async () => {
+    // Generate PKCE parameters for secure OAuth 2.0 flow
+    const codeVerifier = generateCodeVerifier()
+    const codeChallenge = await generateCodeChallenge(codeVerifier)
+
+    // Store code_verifier for the callback (will be used in token exchange)
+    sessionStorage.setItem('dispatch_code_verifier', codeVerifier)
+
+    // Redirect to Janua OAuth authorize endpoint with PKCE
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: OAUTH_CLIENT_ID,
+      redirect_uri: `${window.location.origin}/auth/callback`,
+      scope: 'openid profile email',
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+    })
+    window.location.href = `${JANUA_URL}/api/v1/oauth/authorize?${params.toString()}`
   }, [])
 
   const logout = useCallback(async () => {

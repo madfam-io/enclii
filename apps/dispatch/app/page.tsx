@@ -22,7 +22,7 @@ import { useEffect } from 'react'
  * Provides sovereign control over domains, tunnels, and ecosystem resources.
  */
 export default function DispatchDashboard() {
-  const { user, isLoading, isAuthenticated, isSuperuser, logout, error } = useAuth()
+  const { user, isLoading, isAuthenticated, isAuthorized, logout, error } = useAuth()
   const router = useRouter()
 
   // Redirect to login if not authenticated
@@ -85,7 +85,7 @@ export default function DispatchDashboard() {
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <User className="size-4" />
               <span className="font-mono">{user?.email}</span>
-              {isSuperuser && (
+              {isAuthorized && (
                 <span className="px-1.5 py-0.5 rounded text-xs bg-primary/20 text-primary border border-primary/30">
                   SUPERUSER
                 </span>
