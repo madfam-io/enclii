@@ -1,0 +1,269 @@
+---
+# OPERATION SENTINEL - Drift Detection CronJob
+# The "Watchman" - Automated daily infrastructure audit
+# Applied: 2026-01-17
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sentinel
+  labels:
+    app.kubernetes.io/name: sentinel
+    app.kubernetes.io/component: monitoring
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-script
+  namespace: sentinel
+data:
+  infra-audit.sh: |
+    #!/bin/bash
+    # ============================================
+    # SENTINEL INFRASTRUCTURE AUDIT SCRIPT
+    # The "Watchman" - Drift Detection System
+    # ============================================
+
+    set -euo pipefail
+
+    VIOLATIONS=0
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    echo "============================================"
+    echo "🛡️  SENTINEL INFRASTRUCTURE AUDIT"
+    echo "    Timestamp: ${TIMESTAMP}"
+    echo "============================================"
+    echo ""
+
+    # --------------------------------------------
+    # CHECK 1: Exposed 0.0.0.0 Ports (Docker)
+    # Law 1: All databases MUST bind to 127.0.0.1
+    # --------------------------------------------
+    echo "📍 CHECK 1: Docker Port Bindings"
+    echo "   Rule: No services bound to 0.0.0.0"
+
+    # Check docker port bindings on host via netstat
+    EXPOSED_PORTS=$(ss -tlnp 2>/dev/null | grep -E "0\.0\.0\.0:(5432|6379|3306|27017)" || true)
+
+    if [ -n "$EXPOSED_PORTS" ]; then
+        echo "   ❌ VIOLATION: Database ports exposed on 0.0.0.0"
+        echo "$EXPOSED_PORTS" | while read line; do
+            echo "      - $line"
+        done
+        VIOLATIONS=$((VIOLATIONS + 1))
+    else
+        echo "   ✅ PASS: No database ports exposed publicly"
+    fi
+    echo ""
+
+    # --------------------------------------------
+    # CHECK 2: CrashLoopBackOff > 10 minutes
+    # Rule: No zombie pods allowed
+    # --------------------------------------------
+    echo "📍 CHECK 2: CrashLoopBackOff Pods"
+    echo "   Rule: No pods in CrashLoopBackOff > 10 minutes"
+
+    CRASHLOOP_PODS=$(kubectl get pods -A -o json 2>/dev/null | \
+        jq -r '.items[] |
+        select(.status.containerStatuses != null) |
+        select(.status.containerStatuses[].state.waiting.reason == "CrashLoopBackOff") |
+        "\(.metadata.namespace)/\(.metadata.name)"' || true)
+
+    if [ -n "$CRASHLOOP_PODS" ]; then
+        echo "   ❌ VIOLATION: Pods in CrashLoopBackOff detected"
+        echo "$CRASHLOOP_PODS" | while read pod; do
+            echo "      - $pod"
+        done
+        VIOLATIONS=$((VIOLATIONS + 1))
+    else
+        echo "   ✅ PASS: No CrashLoopBackOff pods found"
+    fi
+    echo ""
+
+    # --------------------------------------------
+    # CHECK 3: hostPort Usage in Pods
+    # Law 1: No hostPort allowed
+    # --------------------------------------------
+    echo "📍 CHECK 3: hostPort Usage"
+    echo "   Rule: No pods using hostPort"
+
+    HOSTPORT_PODS=$(kubectl get pods -A -o json 2>/dev/null | \
+        jq -r '.items[] |
+        select(.spec.containers[].ports != null) |
+        select(.spec.containers[].ports[].hostPort != null) |
+        "\(.metadata.namespace)/\(.metadata.name)"' || true)
+
+    if [ -n "$HOSTPORT_PODS" ]; then
+        echo "   ❌ VIOLATION: Pods using hostPort detected"
+        echo "$HOSTPORT_PODS" | while read pod; do
+            echo "      - $pod"
+        done
+        VIOLATIONS=$((VIOLATIONS + 1))
+    else
+        echo "   ✅ PASS: No hostPort usage detected"
+    fi
+    echo ""
+
+    # --------------------------------------------
+    # CHECK 4: Systemd Tunnel Services (should be disabled)
+    # Law 4: Only K8s ConfigMap tunnels allowed
+    # --------------------------------------------
+    echo "📍 CHECK 4: Systemd Tunnel Services"
+    echo "   Rule: No systemd cloudflared services active"
+
+    SYSTEMD_TUNNELS=$(systemctl is-active cloudflared.service cloudflared-janua.service 2>/dev/null | grep -c "^active$" || echo "0")
+
+    if [ "$SYSTEMD_TUNNELS" -gt 0 ]; then
+        echo "   ❌ VIOLATION: Systemd tunnel services still active"
+        systemctl status cloudflared.service cloudflared-janua.service --no-pager 2>/dev/null | head -10
+        VIOLATIONS=$((VIOLATIONS + 1))
+    else
+        echo "   ✅ PASS: No systemd tunnel services active"
+    fi
+    echo ""
+
+    # --------------------------------------------
+    # CHECK 5: Health Endpoint Verification
+    # Rule: Core services must respond healthy
+    # --------------------------------------------
+    echo "📍 CHECK 5: Health Endpoints"
+    echo "   Rule: Core APIs must respond healthy"
+
+    check_health() {
+        local name=$1
+        local url=$2
+        local response=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null || echo "000")
+        if [ "$response" = "200" ]; then
+            echo "   ✅ $name: HTTP $response"
+        else
+            echo "   ❌ $name: HTTP $response (UNHEALTHY)"
+            VIOLATIONS=$((VIOLATIONS + 1))
+        fi
+    }
+
+    check_health "api.janua.dev" "https://api.janua.dev/health"
+    check_health "api.enclii.dev" "https://api.enclii.dev/health"
+    echo ""
+
+    # --------------------------------------------
+    # CHECK 6: Redis Internal DNS Usage
+    # Law 3: Redis via redis.data.svc.cluster.local
+    # --------------------------------------------
+    echo "📍 CHECK 6: Redis URL Configuration"
+    echo "   Rule: Redis accessed via K8s internal DNS only"
+
+    EXTERNAL_REDIS=$(kubectl get deployments -A -o json 2>/dev/null | \
+        jq -r '.items[].spec.template.spec.containers[].env[]? |
+        select(.name | test("REDIS")) |
+        select(.value != null) |
+        select(.value | test("95\\.217|0\\.0\\.0\\.0|localhost:6379")) |
+        .value' | head -5 || true)
+
+    if [ -n "$EXTERNAL_REDIS" ]; then
+        echo "   ❌ VIOLATION: External Redis URLs detected"
+        echo "$EXTERNAL_REDIS" | while read url; do
+            echo "      - $url"
+        done
+        VIOLATIONS=$((VIOLATIONS + 1))
+    else
+        echo "   ✅ PASS: Redis using internal DNS"
+    fi
+    echo ""
+
+    # --------------------------------------------
+    # FINAL VERDICT
+    # --------------------------------------------
+    echo "============================================"
+    echo "🏁 AUDIT COMPLETE"
+    echo "============================================"
+
+    if [ "$VIOLATIONS" -eq 0 ]; then
+        echo "✅ STATUS: PASS - All checks passed"
+        echo "   Infrastructure compliant with ADR-001"
+        exit 0
+    else
+        echo "❌ STATUS: FAIL - $VIOLATIONS violation(s) detected"
+        echo "   Review ADR-001 and remediate immediately"
+        exit 1
+    fi
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sentinel-sa
+  namespace: sentinel
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sentinel-reader
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "namespaces"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sentinel-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: sentinel-sa
+    namespace: sentinel
+roleRef:
+  kind: ClusterRole
+  name: sentinel-reader
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: infra-audit
+  namespace: sentinel
+  labels:
+    app.kubernetes.io/name: sentinel
+    app.kubernetes.io/component: audit
+spec:
+  schedule: "0 9 * * *"  # Daily at 9:00 AM UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: sentinel-sa
+          hostNetwork: true  # Required to check host netstat
+          containers:
+            - name: sentinel
+              image: bitnami/kubectl:latest
+              imagePullPolicy: Always
+              command:
+                - /bin/bash
+                - /scripts/infra-audit.sh
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "200m"
+          volumes:
+            - name: script
+              configMap:
+                name: sentinel-script
+                defaultMode: 0755
+          restartPolicy: Never

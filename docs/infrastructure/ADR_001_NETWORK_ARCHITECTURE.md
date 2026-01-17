@@ -1,0 +1,263 @@
+# ADR-001: Network Architecture & Security Laws
+
+> **Status**: Accepted
+> **Date**: 2026-01-17
+> **Authors**: Infrastructure Team
+> **Supersedes**: None
+> **Context**: Operation FORTRESS (Infrastructure Stabilization) + Operation SENTINEL (Automated Guards)
+
+---
+
+## Summary
+
+This Architecture Decision Record (ADR) establishes the foundational network security laws for the MADFAM infrastructure ecosystem. These laws are **non-negotiable** and are **automatically enforced** via Kyverno policies and the Sentinel audit CronJob.
+
+---
+
+## The Five Laws
+
+### Law 1: Database Port Binding
+
+> **All databases MUST bind to `127.0.0.1` or ClusterIP. Public WAN binding is FORBIDDEN.**
+
+**Rationale**: Public database exposure is the #1 cause of data breaches. During Operation FORTRESS, we discovered PostgreSQL and Redis were bound to `0.0.0.0`, accessible from the public internet.
+
+**Implementation**:
+- Docker Compose: Use `127.0.0.1:5432:5432` NOT `5432:5432` or `0.0.0.0:5432:5432`
+- Kubernetes: Use `ClusterIP` service type, never `NodePort` with hostPort
+- Kyverno Policy: `block-host-ports` rejects any Pod with hostPort
+
+**Enforcement**:
+```yaml
+# Kyverno ClusterPolicy: block-host-ports
+spec:
+  validationFailureAction: Enforce
+  rules:
+    - name: deny-host-ports
+      validate:
+        pattern:
+          spec:
+            containers:
+              - ports:
+                  - hostPort: "!*"
+```
+
+**Verification**:
+```bash
+# Check for exposed ports
+ss -tlnp | grep -E "0\.0\.0\.0:(5432|6379|3306|27017)"
+# Expected: No output (nothing bound to 0.0.0.0)
+```
+
+---
+
+### Law 2: Janua API Port Standard
+
+> **Janua API runs on port `8000`. Ports `4100` and `8080` are DEPRECATED.**
+
+**Rationale**: Historical drift caused confusion with multiple port references (4100 in docs, 8080 in old manifests, 8000 in actual container). Operation FORTRESS standardized on port 8000 (Uvicorn default).
+
+**Canonical Configuration**:
+```yaml
+# K8s Deployment
+containers:
+  - name: janua-api
+    ports:
+      - containerPort: 8000
+    env:
+      - name: PORT
+        value: "8000"
+
+# K8s Service
+spec:
+  ports:
+    - port: 80
+      targetPort: 8000
+```
+
+**Port Hierarchy**:
+| Layer | Port | Description |
+|-------|------|-------------|
+| Container | 8000 | Uvicorn listener |
+| K8s Service | 80 | Internal cluster routing |
+| Cloudflare Tunnel | 80 | Routes to Service port |
+| Public | 443 | HTTPS via Cloudflare |
+
+**Deprecated References**:
+- ❌ `containerPort: 4100` - Legacy documentation
+- ❌ `containerPort: 8080` - Common default assumption
+- ❌ `ENCLII_PORT: 8080` - Switchyard historical
+
+---
+
+### Law 3: Redis Access Path
+
+> **Redis MUST be accessed via `redis://redis.data.svc.cluster.local:6379`. External IPs are FORBIDDEN.**
+
+**Rationale**: During Operation FORTRESS, we discovered Switchyard using `95.217.198.239:6379` (public IP) which:
+1. Exposed Redis traffic to the public internet
+2. Failed when we locked down to localhost binding
+3. Created unnecessary external network hops
+
+**Canonical URLs**:
+```yaml
+# K8s Services (correct)
+REDIS_URL: "redis://redis.data.svc.cluster.local:6379"
+ENCLII_REDIS_URL: "redis://redis.data.svc.cluster.local:6379"
+
+# Docker (localhost only)
+REDIS_URL: "redis://127.0.0.1:6379"
+```
+
+**Forbidden Patterns**:
+```yaml
+# NEVER use these in production
+REDIS_URL: "redis://95.217.198.239:6379"  # External IP
+REDIS_URL: "redis://0.0.0.0:6379"         # Wildcard bind
+REDIS_URL: "redis://foundry-core:6379"    # Hostname resolution issues
+```
+
+**Sentinel Audit Check**:
+```bash
+# Detect external Redis URLs
+kubectl get deployments -A -o json | \
+  jq -r '.items[].spec.template.spec.containers[].env[]? |
+  select(.name | test("REDIS")) |
+  select(.value | test("95\\.217|0\\.0\\.0\\.0")) | .value'
+# Expected: No output
+```
+
+---
+
+### Law 4: Tunnel Architecture
+
+> **NO `systemd` tunnels. ONLY K8s ConfigMap tunnels are permitted.**
+
+**Rationale**: Operation FORTRESS discovered a "Triple Tunnel Conflict" causing 530 errors:
+1. `cloudflared.service` (systemd) - DISABLED
+2. `cloudflared-janua.service` (systemd) - DISABLED
+3. K8s cloudflared pods (ConfigMap) - THE ONLY VALID PATH
+
+Systemd tunnels cannot route to K8s ClusterIPs, causing routing failures when services migrate to K8s.
+
+**Current Architecture**:
+```
+Internet → Cloudflare Edge → K8s cloudflared pods → ClusterIP Services
+                             (cloudflare-tunnel ns)
+```
+
+**Configuration**:
+- Source of Truth: `infra/k8s/production/cloudflared-unified.yaml`
+- Namespace: `cloudflare-tunnel`
+- Replicas: 2 (for HA)
+
+**Systemd Status** (must be disabled):
+```bash
+systemctl is-enabled cloudflared.service cloudflared-janua.service
+# Expected: disabled disabled
+```
+
+**Enforcement**:
+- Sentinel CronJob: CHECK 4 verifies no systemd tunnels are active
+- Manual check: `systemctl is-active cloudflared*` should return `inactive`
+
+---
+
+### Law 5: PR Validation Gate
+
+> **All PRs MUST pass the `infra-audit` check before merge.**
+
+**Rationale**: Manual fixes applied during incidents must be backported to Git (IaC). The Sentinel audit ensures infrastructure drift is detected automatically.
+
+**Current Implementation**:
+- CronJob: `infra-audit` runs daily at 09:00 UTC
+- Namespace: `sentinel`
+- Checks:
+  1. No `0.0.0.0` port bindings
+  2. No `CrashLoopBackOff` pods > 10 minutes
+  3. No `hostPort` usage
+  4. No systemd tunnels active
+  5. Health endpoints responding (api.janua.dev, api.enclii.dev)
+
+**Future CI Integration** (P2):
+```yaml
+# .github/workflows/infra-audit.yaml
+- name: Run Sentinel Audit
+  run: |
+    kubectl create job ci-audit-${{ github.sha }} \
+      --from=cronjob/infra-audit -n sentinel
+    kubectl wait --for=condition=complete job/ci-audit-${{ github.sha }} \
+      -n sentinel --timeout=120s
+```
+
+**Manual Trigger**:
+```bash
+kubectl create job manual-audit-$(date +%s) --from=cronjob/infra-audit -n sentinel
+kubectl logs -n sentinel -l job-name --tail=100
+```
+
+---
+
+## Enforcement Mechanisms
+
+### Kyverno Policies (Preventive)
+
+| Policy | Scope | Action |
+|--------|-------|--------|
+| `block-host-ports` | Pods | Enforce (block) |
+| `require-health-probes` | Deployments | Enforce (block) |
+| `block-latest-ifnotpresent` | Pods | Enforce (block) |
+
+### Sentinel CronJob (Detective)
+
+| Check | Frequency | Alert |
+|-------|-----------|-------|
+| Port Bindings | Daily 09:00 UTC | Exit code 1 |
+| CrashLoopBackOff | Daily 09:00 UTC | Exit code 1 |
+| hostPort Usage | Daily 09:00 UTC | Exit code 1 |
+| Systemd Tunnels | Daily 09:00 UTC | Exit code 1 |
+| Health Endpoints | Daily 09:00 UTC | Exit code 1 |
+
+---
+
+## Related Documents
+
+| Document | Purpose |
+|----------|---------|
+| `INFRA_ANATOMY.md` | Current infrastructure state |
+| `DOCS_FIX_LIST.md` | Active documentation issues |
+| `kyverno-guards.yaml` | Kyverno policy definitions |
+| `sentinel-cronjob.yaml` | Audit job configuration |
+
+---
+
+## Revision History
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-01-17 | Operation FORTRESS | Initial laws established |
+| 1.1 | 2026-01-17 | Operation SENTINEL | Added enforcement mechanisms |
+
+---
+
+## Appendix: Quick Reference Card
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ADR-001 QUICK REFERENCE                      │
+├─────────────────────────────────────────────────────────────────┤
+│ LAW 1: Databases → 127.0.0.1 or ClusterIP ONLY                 │
+│ LAW 2: Janua API → Port 8000 (not 4100, not 8080)              │
+│ LAW 3: Redis → redis.data.svc.cluster.local:6379               │
+│ LAW 4: Tunnels → K8s ConfigMap ONLY (no systemd)               │
+│ LAW 5: PRs → Must pass infra-audit                              │
+├─────────────────────────────────────────────────────────────────┤
+│ KYVERNO:  block-host-ports, require-health-probes,             │
+│           block-latest-ifnotpresent                             │
+│ SENTINEL: kubectl logs -n sentinel -l job-name                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+*This ADR is automatically enforced. Violations will be blocked by Kyverno or flagged by Sentinel.*
