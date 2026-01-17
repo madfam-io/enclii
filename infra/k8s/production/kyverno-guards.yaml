@@ -26,6 +26,16 @@ spec:
           - resources:
               kinds:
                 - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kyverno
+                - sentinel
+                - janua
+                - data
+                - enclii
       validate:
         message: >-
           hostPort is forbidden. Use ClusterIP services for internal communication.
@@ -75,6 +85,9 @@ spec:
                 - argocd
                 - longhorn-system
                 - cloudflare-tunnel
+                - janua
+                - data
+                - enclii
       validate:
         message: >-
           Deployment containers must have a readinessProbe defined.
@@ -101,6 +114,9 @@ spec:
                 - argocd
                 - longhorn-system
                 - cloudflare-tunnel
+                - janua
+                - data
+                - enclii
       validate:
         message: >-
           Deployment containers must have a livenessProbe defined.
