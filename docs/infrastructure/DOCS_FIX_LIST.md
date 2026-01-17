@@ -1,6 +1,49 @@
 # Documentation Fix List
 
 > **Generated**: 2026-01-17 | **Audit Type**: Full-Stack Recovery Docs Sync
+> **Updated**: 2026-01-17 20:30 UTC | **Phase 3 Sanitation Protocol**
+
+---
+
+## Sanitation Audit Results (2026-01-17)
+
+### Summary
+
+| Phase | Action | Status |
+|-------|--------|--------|
+| **1. Disk Cleanup** | Docker prune + journal vacuum | ✅ 81% (freed 127GB) |
+| **2. Registry Fix** | ImagePullBackOff resolution | ✅ Janua services healthy |
+| **3. Migration Status** | DB version documentation | ✅ Documented |
+| **4. Docs Audit** | This document | ✅ Updated |
+
+### NEW: Janua API Port Issue (P0 - FIXED)
+
+**Problem**: K8s Service `janua-api` targeted port **8080**, but container runs on **4100**.
+**Resolution**: Patched service to target port 4100.
+```bash
+kubectl patch svc janua-api -n janua -p '{"spec":{"ports":[{"name":"http","port":80,"targetPort":4100}]}}'
+```
+
+### NEW: Database Access Configuration
+
+**Current State** (2026-01-17):
+- PostgreSQL: `0.0.0.0:5432` (exposed for K8s pod access)
+- Redis: `0.0.0.0:6379` (exposed for K8s pod access)
+
+**Issue**: K8s pods need to access Docker-hosted databases. Current workaround exposes ports publicly.
+
+**Recommended Architecture**:
+1. Create K8s ExternalName Service for Docker databases
+2. Or migrate databases to K8s StatefulSet
+3. Or use host network mode for pods needing DB access
+
+### NEW: Kyverno Configuration Issue
+
+**Problem**: CronJobs use non-existent image `bitnami/kubectl:1.28.5`
+**Status**: CronJobs suspended
+**Action**: Update Kyverno helm values to use valid kubectl image
+
+---
 
 ## Executive Summary
 
