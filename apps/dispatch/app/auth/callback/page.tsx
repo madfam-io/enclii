@@ -1,0 +1,188 @@
+'use client'
+
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Radio, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
+
+/**
+ * OAuth Callback Page
+ *
+ * Handles the redirect from Janua SSO after authentication.
+ * Validates the user and stores the token.
+ */
+
+const JANUA_URL = process.env.NEXT_PUBLIC_JANUA_URL || 'https://api.janua.dev'
+const ALLOWED_SUPERUSER = 'admin@madfam.io'
+
+type CallbackStatus = 'processing' | 'success' | 'error'
+
+function AuthCallbackContent() {
+  const [status, setStatus] = useState<CallbackStatus>('processing')
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    handleCallback()
+  }, [])
+
+  const handleCallback = async () => {
+    try {
+      const code = searchParams.get('code')
+      const errorParam = searchParams.get('error')
+
+      if (errorParam) {
+        throw new Error(searchParams.get('error_description') || 'Authentication failed')
+      }
+
+      if (!code) {
+        throw new Error('No authorization code received')
+      }
+
+      // Exchange code for token
+      const response = await fetch(`${JANUA_URL}/api/v1/auth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          redirect_uri: `${window.location.origin}/auth/callback`,
+          client_id: 'dispatch',
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to exchange authorization code')
+      }
+
+      const { access_token } = await response.json()
+
+      // Verify user identity
+      const meResponse = await fetch(`${JANUA_URL}/api/v1/auth/me`, {
+        headers: { Authorization: `Bearer ${access_token}` },
+      })
+
+      if (!meResponse.ok) {
+        throw new Error('Failed to verify user identity')
+      }
+
+      const user = await meResponse.json()
+
+      // SECURITY: Only allow admin@madfam.io
+      if (user.email !== ALLOWED_SUPERUSER) {
+        // Clear any stored data
+        localStorage.removeItem('dispatch_token')
+        document.cookie = 'dispatch_auth=; Max-Age=0; path=/'
+        document.cookie = 'dispatch_user_email=; Max-Age=0; path=/'
+
+        setError('Access denied. Dispatch is restricted to infrastructure operators.')
+        setStatus('error')
+
+        // Redirect to access denied after delay
+        setTimeout(() => {
+          router.push('/access-denied')
+        }, 2000)
+        return
+      }
+
+      // Store token
+      localStorage.setItem('dispatch_token', access_token)
+      document.cookie = `dispatch_auth=${access_token}; path=/; max-age=86400; SameSite=Strict`
+      document.cookie = `dispatch_user_email=${user.email}; path=/; max-age=86400; SameSite=Strict`
+
+      setStatus('success')
+
+      // Redirect to dashboard
+      setTimeout(() => {
+        router.push('/')
+      }, 1000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authentication failed')
+      setStatus('error')
+
+      // Redirect to login after delay
+      setTimeout(() => {
+        router.push('/login')
+      }, 3000)
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="max-w-md w-full text-center space-y-6">
+        {/* Logo */}
+        <div className="inline-flex p-3 rounded-xl bg-primary/10 border border-primary/20">
+          <Radio className="size-8 text-primary glow-effect" />
+        </div>
+
+        {/* Status */}
+        <div className="space-y-4">
+          {status === 'processing' && (
+            <>
+              <Loader2 className="size-8 mx-auto text-primary animate-spin" />
+              <div>
+                <h2 className="text-lg font-medium text-foreground">Authenticating</h2>
+                <p className="text-sm text-muted-foreground">
+                  Verifying your credentials<span className="terminal-cursor" />
+                </p>
+              </div>
+            </>
+          )}
+
+          {status === 'success' && (
+            <>
+              <CheckCircle2 className="size-8 mx-auto text-status-success" />
+              <div>
+                <h2 className="text-lg font-medium text-foreground">Welcome, Operator</h2>
+                <p className="text-sm text-muted-foreground">
+                  Redirecting to Control Tower...
+                </p>
+              </div>
+            </>
+          )}
+
+          {status === 'error' && (
+            <>
+              <XCircle className="size-8 mx-auto text-destructive" />
+              <div>
+                <h2 className="text-lg font-medium text-foreground">Authentication Failed</h2>
+                <p className="text-sm text-destructive">{error}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Redirecting...
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AuthCallbackFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="max-w-md w-full text-center space-y-6">
+        <div className="inline-flex p-3 rounded-xl bg-primary/10 border border-primary/20">
+          <Radio className="size-8 text-primary glow-effect" />
+        </div>
+        <div className="space-y-4">
+          <Loader2 className="size-8 mx-auto text-primary animate-spin" />
+          <div>
+            <h2 className="text-lg font-medium text-foreground">Loading</h2>
+            <p className="text-sm text-muted-foreground">
+              Preparing authentication<span className="terminal-cursor" />
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<AuthCallbackFallback />}>
+      <AuthCallbackContent />
+    </Suspense>
+  )
+}
