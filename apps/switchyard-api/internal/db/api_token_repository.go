@@ -107,9 +107,10 @@ func (r *APITokenRepository) GetByID(ctx context.Context, id uuid.UUID) (*types.
 	`
 
 	var scopes pq.StringArray
+	var lastUsedIP sql.NullString
 	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&token.ID, &token.UserID, &token.Name, &token.Prefix, &scopes,
-		&token.ExpiresAt, &token.LastUsedAt, &token.LastUsedIP,
+		&token.ExpiresAt, &token.LastUsedAt, &lastUsedIP,
 		&token.Revoked, &token.RevokedAt, &token.CreatedAt, &token.UpdatedAt,
 	)
 	if err != nil {
@@ -117,6 +118,9 @@ func (r *APITokenRepository) GetByID(ctx context.Context, id uuid.UUID) (*types.
 	}
 
 	token.Scopes = []string(scopes)
+	if lastUsedIP.Valid {
+		token.LastUsedIP = lastUsedIP.String
+	}
 	return token, nil
 }
 
@@ -131,9 +135,10 @@ func (r *APITokenRepository) GetByHash(ctx context.Context, tokenHash string) (*
 	`
 
 	var scopes pq.StringArray
+	var lastUsedIP sql.NullString
 	err := r.db.QueryRowContext(ctx, query, tokenHash).Scan(
 		&token.ID, &token.UserID, &token.Name, &token.Prefix, &token.TokenHash, &scopes,
-		&token.ExpiresAt, &token.LastUsedAt, &token.LastUsedIP,
+		&token.ExpiresAt, &token.LastUsedAt, &lastUsedIP,
 		&token.Revoked, &token.RevokedAt, &token.CreatedAt, &token.UpdatedAt,
 	)
 	if err != nil {
@@ -141,6 +146,9 @@ func (r *APITokenRepository) GetByHash(ctx context.Context, tokenHash string) (*
 	}
 
 	token.Scopes = []string(scopes)
+	if lastUsedIP.Valid {
+		token.LastUsedIP = lastUsedIP.String
+	}
 	return token, nil
 }
 
@@ -199,15 +207,19 @@ func (r *APITokenRepository) ListByUser(ctx context.Context, userID uuid.UUID) (
 	for rows.Next() {
 		token := &types.APIToken{}
 		var scopes pq.StringArray
+		var lastUsedIP sql.NullString
 		err := rows.Scan(
 			&token.ID, &token.UserID, &token.Name, &token.Prefix, &scopes,
-			&token.ExpiresAt, &token.LastUsedAt, &token.LastUsedIP,
+			&token.ExpiresAt, &token.LastUsedAt, &lastUsedIP,
 			&token.Revoked, &token.RevokedAt, &token.CreatedAt, &token.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
 		token.Scopes = []string(scopes)
+		if lastUsedIP.Valid {
+			token.LastUsedIP = lastUsedIP.String
+		}
 		tokens = append(tokens, token)
 	}
 
@@ -236,15 +248,19 @@ func (r *APITokenRepository) ListActiveByUser(ctx context.Context, userID uuid.U
 	for rows.Next() {
 		token := &types.APIToken{}
 		var scopes pq.StringArray
+		var lastUsedIP sql.NullString
 		err := rows.Scan(
 			&token.ID, &token.UserID, &token.Name, &token.Prefix, &scopes,
-			&token.ExpiresAt, &token.LastUsedAt, &token.LastUsedIP,
+			&token.ExpiresAt, &token.LastUsedAt, &lastUsedIP,
 			&token.Revoked, &token.RevokedAt, &token.CreatedAt, &token.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
 		token.Scopes = []string(scopes)
+		if lastUsedIP.Valid {
+			token.LastUsedIP = lastUsedIP.String
+		}
 		tokens = append(tokens, token)
 	}
 
