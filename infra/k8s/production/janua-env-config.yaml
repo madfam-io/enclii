@@ -1,0 +1,100 @@
+# ==============================================================================
+# Janua Environment Configuration - Cross-Project Coordination
+# ==============================================================================
+#
+# This file documents the REQUIRED Janua API environment variables for the
+# Madfam ecosystem. Apply these to the Janua deployment in the janua namespace.
+#
+# IMPORTANT: This is a coordination file. The actual Janua deployment lives in:
+#   https://github.com/madfam-org/janua
+#
+# Operation ALIAS (2026-01-18): Runtime config applied via kubectl set env.
+# This file ensures GitOps parity and prevents configuration drift.
+#
+# To apply manually:
+#   kubectl set env deployment/janua-api -n janua --from=configmap/janua-env-config
+#
+# ==============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: janua-env-config
+  namespace: janua
+  labels:
+    app.kubernetes.io/name: janua
+    app.kubernetes.io/component: api
+    app.kubernetes.io/managed-by: enclii-gitops
+  annotations:
+    description: "Janua API environment configuration for Madfam ecosystem"
+    operation: "ALIAS"
+    last-updated: "2026-01-18"
+data:
+  # ===========================================================================
+  # White-Label Domain Configuration (Operation ALIAS)
+  # ===========================================================================
+
+  # Custom domain alias for TrustedHostMiddleware
+  JANUA_CUSTOM_DOMAIN: "auth.madfam.io"
+
+  # Base URLs - must match the public-facing domain
+  BASE_URL: "https://auth.madfam.io"
+  API_BASE_URL: "https://auth.madfam.io"
+
+  # JWT Issuer - appears in token 'iss' claim
+  JWT_ISSUER: "https://auth.madfam.io"
+
+  # ===========================================================================
+  # CORS Configuration
+  # ===========================================================================
+
+  # All allowed origins for cross-origin requests
+  # Format: comma-separated list of full URLs
+  CORS_ORIGINS: "https://admin.janua.dev,https://app.janua.dev,https://api.enclii.dev,https://app.enclii.dev,https://admin.enclii.dev,https://auth.madfam.io"
+
+  # CSRF trusted origins (for form submissions)
+  CSRF_TRUSTED_ORIGINS: "https://app.enclii.dev,https://admin.enclii.dev,https://app.janua.dev,https://admin.janua.dev,https://auth.madfam.io"
+
+  # ===========================================================================
+  # Redis Configuration
+  # ===========================================================================
+
+  # Redis URL with authentication (password stored in janua-secrets)
+  # Format: redis scheme with password auth before @ symbol
+  # Note: Password must be URL-encoded if it contains special characters
+  # The actual REDIS_URL should be set from a Secret, not this ConfigMap
+  # See: janua-redis-credentials Secret template below
+
+---
+# ==============================================================================
+# Secret Template (DO NOT COMMIT WITH REAL VALUES)
+# ==============================================================================
+#
+# Create a Secret with the Redis URL including authentication:
+#
+#   kubectl create secret generic janua-redis-credentials \
+#     --namespace=janua \
+#     --from-literal=REDIS_URL='<REDIS_URL_WITH_PASSWORD>'
+#
+# ==============================================================================
+
+---
+# ==============================================================================
+# Verification Commands
+# ==============================================================================
+#
+# After applying, verify with:
+#
+#   # Check OIDC discovery
+#   curl -s https://auth.madfam.io/.well-known/openid-configuration | jq .issuer
+#   # Expected: "https://auth.madfam.io"
+#
+#   # Check health
+#   curl -sI https://auth.madfam.io/health
+#   # Expected: HTTP/2 200
+#
+#   # Check Redis connectivity in logs
+#   kubectl logs -n janua -l app=janua-api --tail=20 | grep -i redis
+#   # Expected: "Redis initialized successfully"
+#
+# ==============================================================================
