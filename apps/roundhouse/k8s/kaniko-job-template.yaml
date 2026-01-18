@@ -17,9 +17,12 @@ metadata:
   labels:
     app.kubernetes.io/name: enclii-builds
     app.kubernetes.io/part-of: enclii
-    # Pod Security Standard - restrict privileged operations
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/audit: restricted
+    # Pod Security Standard - baseline allows Kaniko to run as root
+    # Kaniko MUST run as root (UID 0) to unpack container filesystem layers.
+    # This is safe because Kaniko runs in an unprivileged container
+    # (no elevated host capabilities), it just needs root within the container namespace.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: restricted
 ---
 # Registry credentials for pushing images

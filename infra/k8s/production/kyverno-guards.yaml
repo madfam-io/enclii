@@ -36,6 +36,7 @@ spec:
                 - janua
                 - data
                 - enclii
+                - enclii-builds  # Build jobs use Kaniko which doesn't expose hostPorts
       validate:
         message: >-
           hostPort is forbidden. Use ClusterIP services for internal communication.
