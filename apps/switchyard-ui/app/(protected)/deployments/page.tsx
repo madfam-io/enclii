@@ -164,7 +164,7 @@ export default function DeploymentsPage() {
               <p className="text-status-error font-medium mb-4">{error}</p>
               <button
                 onClick={fetchDeployments}
-                className="inline-flex items-center px-4 py-2 border border-status-error/30 rounded-md shadow-sm text-sm font-medium text-status-error-foreground bg-white hover:bg-status-error-muted"
+                className="inline-flex items-center px-4 py-2 border border-status-error/30 rounded-md shadow-sm text-sm font-medium text-status-error-foreground bg-background hover:bg-status-error-muted"
               >
                 Try Again
               </button>
@@ -221,17 +221,17 @@ export default function DeploymentsPage() {
         <CardContent>
           {deployments.length === 0 ? (
             <div className="text-center py-12">
-              <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="mx-auto w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
               </div>
-              <p className="text-lg font-medium text-gray-900">No deployments found</p>
+              <p className="text-lg font-medium text-foreground">No deployments found</p>
               <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
                 Once you deploy a service, your deployment history will appear here.
               </p>
-              <div className="mt-6 space-y-2 text-left max-w-md mx-auto bg-gray-50 rounded-lg p-4">
-                <p className="text-sm font-medium text-gray-700">Possible reasons:</p>
+              <div className="mt-6 space-y-2 text-left max-w-md mx-auto bg-muted/50 rounded-lg p-4 border border-border">
+                <p className="text-sm font-medium text-foreground">Possible reasons:</p>
                 <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
                   <li>No services have been registered yet</li>
                   <li>Services exist but have no deployments</li>
@@ -251,13 +251,13 @@ export default function DeploymentsPage() {
               {deployments.map((deployment) => (
                 <div
                   key={deployment.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="flex items-center justify-between p-4 bg-muted/50 rounded-lg hover:bg-muted transition-colors border border-border"
                 >
                   <div className="flex items-center space-x-4">
                     <div className={`w-3 h-3 rounded-full ${getStatusDotClass(deployment.status)}`}></div>
                     <div>
-                      <p className="font-medium text-gray-900">{deployment.message}</p>
-                      <div className="flex items-center space-x-2 text-sm text-gray-500 mt-1">
+                      <p className="font-medium text-foreground">{deployment.message}</p>
+                      <div className="flex items-center space-x-2 text-sm text-muted-foreground mt-1">
                         {deployment.metadata?.service_name && (
                           <span className="font-medium">{deployment.metadata.service_name}</span>
                         )}
