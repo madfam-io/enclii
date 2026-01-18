@@ -534,7 +534,7 @@ func (h *Handler) StreamBuildLogsWS(c *gin.Context) {
 	// For active builds, stream from builder namespace pods
 	if release.Status == types.ReleaseStatusBuilding {
 		// Stream from the builder pod
-		namespace := "enclii-builders"
+		namespace := "enclii-builds"
 		labelSelector := fmt.Sprintf("build-id=%s", buildID)
 
 		logChan := make(chan k8s.LogLine, 100)

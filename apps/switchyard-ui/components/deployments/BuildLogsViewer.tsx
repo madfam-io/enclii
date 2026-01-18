@@ -397,8 +397,17 @@ export function BuildLogsViewer({ serviceId, serviceName }: BuildLogsViewerProps
                     <svg className="mx-auto h-12 w-12 mb-4 text-status-error" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <p>Build failed</p>
-                    <p className="mt-2 text-xs">Check the build configuration and try again</p>
+                    <p className="text-status-error font-semibold">Build failed</p>
+                    {selectedRelease?.error_message ? (
+                      <div className="mt-4 text-left bg-gray-800 p-4 rounded-md">
+                        <p className="text-xs text-gray-400 mb-2">Error details:</p>
+                        <pre className="text-status-error text-xs whitespace-pre-wrap break-words">
+                          {selectedRelease.error_message}
+                        </pre>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-gray-400">No error details available. Check build worker logs.</p>
+                    )}
                   </>
                 ) : (
                   <p>No logs available</p>

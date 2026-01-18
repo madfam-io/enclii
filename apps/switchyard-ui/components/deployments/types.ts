@@ -30,6 +30,10 @@ export interface Release {
   image_uri: string;
   git_sha: string;
   status: 'building' | 'ready' | 'failed';
+  error_message?: string;  // Error from build failure
+  sbom?: string;
+  sbom_format?: string;
+  image_signature?: string;
   created_at: string;
   updated_at: string;
 }
