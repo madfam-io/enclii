@@ -516,8 +516,8 @@ func (j *JWTManager) RequireRole(roles ...string) gin.HandlerFunc {
 				hasRole = true
 				break
 			}
-			// Apply role hierarchy: admin has all permissions
-			if roleStr == "admin" {
+			// Apply role hierarchy: superadmin and admin have all permissions
+			if roleStr == "superadmin" || roleStr == "admin" {
 				hasRole = true
 				break
 			}
