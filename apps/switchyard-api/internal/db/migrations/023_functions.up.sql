@@ -56,8 +56,8 @@ CREATE TABLE IF NOT EXISTS functions (
 -- Partitioned by created_at for efficient querying and retention management
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS function_invocations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    function_id UUID NOT NULL REFERENCES functions(id) ON DELETE CASCADE,
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    function_id UUID NOT NULL, -- Cannot use REFERENCES on partitioned tables
 
     -- Invocation metadata
     started_at TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -68,7 +68,10 @@ CREATE TABLE IF NOT EXISTS function_invocations (
     request_id VARCHAR(255), -- Unique request identifier for tracing
 
     -- Timestamp for partitioning
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+
+    -- Composite primary key required for partitioned tables (must include partition key)
+    PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
 
 -- Create default partition for function invocations
