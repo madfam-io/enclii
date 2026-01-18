@@ -31,11 +31,15 @@ export default function DeploymentsPage() {
   const [deployments, setDeployments] = useState<RecentActivity[]>([]);
   const [activeDeployments, setActiveDeployments] = useState<RecentActivity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDeployments = async () => {
+  const fetchDeployments = async (isManualRefresh = false) => {
     try {
       setError(null);
+      if (isManualRefresh) {
+        setRefreshing(true);
+      }
       const data = await apiGet<DashboardResponse>(`/v1/dashboard/stats`);
       // Filter for deployment-related activities
       const deploymentActivities = (data.activities || []).filter(
@@ -50,10 +54,12 @@ export default function DeploymentsPage() {
       setActiveDeployments(active);
       setDeployments(history);
       setLoading(false);
+      setRefreshing(false);
     } catch (err) {
       console.error("Failed to fetch deployments:", err);
       setError(err instanceof Error ? err.message : "Failed to fetch deployments");
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -179,11 +185,12 @@ export default function DeploymentsPage() {
           </p>
         </div>
         <button
-          onClick={fetchDeployments}
-          className="inline-flex items-center px-4 py-2 border border-input rounded-md shadow-sm text-sm font-medium text-foreground bg-background hover:bg-accent"
+          onClick={() => fetchDeployments(true)}
+          disabled={refreshing}
+          className="inline-flex items-center px-4 py-2 border border-input rounded-md shadow-sm text-sm font-medium text-foreground bg-background hover:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
+          <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
