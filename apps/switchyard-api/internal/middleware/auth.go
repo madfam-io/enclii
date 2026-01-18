@@ -156,7 +156,7 @@ func (a *AuthMiddleware) Middleware() gin.HandlerFunc {
 			}
 
 			// Set user context from API token
-			c.Set("user_id", apiToken.UserID)
+			c.Set("user_id", apiToken.UserID.String())
 			c.Set("auth_type", "api_token")
 			c.Set("api_token_id", apiToken.ID)
 

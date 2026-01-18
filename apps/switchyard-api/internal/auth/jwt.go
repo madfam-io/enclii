@@ -394,7 +394,7 @@ func (j *JWTManager) AuthMiddleware() gin.HandlerFunc {
 			}
 
 			// Set user context from API token
-			c.Set("user_id", apiToken.UserID)
+			c.Set("user_id", apiToken.UserID.String())
 			c.Set("auth_type", "api_token")
 			c.Set("api_token_id", apiToken.ID)
 			c.Set("api_token_name", apiToken.Name)
@@ -438,7 +438,7 @@ func (j *JWTManager) AuthMiddleware() gin.HandlerFunc {
 		claims, err := j.ValidateToken(tokenString)
 		if err == nil {
 			// Local token validated successfully
-			c.Set("user_id", claims.UserID)
+			c.Set("user_id", claims.UserID.String())
 			c.Set("user_email", claims.Email)
 			c.Set("user_role", claims.Role)
 			c.Set("project_ids", claims.ProjectIDs)
@@ -624,12 +624,15 @@ func GetUserIDFromContext(c *gin.Context) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("user ID not found in context")
 	}
 
-	id, ok := userID.(uuid.UUID)
-	if !ok {
-		return uuid.Nil, fmt.Errorf("invalid user ID format")
+	// Handle both string and uuid.UUID types for backwards compatibility
+	switch v := userID.(type) {
+	case uuid.UUID:
+		return v, nil
+	case string:
+		return uuid.Parse(v)
+	default:
+		return uuid.Nil, fmt.Errorf("invalid user ID format: expected string or uuid.UUID, got %T", userID)
 	}
-
-	return id, nil
 }
 
 func GetUserEmailFromContext(c *gin.Context) (string, error) {

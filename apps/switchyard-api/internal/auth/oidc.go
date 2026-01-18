@@ -387,7 +387,7 @@ func (o *OIDCManager) AuthMiddleware() gin.HandlerFunc {
 			}
 
 			// Set user context from API token
-			c.Set("user_id", apiToken.UserID)
+			c.Set("user_id", apiToken.UserID.String())
 			c.Set("auth_type", "api_token")
 			c.Set("api_token_id", apiToken.ID)
 			c.Set("api_token_name", apiToken.Name)
@@ -430,7 +430,7 @@ func (o *OIDCManager) AuthMiddleware() gin.HandlerFunc {
 		localClaims, localErr := o.jwtManager.ValidateToken(tokenString)
 		if localErr == nil {
 			// Local token valid - set context and continue
-			c.Set("user_id", localClaims.UserID)
+			c.Set("user_id", localClaims.UserID.String())
 			c.Set("user_email", localClaims.Email)
 			c.Set("user_role", localClaims.Role)
 			c.Set("project_ids", localClaims.ProjectIDs)
