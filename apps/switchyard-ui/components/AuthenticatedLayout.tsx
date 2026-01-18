@@ -116,10 +116,10 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <nav className={`bg-background border-b border-border sticky top-0 z-50 transition-shadow duration-200 ${isScrolled ? shadowClass : ''}`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
+      <nav className={`bg-background border-b border-border sticky top-0 z-50 transition-shadow duration-200 overflow-x-hidden ${isScrolled ? shadowClass : ''}`}>
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16 min-w-0">
+            <div className="flex items-center min-w-0 flex-1">
               <div className="flex-shrink-0 flex items-center gap-2">
                 <Link href="/" className="flex items-center">
                   <span className="text-2xl font-bold text-enclii-blue">🚂 Enclii</span>
@@ -188,7 +188,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                 </div>
               </div>
             </div>
-            <div className="flex items-center space-x-1 lg:space-x-2">
+            <div className="flex items-center space-x-1 lg:space-x-2 min-w-0 flex-shrink-0">
               {/* Command Palette - Always visible */}
               <CommandPalette />
 
