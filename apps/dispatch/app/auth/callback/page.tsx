@@ -14,8 +14,8 @@ import { Radio, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 const JANUA_URL = process.env.NEXT_PUBLIC_JANUA_URL || 'https://auth.madfam.io'
 const OAUTH_CLIENT_ID = process.env.NEXT_PUBLIC_OAUTH_CLIENT_ID || 'jnc_lofqyf9LQXG_OwENAIw89p_XvngkWMi-'
 
-// Allowed email domains (must match middleware configuration)
-const DEFAULT_DOMAINS = ['@madfam.io']
+// Allowed email domains (must match middleware configuration, fallback to example.org for OSS)
+const DEFAULT_DOMAINS = ['@example.org']
 const ALLOWED_DOMAINS = process.env.NEXT_PUBLIC_ALLOWED_ADMIN_DOMAINS
   ? process.env.NEXT_PUBLIC_ALLOWED_ADMIN_DOMAINS.split(',').map((d) => d.trim())
   : DEFAULT_DOMAINS

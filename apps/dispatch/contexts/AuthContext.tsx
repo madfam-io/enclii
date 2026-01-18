@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
  * Handles Janua SSO authentication with infrastructure operator validation.
  * Uses PKCE (Proof Key for Code Exchange) for secure OAuth 2.0 flow.
  * Access is restricted based on:
- * 1. Email domain - must be from an allowed domain (@madfam.io by default)
+ * 1. Email domain - must be from an allowed domain (configurable via env)
  * 2. User role - must have an operator-level role (superadmin, admin, operator)
  */
 
@@ -32,8 +32,8 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-// Allowed email domains (must match middleware configuration)
-const DEFAULT_DOMAINS = ['@madfam.io']
+// Allowed email domains (must match middleware configuration, fallback to example.org for OSS)
+const DEFAULT_DOMAINS = ['@example.org']
 const ALLOWED_DOMAINS = process.env.NEXT_PUBLIC_ALLOWED_ADMIN_DOMAINS
   ? process.env.NEXT_PUBLIC_ALLOWED_ADMIN_DOMAINS.split(',').map((d) => d.trim())
   : DEFAULT_DOMAINS

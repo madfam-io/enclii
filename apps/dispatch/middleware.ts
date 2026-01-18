@@ -8,16 +8,16 @@ import type { NextRequest } from 'next/server'
  * Only authorized infrastructure operators can access the Control Tower.
  *
  * Authorization is based on:
- * 1. Email domain - must be from an allowed domain (@madfam.io by default)
+ * 1. Email domain - must be from an allowed domain (configurable via env)
  * 2. User role - must have an operator-level role (superadmin, admin, operator)
  *
  * Configure via environment variables:
- * - ALLOWED_ADMIN_DOMAINS: Comma-separated list of allowed email domains (default: @madfam.io)
+ * - ALLOWED_ADMIN_DOMAINS: Comma-separated list of allowed email domains (e.g., @yourcompany.com)
  * - ALLOWED_ADMIN_ROLES: Comma-separated list of allowed roles (default: superadmin,admin,operator)
  */
 
-// Allowed email domains (configurable via env, default to @madfam.io)
-const DEFAULT_DOMAINS = ['@madfam.io']
+// Allowed email domains (configurable via env, fallback to example.org for OSS deployments)
+const DEFAULT_DOMAINS = ['@example.org']
 const ALLOWED_DOMAINS = process.env.ALLOWED_ADMIN_DOMAINS
   ? process.env.ALLOWED_ADMIN_DOMAINS.split(',').map((d) => d.trim())
   : DEFAULT_DOMAINS
