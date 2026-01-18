@@ -370,3 +370,4 @@ ticket: ENCLII-XXX
 ---
 
 *This ADR is automatically enforced. Violations will be blocked by Kyverno or flagged by Sentinel.*
+# Trigger rebuild - 1768726478
