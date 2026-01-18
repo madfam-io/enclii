@@ -14,7 +14,7 @@ This Architecture Decision Record (ADR) establishes the foundational network sec
 
 ---
 
-## The Five Laws
+## The Six Laws
 
 ### Law 1: Database Port Binding
 
@@ -198,6 +198,65 @@ kubectl logs -n sentinel -l job-name --tail=100
 
 ---
 
+### Law 6: Conservation Law (Differential Builds)
+
+> **CI/CD pipelines MUST use change detection. Rebuilding unchanged services is FORBIDDEN.**
+
+**Rationale**: Operation LAST MILE identified that full-monorepo rebuilds waste compute resources, increase deployment time, and create unnecessary registry churn. Each service should only rebuild when its source or dependencies actually change.
+
+**Implementation Strategy**:
+1. **Change Detection**: Use `dorny/paths-filter` or equivalent to detect affected services
+2. **Dependency Mapping**: Track shared packages that trigger dependent rebuilds
+3. **Conditional Jobs**: Each build job should have `if: needs.changes.outputs.<service> == 'true'`
+
+**Canonical Implementation** (Janua example):
+```yaml
+# GitHub Actions with dorny/paths-filter
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      admin: ${{ steps.filter.outputs.admin }}
+    steps:
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+              - 'Dockerfile.api'
+            admin:
+              - 'apps/admin/**'
+              - 'packages/ui/**'      # Shared dependency
+              - 'packages/sdk/**'     # Shared dependency
+
+  build-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || github.event_name == 'workflow_dispatch'
+    # ... build steps
+```
+
+**Required Filters**:
+| Service | Triggers |
+|---------|----------|
+| API | `apps/api/**`, `Dockerfile.api` |
+| Frontend | `apps/<frontend>/**`, `packages/ui/**`, `Dockerfile.<frontend>` |
+| Shared Package Change | All dependent frontends must rebuild |
+| Lock File Change | All services that use that package manager |
+
+**Escape Hatch**: `workflow_dispatch` allows manual full rebuild when needed.
+
+**Verification**:
+```bash
+# Check GitHub Actions run - should skip unchanged services
+gh run list --workflow=docker-build.yml --limit=5
+# Jobs marked "skipped" indicate conservation law is working
+```
+
+---
+
 ## Enforcement Mechanisms
 
 ### Kyverno Policies (Preventive)
@@ -237,6 +296,7 @@ kubectl logs -n sentinel -l job-name --tail=100
 |---------|------|--------|---------|
 | 1.0 | 2026-01-17 | Operation FORTRESS | Initial laws established |
 | 1.1 | 2026-01-17 | Operation SENTINEL | Added enforcement mechanisms |
+| 1.2 | 2026-01-18 | Operation LAST MILE | Added Law 6: Conservation Law (differential builds) |
 
 ---
 
@@ -251,6 +311,7 @@ kubectl logs -n sentinel -l job-name --tail=100
 │ LAW 3: Redis → redis.data.svc.cluster.local:6379               │
 │ LAW 4: Tunnels → K8s ConfigMap ONLY (no systemd)               │
 │ LAW 5: PRs → Must pass infra-audit                              │
+│ LAW 6: CI/CD → Differential builds (skip unchanged)            │
 ├─────────────────────────────────────────────────────────────────┤
 │ KYVERNO:  block-host-ports, require-health-probes,             │
 │           block-latest-ifnotpresent                             │
