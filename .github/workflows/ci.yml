@@ -246,11 +246,62 @@ jobs:
           cd ../roundhouse && govulncheck ./... || true
           cd ../waybill && govulncheck ./... || true
 
+  # =============================================================================
+  # CONSERVATION LAW (ADR-001 Law 6): Differential Builds
+  # Only rebuild services that have actually changed
+  # =============================================================================
+  detect-changes:
+    name: Detect Changes (Conservation Law)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    outputs:
+      switchyard-api: ${{ steps.filter.outputs.switchyard-api }}
+      switchyard-ui: ${{ steps.filter.outputs.switchyard-ui }}
+      roundhouse: ${{ steps.filter.outputs.roundhouse }}
+      waybill: ${{ steps.filter.outputs.waybill }}
+      landing: ${{ steps.filter.outputs.landing }}
+      dispatch: ${{ steps.filter.outputs.dispatch }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            switchyard-api:
+              - 'apps/switchyard-api/**'
+              - 'packages/core/**'
+            switchyard-ui:
+              - 'apps/switchyard-ui/**'
+              - 'packages/ui/**'
+            roundhouse:
+              - 'apps/roundhouse/**'
+              - 'packages/core/**'
+            waybill:
+              - 'apps/waybill/**'
+              - 'packages/core/**'
+            landing:
+              - 'apps/landing/**'
+            dispatch:
+              - 'apps/dispatch/**'
+              - 'packages/ui/**'
+
+      - name: Log detected changes
+        run: |
+          echo "🔍 Conservation Law - Change Detection Results:"
+          echo "  switchyard-api: ${{ steps.filter.outputs.switchyard-api }}"
+          echo "  switchyard-ui:  ${{ steps.filter.outputs.switchyard-ui }}"
+          echo "  roundhouse:     ${{ steps.filter.outputs.roundhouse }}"
+          echo "  waybill:        ${{ steps.filter.outputs.waybill }}"
+          echo "  landing:        ${{ steps.filter.outputs.landing }}"
+          echo "  dispatch:       ${{ steps.filter.outputs.dispatch }}"
+
   docker-build:
     name: Docker Build
     # Docker builds benefit most from self-hosted runners (DinD, build cache)
     runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
-    needs: [build, ui-tests]
+    needs: [build, ui-tests, detect-changes]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
@@ -269,7 +320,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Conservation Law: Only build if changes detected
       - name: Build and push switchyard-api
+        if: needs.detect-changes.outputs.switchyard-api == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -279,7 +332,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Skip switchyard-api (no changes)
+        if: needs.detect-changes.outputs.switchyard-api != 'true' && github.event_name != 'workflow_dispatch'
+        run: echo "⏭️ Skipping switchyard-api build (Conservation Law - no changes detected)"
+
+      # Conservation Law: Only build if changes detected
       - name: Build and push switchyard-ui
+        if: needs.detect-changes.outputs.switchyard-ui == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -293,7 +352,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Skip switchyard-ui (no changes)
+        if: needs.detect-changes.outputs.switchyard-ui != 'true' && github.event_name != 'workflow_dispatch'
+        run: echo "⏭️ Skipping switchyard-ui build (Conservation Law - no changes detected)"
+
+      # Conservation Law: Only build if changes detected
       - name: Build and push roundhouse
+        if: needs.detect-changes.outputs.roundhouse == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: apps/roundhouse
@@ -302,7 +367,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Skip roundhouse (no changes)
+        if: needs.detect-changes.outputs.roundhouse != 'true' && github.event_name != 'workflow_dispatch'
+        run: echo "⏭️ Skipping roundhouse build (Conservation Law - no changes detected)"
+
+      # Conservation Law: Only build if changes detected
       - name: Build and push waybill
+        if: needs.detect-changes.outputs.waybill == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: apps/waybill
@@ -311,7 +382,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Skip waybill (no changes)
+        if: needs.detect-changes.outputs.waybill != 'true' && github.event_name != 'workflow_dispatch'
+        run: echo "⏭️ Skipping waybill build (Conservation Law - no changes detected)"
+
+      # Conservation Law: Only build if changes detected
       - name: Build and push landing-page
+        if: needs.detect-changes.outputs.landing == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
           context: apps/landing
@@ -319,6 +396,25 @@ jobs:
           tags: ghcr.io/${{ github.repository }}/landing-page:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Skip landing-page (no changes)
+        if: needs.detect-changes.outputs.landing != 'true' && github.event_name != 'workflow_dispatch'
+        run: echo "⏭️ Skipping landing-page build (Conservation Law - no changes detected)"
+
+      # Conservation Law: Only build if changes detected
+      - name: Build and push dispatch
+        if: needs.detect-changes.outputs.dispatch == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/dispatch
+          push: true
+          tags: ghcr.io/${{ github.repository }}/dispatch:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Skip dispatch (no changes)
+        if: needs.detect-changes.outputs.dispatch != 'true' && github.event_name != 'workflow_dispatch'
+        run: echo "⏭️ Skipping dispatch build (Conservation Law - no changes detected)"
 
   test-summary:
     name: Test Summary
