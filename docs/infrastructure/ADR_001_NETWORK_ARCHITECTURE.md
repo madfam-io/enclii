@@ -14,7 +14,7 @@ This Architecture Decision Record (ADR) establishes the foundational network sec
 
 ---
 
-## The Six Laws
+## The Seven Laws
 
 ### Law 1: Database Port Binding
 
@@ -257,6 +257,52 @@ gh run list --workflow=docker-build.yml --limit=5
 
 ---
 
+### Law 7: The API Mandate
+
+> **All tenant operations (onboarding, config, secrets) MUST be performed via Enclii/Janua APIs or CLIs. Direct database/SSH access is restricted strictly to Core Platform debugging (Foundry).**
+
+**Rationale**: During Operations LIFTOFF and GOVERNOR, we identified a pattern of relying on "bare metal" access (SSH, SQL execution, kubectl exec into pods) instead of using our own ecosystem APIs. This violates the principle of dogfooding and creates:
+1. Security gaps (bypassing audit logs)
+2. Reproducibility issues (manual steps not captured in IaC)
+3. Missing API coverage (if an operation requires SSH, the API is incomplete)
+
+**Permitted Operations by Layer**:
+| Layer | Permitted Access | Examples |
+|-------|------------------|----------|
+| Core Platform (Foundry) | SSH, kubectl exec, direct DB | Debugging, emergency recovery |
+| Tenant Services | Enclii/Janua API + CLI ONLY | OAuth clients, deployments, secrets |
+| Infrastructure | Terraform, K8s manifests | Namespace creation, resource allocation |
+
+**Forbidden Patterns**:
+```bash
+# NEVER do these for tenant operations
+kubectl exec -it postgres-pod -- psql  # Use API instead
+ssh foundry-core 'kubectl ...'         # Use enclii CLI instead
+curl -X POST janua-api/internal/...    # Use public API endpoints
+```
+
+**Required Actions When API is Missing**:
+1. Document the missing capability as a feature request
+2. Log tech debt in `TECH_DEBT.md` with severity
+3. Implement the API before relying on bare metal as permanent solution
+
+**Tech Debt Tracking**:
+```yaml
+# Example tech debt entry
+feature: Database Provisioning API
+status: MISSING
+workaround: kubectl exec into postgres pod
+severity: HIGH
+ticket: ENCLII-XXX
+```
+
+**Enforcement**:
+- Code review: PRs containing `kubectl exec`, `psql`, or direct SSH commands for tenant operations must be rejected
+- Audit: Sentinel should log any direct database access patterns
+- CI: Fail builds that include hardcoded database credentials or connection strings
+
+---
+
 ## Enforcement Mechanisms
 
 ### Kyverno Policies (Preventive)
@@ -297,6 +343,7 @@ gh run list --workflow=docker-build.yml --limit=5
 | 1.0 | 2026-01-17 | Operation FORTRESS | Initial laws established |
 | 1.1 | 2026-01-17 | Operation SENTINEL | Added enforcement mechanisms |
 | 1.2 | 2026-01-18 | Operation LAST MILE | Added Law 6: Conservation Law (differential builds) |
+| 1.3 | 2026-01-18 | Operation GOVERNOR | Added Law 7: The API Mandate (API-first tenant operations) |
 
 ---
 
@@ -312,6 +359,7 @@ gh run list --workflow=docker-build.yml --limit=5
 │ LAW 4: Tunnels → K8s ConfigMap ONLY (no systemd)               │
 │ LAW 5: PRs → Must pass infra-audit                              │
 │ LAW 6: CI/CD → Differential builds (skip unchanged)            │
+│ LAW 7: Tenants → API/CLI ONLY (no SSH/kubectl exec)            │
 ├─────────────────────────────────────────────────────────────────┤
 │ KYVERNO:  block-host-ports, require-health-probes,             │
 │           block-latest-ifnotpresent                             │
