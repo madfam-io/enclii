@@ -11,7 +11,7 @@ linters:
     - govet
     # - errcheck      # TODO: Re-enable after fixing unchecked error returns
     # - staticcheck   # TODO: Re-enable after fixing staticcheck warnings (QF/SA/ST/S rules)
-    - unused
+    # - unused        # TODO: Re-enable after removing unused code
     # - ineffassign   # TODO: Re-enable after fixing unused variable assignments
 
 issues:
