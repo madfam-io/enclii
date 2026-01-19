@@ -181,6 +181,8 @@ jobs:
   ui-tests:
     name: UI Tests
     runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
+    # Serialize with lint to avoid resource contention on self-hosted runners
+    needs: lint
 
     steps:
       - uses: actions/checkout@v6
@@ -211,6 +213,8 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
+    # Serialize with ui-tests to avoid resource contention on self-hosted runners
+    needs: ui-tests
 
     steps:
       - uses: actions/checkout@v6
