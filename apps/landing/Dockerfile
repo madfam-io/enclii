@@ -1,5 +1,5 @@
 # Build stage
-FROM ghcr.io/madfam-org/base/node:20-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ COPY apps/landing/ .
 RUN npm run build
 
 # Production stage
-FROM ghcr.io/madfam-org/base/nginx:alpine
+FROM nginx:alpine
 
 # Copy nginx config
 COPY apps/landing/nginx.conf /etc/nginx/conf.d/default.conf

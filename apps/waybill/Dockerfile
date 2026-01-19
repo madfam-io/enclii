@@ -1,5 +1,5 @@
 # Build stage
-FROM ghcr.io/madfam-org/base/golang:1.24-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /waybill-api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -o /waybill-aggregator ./cmd/aggregator
 
 # Aggregator runtime stage (for background jobs)
-FROM ghcr.io/madfam-org/base/alpine:3.19 AS aggregator
+FROM alpine:3.19 AS aggregator
 
 RUN apk add --no-cache ca-certificates tzdata
 
@@ -29,7 +29,7 @@ COPY --from=builder /waybill-aggregator /usr/local/bin/waybill-aggregator
 ENTRYPOINT ["/usr/local/bin/waybill-aggregator"]
 
 # API runtime stage (default - HTTP server with health checks)
-FROM ghcr.io/madfam-org/base/alpine:3.19 AS api
+FROM alpine:3.19 AS api
 
 RUN apk add --no-cache ca-certificates tzdata
 

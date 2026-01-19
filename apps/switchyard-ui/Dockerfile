@@ -2,7 +2,7 @@
 # Build context should be the enclii root directory, not apps/switchyard-ui
 # Usage: docker build -f apps/switchyard-ui/Dockerfile -t enclii-ui .
 
-FROM ghcr.io/madfam-org/base/node:20-alpine AS base
+FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 

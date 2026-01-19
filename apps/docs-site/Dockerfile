@@ -2,7 +2,7 @@
 # Build context should be the enclii root directory, not apps/docs-site
 # Usage: docker build -f apps/docs-site/Dockerfile -t enclii-docs .
 
-FROM ghcr.io/madfam-org/base/node:20-alpine AS base
+FROM node:20-alpine AS base
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
@@ -31,7 +31,7 @@ ENV DOCKER_BUILD=true
 RUN npm run build
 
 # Production image - serve static files with nginx
-FROM ghcr.io/madfam-org/base/nginx:alpine AS runner
+FROM nginx:alpine AS runner
 
 # Copy custom nginx config
 RUN echo 'server { \
