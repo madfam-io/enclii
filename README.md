@@ -38,15 +38,21 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 
 ### 🏗️ Production-Ready Infrastructure
 
-**Cost-Optimized Stack** (~$55/month):
-- **Hetzner AX41-NVME** - Dedicated server (AMD Ryzen, 64GB RAM, 2x512GB NVMe) - ~$50/mo
+**2-Node Hetzner Cluster** (~$70/month):
+
+| Node | Role | Hardware | Cost |
+|------|------|----------|------|
+| **The Sanctuary** | Production Workloads | Hetzner AX41-NVMe (AMD Ryzen, 64GB RAM, 2x512GB NVMe) | ~$50/mo |
+| **The Forge** | CI/CD Builder | Hetzner VPS CX41 (4 vCPU, 16GB RAM) | ~$15/mo |
+
+**Cost-Optimized Stack:**
 - **Cloudflare Tunnel** - Zero-trust ingress (replaces load balancers) - $0
 - **Cloudflare for SaaS** - 100 custom domains FREE - $0
 - **Cloudflare R2** - Zero-egress object storage - $5/mo
 - **Self-hosted PostgreSQL** - In-cluster with persistent storage - $0
 - **Self-hosted Redis** - In-cluster caching (Sentinel ready for multi-node) - $0
 
-> **Note:** Currently running on a single dedicated server. Infrastructure is prepared for multi-node scaling with Longhorn CSI when needed.
+> **Builder Node Targeting**: Build workloads are isolated on "The Forge" via Kubernetes taints (`builder=true:NoSchedule`). Production apps run exclusively on "The Sanctuary".
 
 > **Infrastructure Audit (Jan 2026)**: Evaluated Ubicloud managed PostgreSQL and Redis Sentinel. **Decision: NOT NEEDED** for 99.5% SLA / 24-hour RPO. Sentinel manifests staged for future multi-node deployment.
 
