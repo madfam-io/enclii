@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/madfam-org/enclii/packages/sdk-go/pkg/types"
 )
 
@@ -198,7 +199,7 @@ func (r *FunctionRepository) ListByProjects(ctx context.Context, projectIDs []uu
 		ORDER BY created_at DESC
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, projectIDs)
+	rows, err := r.db.QueryContext(ctx, query, pq.Array(projectIDs))
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +230,7 @@ func (r *FunctionRepository) ListByStatus(ctx context.Context, statuses ...types
 		ORDER BY created_at ASC
 	`
 
-	rows, err := r.db.QueryContext(ctx, query, statusStrings)
+	rows, err := r.db.QueryContext(ctx, query, pq.Array(statusStrings))
 	if err != nil {
 		return nil, err
 	}
