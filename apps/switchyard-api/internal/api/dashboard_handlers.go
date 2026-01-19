@@ -200,11 +200,31 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 	g2, ctx := errgroup.WithContext(ctx)
 	var countMu sync.Mutex
 
+	// Build a map of services for quick lookup
+	serviceMap := make(map[string]*types.Service)
+	for _, project := range projects {
+		services, _ := h.projectService.ListServices(ctx, project.Slug)
+		for _, svc := range services {
+			svcCopy := svc // capture
+			serviceMap[svc.ID.String()] = svcCopy
+		}
+	}
+
 	for _, svcID := range allServiceIDs {
 		svcID := svcID
 		projectSlug := serviceToProject[svcID]
 		g2.Go(func() error {
-			// Check deployment health
+			svc := serviceMap[svcID]
+
+			// Phase 1: Check service-level health (from Cartographer)
+			if svc != nil && svc.Health == types.HealthStatusHealthy {
+				countMu.Lock()
+				healthyCount++
+				countMu.Unlock()
+				return nil
+			}
+
+			// Phase 2: Fall back to deployment table (Enclii-deployed services)
 			deployment, err := h.repos.Deployments.GetLatestByService(ctx, svcID)
 			if err == nil && deployment != nil {
 				countMu.Lock()
@@ -215,24 +235,25 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 					deploymentsToday++
 				}
 				countMu.Unlock()
+				return nil
+			}
+
+			// Phase 3: K8s API fallback with CORRECT namespace
+			var namespace string
+			if svc != nil && svc.K8sNamespace != nil && *svc.K8sNamespace != "" {
+				namespace = *svc.K8sNamespace // Use stored namespace
 			} else {
-				// Fallback to K8s only if DB lookup fails
-				// Note: This is still slow but necessary for manually deployed services
-				namespace := strings.ToLower(projectSlug)
-				// Get service name from ID - we need to look it up
-				services, _ := h.projectService.ListServices(ctx, projectSlug)
-				for _, svc := range services {
-					if svc.ID.String() == svcID {
-						k8sStatus, err := h.k8sClient.GetDeploymentStatusInfo(ctx, namespace, svc.Name)
-						if err == nil && k8sStatus != nil {
-							countMu.Lock()
-							if k8sStatus.AvailableReplicas == k8sStatus.Replicas && k8sStatus.Replicas > 0 {
-								healthyCount++
-							}
-							countMu.Unlock()
-						}
-						break
+				namespace = strings.ToLower(projectSlug) // Original fallback
+			}
+
+			if svc != nil {
+				k8sStatus, err := h.k8sClient.GetDeploymentStatusInfo(ctx, namespace, svc.Name)
+				if err == nil && k8sStatus != nil {
+					countMu.Lock()
+					if k8sStatus.AvailableReplicas == k8sStatus.Replicas && k8sStatus.Replicas > 0 {
+						healthyCount++
 					}
+					countMu.Unlock()
 				}
 			}
 			return nil
@@ -422,10 +443,9 @@ func (h *Handler) getProjectServicesOverview(ctx context.Context, project *types
 			version := "N/A"
 			replicas := "0/0"
 
-			// Try database first (fast)
-			deployment, err := h.repos.Deployments.GetLatestByService(ctx, svc.ID.String())
-			if err == nil && deployment != nil {
-				switch deployment.Health {
+			// Phase 1: Check service-level health (from Cartographer)
+			if svc.Health != "" && svc.Health != types.HealthStatusUnknown {
+				switch svc.Health {
 				case types.HealthStatusHealthy:
 					status = "healthy"
 				case types.HealthStatusUnhealthy:
@@ -433,24 +453,45 @@ func (h *Handler) getProjectServicesOverview(ctx context.Context, project *types
 				default:
 					status = "unknown"
 				}
-				replicas = "1/1"
-
-				release, err := h.repos.Releases.GetByID(deployment.ReleaseID)
-				if err == nil {
-					version = release.Version
-				}
+				replicas = fmt.Sprintf("%d/%d", svc.ReadyReplicas, svc.DesiredReplicas)
 			} else {
-				// Fallback to K8s only when necessary
-				k8sStatus, err := h.k8sClient.GetDeploymentStatusInfo(ctx, namespace, svc.Name)
-				if err == nil && k8sStatus != nil {
-					if k8sStatus.AvailableReplicas == k8sStatus.Replicas && k8sStatus.Replicas > 0 {
+				// Phase 2: Fall back to deployment table (Enclii-deployed services)
+				deployment, err := h.repos.Deployments.GetLatestByService(ctx, svc.ID.String())
+				if err == nil && deployment != nil {
+					switch deployment.Health {
+					case types.HealthStatusHealthy:
 						status = "healthy"
-					} else if k8sStatus.AvailableReplicas > 0 {
+					case types.HealthStatusUnhealthy:
 						status = "unhealthy"
+					default:
+						status = "unknown"
 					}
-					replicas = fmt.Sprintf("%d/%d", k8sStatus.AvailableReplicas, k8sStatus.Replicas)
-					if k8sStatus.ImageTag != "" {
-						version = k8sStatus.ImageTag
+					replicas = "1/1"
+
+					release, err := h.repos.Releases.GetByID(deployment.ReleaseID)
+					if err == nil {
+						version = release.Version
+					}
+				} else {
+					// Phase 3: K8s API fallback with CORRECT namespace
+					var k8sNamespace string
+					if svc.K8sNamespace != nil && *svc.K8sNamespace != "" {
+						k8sNamespace = *svc.K8sNamespace // Use stored namespace
+					} else {
+						k8sNamespace = namespace // Original fallback (project slug)
+					}
+
+					k8sStatus, err := h.k8sClient.GetDeploymentStatusInfo(ctx, k8sNamespace, svc.Name)
+					if err == nil && k8sStatus != nil {
+						if k8sStatus.AvailableReplicas == k8sStatus.Replicas && k8sStatus.Replicas > 0 {
+							status = "healthy"
+						} else if k8sStatus.AvailableReplicas > 0 {
+							status = "unhealthy"
+						}
+						replicas = fmt.Sprintf("%d/%d", k8sStatus.AvailableReplicas, k8sStatus.Replicas)
+						if k8sStatus.ImageTag != "" {
+							version = k8sStatus.ImageTag
+						}
 					}
 				}
 			}

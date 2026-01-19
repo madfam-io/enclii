@@ -3,7 +3,7 @@
 # Usage: ./ops/cartographer.sh [--dry-run]
 #
 # Discovers K8s services across all namespaces and populates the Enclii
-# services table with appropriate project mappings.
+# services table with appropriate project mappings and health data.
 
 set -eo pipefail
 
@@ -102,19 +102,36 @@ get_project_id() {
 
 echo ""
 echo "Fetching K8s services..."
-
-# Get all K8s Services
 SERVICES_JSON=$(ssh "$SSH_HOST" "sudo kubectl get services -A -o json")
 
-echo "Generating SQL..."
+echo "Fetching K8s deployments and statefulsets..."
+# Query BOTH - databases (Postgres, Redis) are StatefulSets, not Deployments
+WORKLOADS_JSON=$(ssh "$SSH_HOST" "sudo kubectl get deployments,statefulsets -A -o json")
+
+echo "Building deployment lookup file..."
+
+# Build deployment lookup file: namespace/name|desired|ready
+DEPLOYMENT_FILE="/tmp/cartographer_deployments_$$.txt"
+echo "$WORKLOADS_JSON" | jq -r '.items[] | "\(.metadata.namespace)/\(.metadata.name)|\(.spec.replicas // 1)|\(.status.readyReplicas // 0)"' > "$DEPLOYMENT_FILE"
+
+WORKLOAD_COUNT=$(wc -l < "$DEPLOYMENT_FILE" | xargs)
+echo "  Found $WORKLOAD_COUNT workloads"
+
+# Helper to look up deployment data
+get_deployment_data() {
+  local key="$1"
+  grep "^${key}|" "$DEPLOYMENT_FILE" 2>/dev/null | head -1 || echo ""
+}
+
 echo ""
+echo "Generating SQL..."
 
 # Generate SQL file
 SQL_FILE="/tmp/cartographer_$$.sql"
 > "$SQL_FILE"
 
-count=0
-echo "$SERVICES_JSON" | jq -r '.items[] | "\(.metadata.namespace)|\(.metadata.name)"' | while IFS='|' read -r namespace name; do
+# Process services using process substitution to avoid subshell issues
+while IFS='|' read -r namespace name; do
   [[ -z "$namespace" || -z "$name" ]] && continue
 
   case "$namespace" in
@@ -130,26 +147,90 @@ echo "$SERVICES_JSON" | jq -r '.items[] | "\(.metadata.namespace)|\(.metadata.na
   git_repo=$(get_service_repo "$name" "$namespace")
   app_path=$(get_app_path "$name")
 
-  echo "[$namespace] $name -> $project_slug"
+  # Look up deployment health data
+  deployment_key="${namespace}/${name}"
+  deployment_data=$(get_deployment_data "$deployment_key")
 
-  if [[ -n "$app_path" ]]; then
-    echo "INSERT INTO services (id, project_id, name, git_repo, app_path, created_at, updated_at) VALUES (gen_random_uuid(), '$project_id', '$name', '$git_repo', '$app_path', NOW(), NOW()) ON CONFLICT (project_id, name) DO UPDATE SET git_repo = EXCLUDED.git_repo, app_path = EXCLUDED.app_path, updated_at = NOW();" >> "$SQL_FILE"
+  if [[ -n "$deployment_data" ]]; then
+    IFS='|' read -r _ desired ready <<< "$deployment_data"
+
+    # Calculate health
+    if [[ "$desired" -gt 0 && "$desired" -eq "$ready" ]]; then
+      health="healthy"
+    elif [[ "$ready" -gt 0 ]]; then
+      health="unhealthy"
+    else
+      health="unknown"
+    fi
+
+    # Calculate status
+    if [[ "$ready" -gt 0 ]]; then
+      status="running"
+    elif [[ "$desired" -gt 0 ]]; then
+      status="pending"
+    else
+      status="unknown"
+    fi
   else
-    echo "INSERT INTO services (id, project_id, name, git_repo, created_at, updated_at) VALUES (gen_random_uuid(), '$project_id', '$name', '$git_repo', NOW(), NOW()) ON CONFLICT (project_id, name) DO UPDATE SET git_repo = EXCLUDED.git_repo, updated_at = NOW();" >> "$SQL_FILE"
+    desired=0
+    ready=0
+    health="unknown"
+    status="unknown"
   fi
-done
 
-SERVICE_COUNT=$(wc -l < "$SQL_FILE" | xargs)
+  echo "[$namespace] $name -> $project_slug (health: $health, replicas: $ready/$desired)"
+
+  # Build SQL with all health fields
+  if [[ -n "$app_path" ]]; then
+    cat >> "$SQL_FILE" << EOF
+INSERT INTO services (id, project_id, name, git_repo, app_path, k8s_namespace, health, status, desired_replicas, ready_replicas, last_health_check, created_at, updated_at)
+VALUES (gen_random_uuid(), '$project_id', '$name', '$git_repo', '$app_path', '$namespace', '$health', '$status', $desired, $ready, NOW(), NOW(), NOW())
+ON CONFLICT (project_id, name)
+DO UPDATE SET
+    git_repo = EXCLUDED.git_repo,
+    app_path = EXCLUDED.app_path,
+    k8s_namespace = EXCLUDED.k8s_namespace,
+    health = EXCLUDED.health,
+    status = EXCLUDED.status,
+    desired_replicas = EXCLUDED.desired_replicas,
+    ready_replicas = EXCLUDED.ready_replicas,
+    last_health_check = NOW(),
+    updated_at = NOW();
+EOF
+  else
+    cat >> "$SQL_FILE" << EOF
+INSERT INTO services (id, project_id, name, git_repo, k8s_namespace, health, status, desired_replicas, ready_replicas, last_health_check, created_at, updated_at)
+VALUES (gen_random_uuid(), '$project_id', '$name', '$git_repo', '$namespace', '$health', '$status', $desired, $ready, NOW(), NOW(), NOW())
+ON CONFLICT (project_id, name)
+DO UPDATE SET
+    git_repo = EXCLUDED.git_repo,
+    k8s_namespace = EXCLUDED.k8s_namespace,
+    health = EXCLUDED.health,
+    status = EXCLUDED.status,
+    desired_replicas = EXCLUDED.desired_replicas,
+    ready_replicas = EXCLUDED.ready_replicas,
+    last_health_check = NOW(),
+    updated_at = NOW();
+EOF
+  fi
+done < <(echo "$SERVICES_JSON" | jq -r '.items[] | "\(.metadata.namespace)|\(.metadata.name)"')
+
+# Cleanup deployment file
+rm -f "$DEPLOYMENT_FILE"
+
+# Count statements
+STATEMENT_COUNT=$(grep -c "^INSERT INTO services" "$SQL_FILE" 2>/dev/null || echo "0")
+
 echo ""
-echo "Generated $SERVICE_COUNT SQL statements"
+echo "Generated $STATEMENT_COUNT SQL statements"
 
 if [[ "$DRY_RUN" == "--dry-run" ]]; then
   echo ""
   echo "=== DRY-RUN Complete ==="
-  echo "Would insert/update $SERVICE_COUNT services"
+  echo "Would insert/update $STATEMENT_COUNT services"
   echo ""
   echo "Sample SQL:"
-  head -3 "$SQL_FILE"
+  head -20 "$SQL_FILE"
   rm -f "$SQL_FILE"
   exit 0
 fi
@@ -161,7 +242,7 @@ echo "Executing batch insert via stdin..."
 if cat "$SQL_FILE" | ssh "$SSH_HOST" "sudo kubectl exec -i -n data postgres-0 -- psql -U enclii -d enclii"; then
   echo ""
   echo "=== Discovery Complete ==="
-  echo "Successfully upserted $SERVICE_COUNT services"
+  echo "Successfully upserted $STATEMENT_COUNT services with health data"
 else
   echo ""
   echo "ERROR: Batch insert failed"
