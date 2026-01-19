@@ -688,3 +688,4 @@ This section defines the operating protocol for AI agents (Claude Code, GitHub C
 # Build trigger 1768798535
 # Build trigger 1768815370
 # Build trigger 1768815613
+# Fallback to GitHub-hosted runners 1768819160
