@@ -22,9 +22,9 @@ const (
 
 // FunctionBuildConfig contains detected function configuration
 type FunctionBuildConfig struct {
-	Runtime     FunctionRuntime
-	Handler     string
-	EntryFile   string
+	Runtime      FunctionRuntime
+	Handler      string
+	EntryFile    string
 	FunctionsDir string
 }
 

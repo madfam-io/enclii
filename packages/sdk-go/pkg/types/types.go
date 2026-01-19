@@ -40,9 +40,9 @@ type Service struct {
 	// Resource configuration for container limits
 	Resources *ResourceConfig `json:"resources,omitempty" db:"resources"`
 	// AutoDeploy configuration for webhook-triggered deployments
-	AutoDeploy       bool      `json:"auto_deploy" db:"auto_deploy"`               // Enable auto-deploy on successful build
-	AutoDeployBranch string    `json:"auto_deploy_branch" db:"auto_deploy_branch"` // Branch to auto-deploy (e.g., "main", "master")
-	AutoDeployEnv    string    `json:"auto_deploy_env" db:"auto_deploy_env"`       // Target environment (e.g., "development", "staging")
+	AutoDeploy       bool   `json:"auto_deploy" db:"auto_deploy"`               // Enable auto-deploy on successful build
+	AutoDeployBranch string `json:"auto_deploy_branch" db:"auto_deploy_branch"` // Branch to auto-deploy (e.g., "main", "master")
+	AutoDeployEnv    string `json:"auto_deploy_env" db:"auto_deploy_env"`       // Target environment (e.g., "development", "staging")
 	// Health tracking fields (populated by Cartographer from K8s)
 	K8sNamespace    *string      `json:"k8s_namespace,omitempty" db:"k8s_namespace"` // Actual K8s namespace (may differ from project slug)
 	Health          HealthStatus `json:"health" db:"health"`                         // Service health: unknown, healthy, unhealthy

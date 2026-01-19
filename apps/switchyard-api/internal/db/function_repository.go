@@ -660,4 +660,5 @@ func (r *FunctionRepository) UpsertMetrics(ctx context.Context, m *types.Functio
 	)
 	return err
 }
+
 // Build trigger 1768798621

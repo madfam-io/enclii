@@ -49,9 +49,9 @@ type CacheService interface {
 }
 
 type RedisCache struct {
-	client      *redis.Client
-	config      *CacheConfig
-	errorCount  atomic.Int64 // Track application-level cache errors
+	client     *redis.Client
+	config     *CacheConfig
+	errorCount atomic.Int64 // Track application-level cache errors
 }
 
 type CacheConfig struct {

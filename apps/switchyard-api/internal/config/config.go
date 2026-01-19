@@ -108,10 +108,10 @@ type Config struct {
 	AdminEmails []string // Comma-separated list of admin email addresses
 
 	// Email Configuration (for transactional emails like invitations)
-	EmailAPIKey       string // RESEND_API_KEY - Resend API key for sending emails
-	EmailFromAddress  string // EMAIL_FROM_ADDRESS - From email address (default: noreply@enclii.dev)
-	EmailFromName     string // EMAIL_FROM_NAME - From name (default: Enclii)
-	AppBaseURL        string // APP_BASE_URL - Base URL for app links in emails (default: https://app.enclii.dev)
+	EmailAPIKey      string // RESEND_API_KEY - Resend API key for sending emails
+	EmailFromAddress string // EMAIL_FROM_ADDRESS - From email address (default: noreply@enclii.dev)
+	EmailFromName    string // EMAIL_FROM_NAME - From name (default: Enclii)
+	AppBaseURL       string // APP_BASE_URL - Base URL for app links in emails (default: https://app.enclii.dev)
 }
 
 func Load() (*Config, error) {
@@ -178,10 +178,10 @@ func Load() (*Config, error) {
 	viper.SetDefault("admin-emails", "")                        // ADMIN_EMAILS (comma-separated)
 
 	// Email configuration
-	viper.SetDefault("resend-api-key", "")                      // RESEND_API_KEY
+	viper.SetDefault("resend-api-key", "")                       // RESEND_API_KEY
 	viper.SetDefault("email-from-address", "noreply@enclii.dev") // EMAIL_FROM_ADDRESS
-	viper.SetDefault("email-from-name", "Enclii")               // EMAIL_FROM_NAME
-	viper.SetDefault("app-base-url", "https://app.enclii.dev")  // APP_BASE_URL
+	viper.SetDefault("email-from-name", "Enclii")                // EMAIL_FROM_NAME
+	viper.SetDefault("app-base-url", "https://app.enclii.dev")   // APP_BASE_URL
 
 	// Parse log level
 	logLevelStr := viper.GetString("log-level")
@@ -191,51 +191,51 @@ func Load() (*Config, error) {
 	}
 
 	config := &Config{
-		Environment:               viper.GetString("environment"),
-		Port:                      viper.GetString("port"),
-		DatabaseURL:               viper.GetString("database-url"),
-		LogLevel:                  logLevel,
-		Registry:                  viper.GetString("registry"),
-		RegistryUsername:          viper.GetString("registry-username"),
-		RegistryPassword:          viper.GetString("registry-password"),
-		AuthMode:                  viper.GetString("auth-mode"),
-		OIDCIssuer:                viper.GetString("oidc-issuer"),
-		OIDCClientID:              viper.GetString("oidc-client-id"),
-		OIDCClientSecret:          viper.GetString("oidc-client-secret"),
-		OIDCRedirectURL:           viper.GetString("oidc-redirect-url"),
-		PostLoginRedirectURL:      viper.GetString("post-login-redirect-url"),
-		ExternalJWKSURL:           viper.GetString("external-jwks-url"),
-		ExternalIssuer:            viper.GetString("external-issuer"),
-		ExternalJWKSCacheTTL:      viper.GetInt("external-jwks-cache-ttl"),
-		AccessTokenExpireMinutes:  viper.GetInt("access-token-expire-minutes"),
-		RefreshTokenExpireDays:    viper.GetInt("refresh-token-expire-days"),
-		JanuaAPIURL:               viper.GetString("janua-api-url"),
-		KubeConfig:                viper.GetString("kube-config"),
-		KubeContext:               viper.GetString("kube-context"),
-		BuildkitAddr:              viper.GetString("buildkit-addr"),
-		BuildTimeout:              viper.GetInt("build-timeout"),
-		BuildWorkDir:              viper.GetString("build-work-dir"),
-		BuildCacheDir:             viper.GetString("build-cache-dir"),
-		BuildMode:                 viper.GetString("build-mode"),
-		RoundhouseURL:             viper.GetString("roundhouse-url"),
-		RoundhouseAPIKey:          viper.GetString("roundhouse-api-key"),
-		SelfURL:                   viper.GetString("self-url"),
-		GitHubToken:               viper.GetString("github-token"),
-		GitHubWebhookSecret:       viper.GetString("github-webhook-secret"),
-		ComplianceWebhooksEnabled: viper.GetBool("compliance-webhooks-enabled"),
-		VantaWebhookURL:           viper.GetString("vanta-webhook-url"),
-		DrataWebhookURL:           viper.GetString("drata-webhook-url"),
-		SecretRotationEnabled:     viper.GetBool("secret-rotation-enabled"),
-		VaultAddress:              viper.GetString("vault-address"),
-		VaultToken:                viper.GetString("vault-token"),
-		VaultNamespace:            viper.GetString("vault-namespace"),
-		VaultPollInterval:         viper.GetInt("vault-poll-interval"),
-		RedisHost:                 viper.GetString("redis-host"),
-		RedisPort:                 viper.GetInt("redis-port"),
-		RedisPassword:             viper.GetString("redis-password"),
-		CloudflareAPIToken:        viper.GetString("cloudflare-api-token"),
-		CloudflareAccountID:       viper.GetString("cloudflare-account-id"),
-		CloudflareZoneID:          viper.GetString("cloudflare-zone-id"),
+		Environment:                viper.GetString("environment"),
+		Port:                       viper.GetString("port"),
+		DatabaseURL:                viper.GetString("database-url"),
+		LogLevel:                   logLevel,
+		Registry:                   viper.GetString("registry"),
+		RegistryUsername:           viper.GetString("registry-username"),
+		RegistryPassword:           viper.GetString("registry-password"),
+		AuthMode:                   viper.GetString("auth-mode"),
+		OIDCIssuer:                 viper.GetString("oidc-issuer"),
+		OIDCClientID:               viper.GetString("oidc-client-id"),
+		OIDCClientSecret:           viper.GetString("oidc-client-secret"),
+		OIDCRedirectURL:            viper.GetString("oidc-redirect-url"),
+		PostLoginRedirectURL:       viper.GetString("post-login-redirect-url"),
+		ExternalJWKSURL:            viper.GetString("external-jwks-url"),
+		ExternalIssuer:             viper.GetString("external-issuer"),
+		ExternalJWKSCacheTTL:       viper.GetInt("external-jwks-cache-ttl"),
+		AccessTokenExpireMinutes:   viper.GetInt("access-token-expire-minutes"),
+		RefreshTokenExpireDays:     viper.GetInt("refresh-token-expire-days"),
+		JanuaAPIURL:                viper.GetString("janua-api-url"),
+		KubeConfig:                 viper.GetString("kube-config"),
+		KubeContext:                viper.GetString("kube-context"),
+		BuildkitAddr:               viper.GetString("buildkit-addr"),
+		BuildTimeout:               viper.GetInt("build-timeout"),
+		BuildWorkDir:               viper.GetString("build-work-dir"),
+		BuildCacheDir:              viper.GetString("build-cache-dir"),
+		BuildMode:                  viper.GetString("build-mode"),
+		RoundhouseURL:              viper.GetString("roundhouse-url"),
+		RoundhouseAPIKey:           viper.GetString("roundhouse-api-key"),
+		SelfURL:                    viper.GetString("self-url"),
+		GitHubToken:                viper.GetString("github-token"),
+		GitHubWebhookSecret:        viper.GetString("github-webhook-secret"),
+		ComplianceWebhooksEnabled:  viper.GetBool("compliance-webhooks-enabled"),
+		VantaWebhookURL:            viper.GetString("vanta-webhook-url"),
+		DrataWebhookURL:            viper.GetString("drata-webhook-url"),
+		SecretRotationEnabled:      viper.GetBool("secret-rotation-enabled"),
+		VaultAddress:               viper.GetString("vault-address"),
+		VaultToken:                 viper.GetString("vault-token"),
+		VaultNamespace:             viper.GetString("vault-namespace"),
+		VaultPollInterval:          viper.GetInt("vault-poll-interval"),
+		RedisHost:                  viper.GetString("redis-host"),
+		RedisPort:                  viper.GetInt("redis-port"),
+		RedisPassword:              viper.GetString("redis-password"),
+		CloudflareAPIToken:         viper.GetString("cloudflare-api-token"),
+		CloudflareAccountID:        viper.GetString("cloudflare-account-id"),
+		CloudflareZoneID:           viper.GetString("cloudflare-zone-id"),
 		CloudflareTunnelID:         viper.GetString("cloudflare-tunnel-id"),
 		FunctionBaseDomain:         viper.GetString("function-base-domain"),
 		DBPoolSize:                 viper.GetInt("db-pool-size"),

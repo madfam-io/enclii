@@ -166,9 +166,9 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 
 	// Use a simpler approach - collect service IDs first, then batch query
 	var (
-		allServiceIDs []string
+		allServiceIDs    []string
 		serviceToProject = make(map[string]string) // serviceID -> projectSlug
-		mu sync.Mutex
+		mu               sync.Mutex
 	)
 
 	// Parallel service fetching per project

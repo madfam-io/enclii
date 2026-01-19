@@ -13,13 +13,13 @@ import (
 
 // EmailService handles transactional email delivery
 type EmailService struct {
-	logger       *logrus.Logger
-	apiKey       string    // Resend API key
-	fromEmail    string    // Default from email
-	fromName     string    // Default from name
-	baseURL      string    // App base URL for links
-	enabled      bool      // Whether email is configured
-	httpClient   *http.Client
+	logger     *logrus.Logger
+	apiKey     string // Resend API key
+	fromEmail  string // Default from email
+	fromName   string // Default from name
+	baseURL    string // App base URL for links
+	enabled    bool   // Whether email is configured
+	httpClient *http.Client
 }
 
 // EmailConfig holds email service configuration

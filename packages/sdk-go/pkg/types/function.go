@@ -86,9 +86,9 @@ type Function struct {
 	Endpoint string `json:"endpoint,omitempty" db:"endpoint"`
 
 	// Runtime metrics
-	AvailableReplicas int     `json:"available_replicas" db:"available_replicas"`
-	InvocationCount   int64   `json:"invocation_count" db:"invocation_count"`
-	AvgDurationMs     float64 `json:"avg_duration_ms" db:"avg_duration_ms"`
+	AvailableReplicas int        `json:"available_replicas" db:"available_replicas"`
+	InvocationCount   int64      `json:"invocation_count" db:"invocation_count"`
+	AvgDurationMs     float64    `json:"avg_duration_ms" db:"avg_duration_ms"`
 	LastInvokedAt     *time.Time `json:"last_invoked_at,omitempty" db:"last_invoked_at"`
 
 	// Audit fields
@@ -104,21 +104,21 @@ type Function struct {
 
 // FunctionInvocation represents a single invocation of a function
 type FunctionInvocation struct {
-	ID         uuid.UUID  `json:"id" db:"id"`
-	FunctionID uuid.UUID  `json:"function_id" db:"function_id"`
-	StartedAt  time.Time  `json:"started_at" db:"started_at"`
-	DurationMs *int64     `json:"duration_ms,omitempty" db:"duration_ms"`
-	StatusCode *int       `json:"status_code,omitempty" db:"status_code"`
-	ColdStart  bool       `json:"cold_start" db:"cold_start"`
-	ErrorType  *string    `json:"error_type,omitempty" db:"error_type"`
-	RequestID  string     `json:"request_id,omitempty" db:"request_id"`
-	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
+	ID         uuid.UUID `json:"id" db:"id"`
+	FunctionID uuid.UUID `json:"function_id" db:"function_id"`
+	StartedAt  time.Time `json:"started_at" db:"started_at"`
+	DurationMs *int64    `json:"duration_ms,omitempty" db:"duration_ms"`
+	StatusCode *int      `json:"status_code,omitempty" db:"status_code"`
+	ColdStart  bool      `json:"cold_start" db:"cold_start"`
+	ErrorType  *string   `json:"error_type,omitempty" db:"error_type"`
+	RequestID  string    `json:"request_id,omitempty" db:"request_id"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 }
 
 // FunctionCreateRequest is the API request for creating a function
 type FunctionCreateRequest struct {
-	Name    string         `json:"name" binding:"required"`
-	Config  FunctionConfig `json:"config" binding:"required"`
+	Name   string         `json:"name" binding:"required"`
+	Config FunctionConfig `json:"config" binding:"required"`
 }
 
 // FunctionUpdateRequest is the API request for updating a function
@@ -186,12 +186,12 @@ type FunctionListResponse struct {
 
 // FunctionDeploymentInfo contains deployment information for the UI
 type FunctionDeploymentInfo struct {
-	Function         Function          `json:"function"`
-	ScaledObjectName string            `json:"scaled_object_name,omitempty"`
-	ServiceName      string            `json:"service_name,omitempty"`
-	DeploymentName   string            `json:"deployment_name,omitempty"`
-	PodCount         int               `json:"pod_count"`
-	LastBuildLogs    string            `json:"last_build_logs,omitempty"`
+	Function         Function `json:"function"`
+	ScaledObjectName string   `json:"scaled_object_name,omitempty"`
+	ServiceName      string   `json:"service_name,omitempty"`
+	DeploymentName   string   `json:"deployment_name,omitempty"`
+	PodCount         int      `json:"pod_count"`
+	LastBuildLogs    string   `json:"last_build_logs,omitempty"`
 }
 
 // FunctionDefaults provides default values for function configuration
@@ -199,7 +199,7 @@ var FunctionDefaults = FunctionConfig{
 	Memory:         "128Mi",
 	CPU:            "100m",
 	Timeout:        30,
-	MinReplicas:    0,  // Enable scale-to-zero by default
+	MinReplicas:    0, // Enable scale-to-zero by default
 	MaxReplicas:    10,
 	CooldownPeriod: 300, // 5 minutes
 	Concurrency:    100,

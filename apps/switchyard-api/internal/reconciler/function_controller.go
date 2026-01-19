@@ -389,7 +389,7 @@ func (r *FunctionReconciler) createDeployment(ctx context.Context, fn *types.Fun
 
 	labels := map[string]string{
 		"app":                    fn.K8sResourceName,
-		"enclii.dev/function":   fn.Name,
+		"enclii.dev/function":    fn.Name,
 		"enclii.dev/function-id": fn.ID.String(),
 	}
 
@@ -486,7 +486,7 @@ func (r *FunctionReconciler) createDeployment(ctx context.Context, fn *types.Fun
 func (r *FunctionReconciler) createService(ctx context.Context, fn *types.Function) error {
 	labels := map[string]string{
 		"app":                    fn.K8sResourceName,
-		"enclii.dev/function":   fn.Name,
+		"enclii.dev/function":    fn.Name,
 		"enclii.dev/function-id": fn.ID.String(),
 	}
 
