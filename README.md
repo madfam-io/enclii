@@ -38,12 +38,12 @@ Enclii is a **Railway-style Platform-as-a-Service** that runs on cost-effective 
 
 ### 🏗️ Production-Ready Infrastructure
 
-**2-Node Hetzner Cluster** (~$70/month):
+**2-Node Hetzner Cluster** (~$55/month):
 
 | Node | Role | Hardware | Cost |
 |------|------|----------|------|
 | **The Sanctuary** | Production Workloads | Hetzner AX41-NVMe (AMD Ryzen, 64GB RAM, 2x512GB NVMe) | ~$50/mo |
-| **The Forge** | CI/CD Builder | Hetzner VPS CX41 (4 vCPU, 16GB RAM) | ~$15/mo |
+| **The Forge** | CI/CD Builder | Hetzner Cloud CPX11 (2 AMD vCPU, 2GB RAM) | ~$5/mo |
 
 **Cost-Optimized Stack:**
 - **Cloudflare Tunnel** - Zero-trust ingress (replaces load balancers) - $0
