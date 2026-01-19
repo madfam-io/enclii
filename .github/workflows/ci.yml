@@ -313,7 +313,12 @@ jobs:
     # Docker builds benefit most from self-hosted runners (DinD, build cache)
     runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
     needs: [build, ui-tests, detect-changes]
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    # Use always() to run even when detect-changes is skipped (workflow_dispatch)
+    if: |
+      always() &&
+      (needs.build.result == 'success') &&
+      (needs.ui-tests.result == 'success') &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
       packages: write
