@@ -394,7 +394,8 @@ jobs:
         if: needs.detect-changes.outputs.roundhouse == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
-          context: apps/roundhouse
+          context: .
+          file: apps/roundhouse/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}/roundhouse:${{ github.sha }}
           cache-from: type=gha
@@ -409,7 +410,8 @@ jobs:
         if: needs.detect-changes.outputs.waybill == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
-          context: apps/waybill
+          context: .
+          file: apps/waybill/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}/waybill:${{ github.sha }}
           cache-from: type=gha
@@ -424,7 +426,8 @@ jobs:
         if: needs.detect-changes.outputs.landing == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
-          context: apps/landing
+          context: .
+          file: apps/landing/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}/landing-page:${{ github.sha }}
           cache-from: type=gha
@@ -439,7 +442,8 @@ jobs:
         if: needs.detect-changes.outputs.dispatch == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v6
         with:
-          context: apps/dispatch
+          context: .
+          file: apps/dispatch/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository }}/dispatch:${{ github.sha }}
           cache-from: type=gha
