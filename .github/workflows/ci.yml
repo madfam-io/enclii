@@ -314,6 +314,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Wait for Docker daemon (DinD sidecar) to be ready on self-hosted runners
+      - name: Wait for Docker daemon
+        if: vars.ARC_BOOTSTRAP_COMPLETE == 'true'
+        run: |
+          echo "Waiting for Docker daemon to be ready..."
+          for i in $(seq 1 30); do
+            if docker info >/dev/null 2>&1; then
+              echo "Docker daemon is ready!"
+              docker version
+              exit 0
+            fi
+            echo "Attempt $i/30: Docker not ready, waiting 2 seconds..."
+            sleep 2
+          done
+          echo "ERROR: Docker daemon did not become ready in time"
+          exit 1
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
