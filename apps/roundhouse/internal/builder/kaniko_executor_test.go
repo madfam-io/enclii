@@ -266,12 +266,13 @@ func TestCreateBuildJob(t *testing.T) {
 	}
 
 	// Verify security context
+	// Kaniko MUST run as root (UID 0) to unpack container filesystem layers
 	podSpec := k8sJob.Spec.Template.Spec
 	if podSpec.SecurityContext == nil {
 		t.Fatal("expected pod security context to be set")
 	}
-	if !*podSpec.SecurityContext.RunAsNonRoot {
-		t.Error("expected RunAsNonRoot to be true")
+	if *podSpec.SecurityContext.RunAsNonRoot {
+		t.Error("expected RunAsNonRoot to be false (Kaniko requires root to unpack layers)")
 	}
 
 	// Verify container
