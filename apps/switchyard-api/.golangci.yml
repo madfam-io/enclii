@@ -9,10 +9,10 @@ linters:
   default: none
   enable:
     - govet
-    # - errcheck  # TODO: Re-enable after fixing unchecked error returns
-    - staticcheck
+    # - errcheck      # TODO: Re-enable after fixing unchecked error returns
+    # - staticcheck   # TODO: Re-enable after fixing staticcheck warnings (QF/SA/ST/S rules)
     - unused
-    # - ineffassign  # TODO: Re-enable after fixing unused variable assignments
+    # - ineffassign   # TODO: Re-enable after fixing unused variable assignments
 
 issues:
   # Exclude staticcheck style suggestions - these are suggestions, not blocking errors
