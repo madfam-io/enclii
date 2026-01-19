@@ -77,7 +77,14 @@ const eslintConfig = defineConfig([
       'no-restricted-syntax': 'off',
     },
   },
-  globalIgnores(['.next/**', 'out/**', 'build/**', 'node_modules/**', 'next-env.d.ts']),
+  // Disable require imports rule for CommonJS config files
+  {
+    files: ['*.config.js', 'jest.setup.js'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  globalIgnores(['.next/**', 'out/**', 'build/**', 'node_modules/**', 'next-env.d.ts', '**/*.css']),
 ])
 
 export default eslintConfig
