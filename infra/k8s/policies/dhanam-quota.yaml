@@ -1,0 +1,24 @@
+# =============================================================================
+# Dhanam Namespace ResourceQuota
+# =============================================================================
+# Protects against "noisy neighbor" resource exhaustion
+# Ensures dhanam workloads stay within defined boundaries
+# =============================================================================
+
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: dhanam-compute-limit
+  namespace: dhanam
+  labels:
+    app.kubernetes.io/name: dhanam
+    app.kubernetes.io/component: resource-quota
+    app.kubernetes.io/managed-by: enclii
+spec:
+  hard:
+    # CPU limits
+    requests.cpu: "1"
+    limits.cpu: "2"
+    # Memory limits
+    requests.memory: 2Gi
+    limits.memory: 4Gi

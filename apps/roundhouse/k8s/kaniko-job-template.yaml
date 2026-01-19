@@ -143,6 +143,17 @@ spec:
     spec:
       restartPolicy: Never
 
+      # Target the dedicated builder node
+      nodeSelector:
+        role: builder
+
+      # Tolerate the builder taint
+      tolerations:
+        - key: "builder"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+
       # Security context - non-root, restricted
       securityContext:
         runAsNonRoot: true

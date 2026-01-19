@@ -250,6 +250,39 @@ data:
           httpHostHeader: npm.madfam.io
 
       # ============================================
+      # Dhanam Finance Services (namespace: dhanam)
+      # ============================================
+      # Budget and wealth tracking for LATAM
+
+      # Dhanam Admin Dashboard
+      - hostname: admin.dhan.am
+        service: http://dhanam-admin.dhanam.svc.cluster.local:80
+        originRequest:
+          connectTimeout: 10s
+          httpHostHeader: admin.dhan.am
+
+      # Dhanam Web App
+      - hostname: app.dhan.am
+        service: http://dhanam-web.dhanam.svc.cluster.local:80
+        originRequest:
+          connectTimeout: 10s
+          httpHostHeader: app.dhan.am
+
+      # Dhanam API
+      - hostname: api.dhan.am
+        service: http://dhanam-api.dhanam.svc.cluster.local:80
+        originRequest:
+          connectTimeout: 30s
+          keepAliveTimeout: 90s
+          httpHostHeader: api.dhan.am
+
+      # Dhanam apex domain (redirect to app)
+      - hostname: dhan.am
+        service: http://dhanam-web.dhanam.svc.cluster.local:80
+        originRequest:
+          httpHostHeader: dhan.am
+
+      # ============================================
       # Catch-all (required by cloudflared)
       # ============================================
       - service: http_status:404
