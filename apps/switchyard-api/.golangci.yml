@@ -13,6 +13,17 @@ linters:
     - staticcheck
     - unused
     - ineffassign
+  settings:
+    errcheck:
+      # Don't check error returns for common Close() methods
+      # These are typically deferred and errors are logged but not returned
+      exclude-functions:
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (net/http.Response).Body.Close
+        - io.ReadCloser.Close
 
 issues:
   # Exclude staticcheck style suggestions (QF* rules) - these are suggestions, not errors
