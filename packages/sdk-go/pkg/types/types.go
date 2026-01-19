@@ -83,10 +83,12 @@ type ResourceConfig struct {
 
 // BuildConfig defines how to build a service
 type BuildConfig struct {
-	Type       BuildType `json:"type"`
-	Dockerfile string    `json:"dockerfile,omitempty"`
-	Buildpack  string    `json:"buildpack,omitempty"`
-	Context    string    `json:"context,omitempty"`
+	Type       BuildType         `json:"type"`
+	Dockerfile string            `json:"dockerfile,omitempty"`
+	Buildpack  string            `json:"buildpack,omitempty"`
+	Context    string            `json:"context,omitempty"`
+	BuildArgs  map[string]string `json:"build_args,omitempty"`
+	Target     string            `json:"target,omitempty"`
 }
 
 type BuildType string

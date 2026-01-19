@@ -72,8 +72,8 @@ func BuildServiceConfigToRoundhouse(cfg types.BuildConfig) RoundhouseBuildConfig
 		Dockerfile: cfg.Dockerfile,
 		Buildpack:  cfg.Buildpack,
 		Context:    context,
-		BuildArgs:  nil,
-		Target:     "",
+		BuildArgs:  cfg.BuildArgs,
+		Target:     cfg.Target,
 	}
 }
 
