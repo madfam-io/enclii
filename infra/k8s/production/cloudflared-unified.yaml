@@ -279,11 +279,17 @@ data:
           keepAliveTimeout: 90s
           httpHostHeader: api.dhan.am
 
-      # Dhanam apex domain (redirect to app)
+      # Dhanam apex domain (landing page)
       - hostname: dhan.am
         service: http://dhanam-web.dhanam.svc.cluster.local:80
         originRequest:
           httpHostHeader: dhan.am
+
+      # Dhanam www subdomain (landing page)
+      - hostname: www.dhan.am
+        service: http://dhanam-web.dhanam.svc.cluster.local:80
+        originRequest:
+          httpHostHeader: www.dhan.am
 
       # ============================================
       # Catch-all (required by cloudflared)
