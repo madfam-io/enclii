@@ -182,6 +182,43 @@ while IFS='|' read -r namespace name; do
     status="unknown"
   fi
 
+  # Check if service exists and if health/status changed - create deployment record
+  PREV_STATE=$(ssh "$SSH_HOST" "sudo kubectl exec -n data postgres-0 -- psql -U enclii -d enclii -t -c \"SELECT health, status, desired_replicas, ready_replicas FROM services WHERE project_id = '$project_id' AND name = '$name'\"" 2>/dev/null | xargs)
+
+  if [[ -n "$PREV_STATE" ]]; then
+    prev_health=$(echo "$PREV_STATE" | awk '{print $1}')
+    prev_status=$(echo "$PREV_STATE" | awk '{print $2}')
+    prev_desired=$(echo "$PREV_STATE" | awk '{print $3}')
+    prev_ready=$(echo "$PREV_STATE" | awk '{print $4}')
+
+    # Detect meaningful change
+    if [[ "$health" != "$prev_health" ]] || [[ "$status" != "$prev_status" ]] || \
+       [[ "$desired" != "$prev_desired" ]] || [[ "$ready" != "$prev_ready" ]]; then
+
+      # Get service_id and default environment_id
+      SERVICE_ID=$(ssh "$SSH_HOST" "sudo kubectl exec -n data postgres-0 -- psql -U enclii -d enclii -t -c \"SELECT id FROM services WHERE project_id = '$project_id' AND name = '$name'\"" 2>/dev/null | xargs)
+      ENV_ID=$(ssh "$SSH_HOST" "sudo kubectl exec -n data postgres-0 -- psql -U enclii -d enclii -t -c \"SELECT id FROM environments WHERE project_id = '$project_id' ORDER BY created_at LIMIT 1\"" 2>/dev/null | xargs)
+
+      if [[ -n "$SERVICE_ID" ]] && [[ -n "$ENV_ID" ]]; then
+        # Create ghost deployment record for tracking
+        cat >> "$SQL_FILE" << EOF
+-- Ghost deployment record: $name ($prev_health -> $health)
+INSERT INTO deployments (id, release_id, environment_id, replicas, status, health, created_at, updated_at)
+SELECT gen_random_uuid(),
+       (SELECT id FROM releases WHERE service_id = '$SERVICE_ID' ORDER BY created_at DESC LIMIT 1),
+       '$ENV_ID',
+       $desired,
+       '$status',
+       '$health',
+       NOW(),
+       NOW()
+WHERE EXISTS (SELECT 1 FROM releases WHERE service_id = '$SERVICE_ID');
+EOF
+        echo "  [DEPLOYMENT] Recorded change: $name ($prev_health -> $health)"
+      fi
+    fi
+  fi
+
   echo "[$namespace] $name -> $project_slug (health: $health, replicas: $ready/$desired)"
 
   # Build SQL with all health fields
