@@ -44,6 +44,8 @@ get_service_repo() {
       echo "helm://grafana/grafana" ;;
     cloudflared)
       echo "external://cloudflare/cloudflared" ;;
+    runner-monitor)
+      echo "https://github.com/actions/actions-runner-controller" ;;
     cert-manager|cert-manager-webhook)
       echo "helm://jetstack/cert-manager" ;;
     argocd-server|argocd-repo-server|argocd-redis|argocd-applicationset-controller|argocd-dex-server|argocd-notifications-controller)
@@ -145,6 +147,13 @@ while IFS='|' read -r namespace name; do
   [[ "$name" == "kubernetes" ]] && continue
 
   project_slug=$(get_ns_project "$namespace")
+
+  # Name-based override: janua-* services always go to janua project
+  # This handles janua apps deployed in non-janua namespaces (e.g., enclii)
+  if [[ "$name" == janua-* ]]; then
+    project_slug="janua"
+  fi
+
   project_id=$(get_project_id "$project_slug")
   [[ -z "$project_id" ]] && continue
 
@@ -180,6 +189,24 @@ while IFS='|' read -r namespace name; do
     ready=0
     health="unknown"
     status="unknown"
+  fi
+
+  # Special handling for runner-monitor: count active runner pods instead of deployment replicas
+  # Runner pods are ephemeral - active means builds in progress, none means idle (normal)
+  if [[ "$name" == "runner-monitor" ]]; then
+    ACTIVE_RUNNERS=$(ssh "$SSH_HOST" "sudo kubectl get pods -n arc-runners -l app.kubernetes.io/component=runner --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l" | xargs)
+    if [[ "$ACTIVE_RUNNERS" -gt 0 ]]; then
+      health="healthy"
+      status="running"
+      desired=$ACTIVE_RUNNERS
+      ready=$ACTIVE_RUNNERS
+    else
+      # No active runners = idle state (normal for ephemeral runners)
+      health="unknown"
+      status="pending"
+      desired=0
+      ready=0
+    fi
   fi
 
   # Check if service exists and if health/status changed - create deployment record
