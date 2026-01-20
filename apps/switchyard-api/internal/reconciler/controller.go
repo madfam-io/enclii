@@ -813,6 +813,13 @@ func (c *Controller) runK8sSync(ctx context.Context, logger *logrus.Entry) {
 func (c *Controller) syncDeploymentToDatabase(ctx context.Context, namespace string, k8sDep appsv1.Deployment, logger *logrus.Entry) {
 	deploymentName := k8sDep.Name
 
+	// Check if deployment has opted out of reconciliation via annotation
+	// This allows manually-deployed services to be excluded from Switchyard management
+	if val, ok := k8sDep.Annotations["enclii.dev/reconcile"]; ok && val == "disabled" {
+		logger.WithField("deployment", deploymentName).Debug("Deployment has reconciliation disabled, skipping")
+		return
+	}
+
 	// 1. Find matching service by name (skip if not registered)
 	service, err := c.repositories.Services.GetByName(deploymentName)
 	if err != nil {
