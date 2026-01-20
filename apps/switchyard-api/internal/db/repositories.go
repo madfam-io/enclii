@@ -369,7 +369,10 @@ func (r *ServiceRepository) ListAll(ctx context.Context) ([]*types.Service, erro
 
 func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service, error) {
 	query := `SELECT id, project_id, name, git_repo, COALESCE(app_path, '') as app_path, build_config,
-		auto_deploy, auto_deploy_branch, auto_deploy_env, created_at, updated_at
+		auto_deploy, auto_deploy_branch, auto_deploy_env,
+		k8s_namespace, COALESCE(health, 'unknown') as health, COALESCE(status, 'unknown') as status,
+		COALESCE(desired_replicas, 0) as desired_replicas, COALESCE(ready_replicas, 0) as ready_replicas,
+		last_health_check, created_at, updated_at
 		FROM services WHERE project_id = $1 ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(query, projectID)
@@ -383,15 +386,26 @@ func (r *ServiceRepository) ListByProject(projectID uuid.UUID) ([]*types.Service
 		service := &types.Service{}
 		var buildConfigJSON []byte
 		var appPath sql.NullString
+		var k8sNamespace sql.NullString
+		var lastHealthCheck sql.NullTime
 
 		err := rows.Scan(&service.ID, &service.ProjectID, &service.Name, &service.GitRepo, &appPath, &buildConfigJSON,
-			&service.AutoDeploy, &service.AutoDeployBranch, &service.AutoDeployEnv, &service.CreatedAt, &service.UpdatedAt)
+			&service.AutoDeploy, &service.AutoDeployBranch, &service.AutoDeployEnv,
+			&k8sNamespace, &service.Health, &service.Status,
+			&service.DesiredReplicas, &service.ReadyReplicas, &lastHealthCheck,
+			&service.CreatedAt, &service.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
 
 		if appPath.Valid {
 			service.AppPath = appPath.String
+		}
+		if k8sNamespace.Valid {
+			service.K8sNamespace = &k8sNamespace.String
+		}
+		if lastHealthCheck.Valid {
+			service.LastHealthCheck = &lastHealthCheck.Time
 		}
 
 		if err := json.Unmarshal(buildConfigJSON, &service.BuildConfig); err != nil {
