@@ -1115,7 +1115,13 @@ CREATE TABLE public.services (
     auto_deploy_branch character varying(255) DEFAULT 'main'::character varying NOT NULL,
     auto_deploy_env character varying(255) DEFAULT 'production'::character varying NOT NULL,
     github_repo_id uuid,
-    app_path character varying(500) DEFAULT ''::character varying
+    app_path character varying(500) DEFAULT ''::character varying,
+    k8s_namespace character varying(255),
+    health character varying(50) DEFAULT 'unknown'::character varying NOT NULL,
+    status character varying(50) DEFAULT 'unknown'::character varying NOT NULL,
+    desired_replicas integer DEFAULT 0 NOT NULL,
+    ready_replicas integer DEFAULT 0 NOT NULL,
+    last_health_check timestamp with time zone
 );
 -- Name: COLUMN services.auto_deploy; Type: COMMENT; Schema: public; Owner: -
 
@@ -2117,6 +2123,12 @@ CREATE INDEX idx_services_git_repo_app_path ON public.services USING btree (git_
 -- Name: idx_services_project_id; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_services_project_id ON public.services USING btree (project_id);
+-- Name: idx_services_health; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_services_health ON public.services USING btree (health);
+-- Name: idx_services_status; Type: INDEX; Schema: public; Owner: -
+
+CREATE INDEX idx_services_status ON public.services USING btree (status);
 -- Name: idx_sessions_expires_at; Type: INDEX; Schema: public; Owner: -
 
 CREATE INDEX idx_sessions_expires_at ON public.sessions USING btree (expires_at);
