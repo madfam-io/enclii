@@ -28,6 +28,15 @@ template:
   spec:
     serviceAccountName: arc-runner
     terminationGracePeriodSeconds: 300
+    # Target the builder node "The Forge" (foundry-builder-01)
+    nodeSelector:
+      role: builder
+    # Tolerate the builder taint
+    tolerations:
+      - key: "builder"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
     # NOTE: Do NOT define containers here - let ARC inject them properly
 
 # Listener configuration (manages scale set communication with GitHub)

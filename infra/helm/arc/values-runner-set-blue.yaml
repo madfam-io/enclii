@@ -20,6 +20,16 @@ template:
       arc.enclii.dev/active: "true"
     annotations:
       arc.enclii.dev/deployed-at: ""  # Will be set by Helm
+  spec:
+    # Target the builder node "The Forge" (foundry-builder-01)
+    nodeSelector:
+      role: builder
+    # Tolerate the builder taint
+    tolerations:
+      - key: "builder"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
 
 # NOTE: Custom PVC volumes removed for now
 # ARC's container merge doesn't work properly with custom containers

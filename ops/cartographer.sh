@@ -18,6 +18,7 @@ get_ns_project() {
     janua) echo "janua" ;;
     enclii) echo "enclii" ;;
     dhanam) echo "dhanam" ;;
+    arc-runners) echo "anvil" ;;
     *) echo "solarpunk-foundry" ;;
   esac
 }
@@ -83,11 +84,13 @@ PROJECT_DATA=$(ssh "$SSH_HOST" "sudo kubectl exec -n data postgres-0 -- psql -U 
 JANUA_ID=$(echo "$PROJECT_DATA" | grep "janua" | head -1 | sed 's/.*| *//' | xargs)
 ENCLII_ID=$(echo "$PROJECT_DATA" | grep " enclii" | head -1 | sed 's/.*| *//' | xargs)
 DHANAM_ID=$(echo "$PROJECT_DATA" | grep "dhanam" | head -1 | sed 's/.*| *//' | xargs)
+ANVIL_ID=$(echo "$PROJECT_DATA" | grep "anvil" | head -1 | sed 's/.*| *//' | xargs)
 FOUNDRY_ID=$(echo "$PROJECT_DATA" | grep "solarpunk-foundry" | head -1 | sed 's/.*| *//' | xargs)
 
 echo "  janua -> $JANUA_ID"
 echo "  enclii -> $ENCLII_ID"
 echo "  dhanam -> $DHANAM_ID"
+echo "  anvil -> $ANVIL_ID"
 echo "  solarpunk-foundry -> $FOUNDRY_ID"
 
 get_project_id() {
@@ -96,6 +99,7 @@ get_project_id() {
     janua) echo "$JANUA_ID" ;;
     enclii) echo "$ENCLII_ID" ;;
     dhanam) echo "$DHANAM_ID" ;;
+    anvil) echo "$ANVIL_ID" ;;
     solarpunk-foundry) echo "$FOUNDRY_ID" ;;
   esac
 }
