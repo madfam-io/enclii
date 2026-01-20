@@ -150,11 +150,14 @@ data:
       # ============================================
 
       # Janua API (Authentication) - Primary domain
+      # Tuned for self-healing (Operation Phoenix - Jan 2026)
       - hostname: api.janua.dev
         service: http://janua-api.janua.svc.cluster.local:80
         originRequest:
-          connectTimeout: 30s
+          connectTimeout: 10s
           keepAliveTimeout: 90s
+          noTLSVerify: false
+          retries: 2
           httpHostHeader: api.janua.dev
 
       # Janua API (Authentication) - MADFAM alias
