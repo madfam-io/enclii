@@ -72,6 +72,7 @@ func TestSingleRouteCreation(t *testing.T) {
 			if len(rule.HTTP.Paths) > 0 {
 				path := rule.HTTP.Paths[0]
 				assert.Equal(t, "/api/v1", path.Path, "Path should be /api/v1")
+				require.NotNil(t, path.PathType, "PathType should not be nil")
 				assert.Equal(t, networkingv1.PathTypePrefix, *path.PathType, "PathType should be Prefix")
 				assert.Equal(t, int32(8080), path.Backend.Service.Port.Number, "Backend port should be 8080")
 
@@ -185,6 +186,10 @@ func TestPathTypesConfiguration(t *testing.T) {
 		paths := ingress.Spec.Rules[0].HTTP.Paths
 
 		for _, path := range paths {
+			if path.PathType == nil {
+				t.Errorf("Path %s has nil PathType", path.Path)
+				continue
+			}
 			pathType := *path.PathType
 
 			switch path.Path {

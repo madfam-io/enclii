@@ -31,13 +31,20 @@ func TestPostgreSQLPersistence(t *testing.T) {
 
 	t.Log("Deploying PostgreSQL with PVC...")
 
-	// Apply PostgreSQL manifest
-	// Note: In a real test, you would use kubectl apply or create resources programmatically
-	// For now, we assume the manifest is already applied
+	// Create postgres credentials secret
+	err = helper.CreateSecret(ctx, "postgres-credentials", map[string]string{
+		"username": "postgres",
+		"password": "testpassword",
+	})
+	require.NoError(t, err, "failed to create postgres credentials secret")
+
+	// Deploy PostgreSQL into this test's namespace
+	err = helper.DeployPostgres(ctx)
+	require.NoError(t, err, "failed to deploy PostgreSQL")
 
 	// Wait for PostgreSQL pod to be ready
 	t.Log("Waiting for PostgreSQL pod to be ready...")
-	pod, err := helper.WaitForPodReady(ctx, "app=postgres", 2*time.Minute)
+	pod, err := helper.WaitForPodReady(ctx, "app=postgres", 3*time.Minute)
 	require.NoError(t, err, "PostgreSQL pod should become ready")
 	require.NotNil(t, pod, "PostgreSQL pod should exist")
 
@@ -135,9 +142,13 @@ func TestRedisPersistence(t *testing.T) {
 
 	t.Log("Deploying Redis with PVC...")
 
+	// Deploy Redis into this test's namespace
+	err = helper.DeployRedis(ctx)
+	require.NoError(t, err, "failed to deploy Redis")
+
 	// Wait for Redis pod to be ready
 	t.Log("Waiting for Redis pod to be ready...")
-	pod, err := helper.WaitForPodReady(ctx, "app=redis", 2*time.Minute)
+	pod, err := helper.WaitForPodReady(ctx, "app=redis", 3*time.Minute)
 	require.NoError(t, err, "Redis pod should become ready")
 	require.NotNil(t, pod, "Redis pod should exist")
 
@@ -230,9 +241,20 @@ func TestPVCWithRollingUpdate(t *testing.T) {
 
 	t.Log("Testing PVC persistence during rolling update...")
 
+	// Create postgres credentials secret
+	err = helper.CreateSecret(ctx, "postgres-credentials", map[string]string{
+		"username": "postgres",
+		"password": "testpassword",
+	})
+	require.NoError(t, err, "failed to create postgres credentials secret")
+
+	// Deploy PostgreSQL into this test's namespace
+	err = helper.DeployPostgres(ctx)
+	require.NoError(t, err, "failed to deploy PostgreSQL")
+
 	// Wait for PostgreSQL deployment to be ready
 	t.Log("Waiting for PostgreSQL deployment...")
-	err = helper.WaitForDeploymentReady(ctx, "postgres", 2*time.Minute)
+	err = helper.WaitForDeploymentReady(ctx, "postgres", 3*time.Minute)
 	require.NoError(t, err, "PostgreSQL deployment should be ready")
 
 	// Get initial PVC

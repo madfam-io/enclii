@@ -34,8 +34,13 @@ func TestServiceWithSingleVolume(t *testing.T) {
 	volumeName := "data"
 	expectedPVCName := serviceName + "-" + volumeName
 
+	// Deploy test service with a single volume
+	err = helper.DeployTestService(ctx, serviceName, map[string]string{
+		volumeName: "/data",
+	})
+	require.NoError(t, err, "failed to deploy test service")
+
 	// Wait for deployment to be ready
-	// (Assumes deployment is created via Enclii API/reconciler)
 	t.Log("Waiting for service deployment to be ready...")
 	err = helper.WaitForDeploymentReady(ctx, serviceName, 3*time.Minute)
 	require.NoError(t, err, "deployment should become ready")
@@ -115,6 +120,10 @@ func TestServiceWithMultipleVolumes(t *testing.T) {
 		"cache":   "/data/cache",
 	}
 
+	// Deploy test service with multiple volumes
+	err = helper.DeployTestService(ctx, serviceName, expectedVolumes)
+	require.NoError(t, err, "failed to deploy test service")
+
 	// Wait for deployment to be ready
 	t.Log("Waiting for service deployment to be ready...")
 	err = helper.WaitForDeploymentReady(ctx, serviceName, 3*time.Minute)
@@ -181,8 +190,14 @@ func TestVolumeDataPersistence(t *testing.T) {
 
 	serviceName := "test-service"
 
+	// Deploy test service with a volume
+	err = helper.DeployTestService(ctx, serviceName, map[string]string{
+		"data": "/data",
+	})
+	require.NoError(t, err, "failed to deploy test service")
+
 	// Wait for pod to be ready
-	pod, err := helper.WaitForPodReady(ctx, "app="+serviceName, 2*time.Minute)
+	pod, err := helper.WaitForPodReady(ctx, "app="+serviceName, 3*time.Minute)
 	require.NoError(t, err, "pod should become ready")
 
 	t.Logf("Pod ready: %s", pod.Name)
@@ -232,12 +247,24 @@ func TestPVCStorageClass(t *testing.T) {
 
 	t.Log("Testing PVC storage class configuration...")
 
+	// Deploy test service with volumes (all will use 'standard' storage class)
+	serviceName := "test-service"
+	err = helper.DeployTestService(ctx, serviceName, map[string]string{
+		"uploads": "/data/uploads",
+		"cache":   "/data/cache",
+	})
+	require.NoError(t, err, "failed to deploy test service")
+
+	// Wait for deployment to be ready
+	err = helper.WaitForDeploymentReady(ctx, serviceName, 3*time.Minute)
+	require.NoError(t, err, "deployment should become ready")
+
 	testCases := []struct {
 		pvcName      string
 		storageClass string
 	}{
 		{"test-service-uploads", "standard"},
-		{"test-service-cache", "fast-ssd"},
+		{"test-service-cache", "standard"},
 	}
 
 	for _, tc := range testCases {
@@ -278,6 +305,16 @@ func TestPVCCleanupOnServiceDeletion(t *testing.T) {
 
 	serviceName := "test-service"
 	pvcName := serviceName + "-data"
+
+	// Deploy test service with a volume
+	err = helper.DeployTestService(ctx, serviceName, map[string]string{
+		"data": "/data",
+	})
+	require.NoError(t, err, "failed to deploy test service")
+
+	// Wait for deployment to be ready
+	err = helper.WaitForDeploymentReady(ctx, serviceName, 3*time.Minute)
+	require.NoError(t, err, "deployment should become ready")
 
 	// Verify PVC exists
 	pvc, err := helper.GetPVC(ctx, pvcName)

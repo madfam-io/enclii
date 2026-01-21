@@ -73,6 +73,29 @@ jobs:
                   protocol: TCP
           EOF
 
+      - name: Install local-path-provisioner and create standard StorageClass
+        run: |
+          # Install Rancher's local-path-provisioner (required for KIND)
+          kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.26/deploy/local-path-storage.yaml
+
+          # Wait for local-path-provisioner to be ready
+          kubectl wait --for=condition=Available --timeout=60s \
+            deployment/local-path-provisioner \
+            -n local-path-storage
+
+          # Create 'standard' StorageClass (tests expect this name)
+          cat <<EOF | kubectl apply -f -
+          apiVersion: storage.k8s.io/v1
+          kind: StorageClass
+          metadata:
+            name: standard
+          provisioner: rancher.io/local-path
+          reclaimPolicy: Delete
+          volumeBindingMode: WaitForFirstConsumer
+          EOF
+
+          kubectl get storageclass
+
       - name: Install cert-manager
         run: |
           kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.2/cert-manager.yaml
@@ -98,23 +121,6 @@ jobs:
           echo "Waiting for ClusterIssuers to be ready..."
           sleep 10
           kubectl get clusterissuer
-
-      - name: Install PostgreSQL and Redis
-        run: |
-          # Create required namespace first (secrets.dev.yaml targets enclii-system)
-          kubectl create namespace enclii-system --dry-run=client -o yaml | kubectl apply -f -
-          # Create secrets first (required by postgres.yaml)
-          kubectl apply -f infra/k8s/base/secrets.dev.yaml
-          # Apply database manifests
-          kubectl apply -f infra/k8s/base/postgres.yaml
-          kubectl apply -f infra/k8s/base/redis.yaml
-          # Wait for PVCs to bind (may not have storage provisioner)
-          kubectl wait --for=condition=bound pvc -l app=postgres --timeout=60s || echo "PVC binding skipped"
-          kubectl wait --for=condition=bound pvc -l app=redis --timeout=60s || echo "PVC binding skipped"
-          # Wait for pods to be ready
-          echo "Waiting for PostgreSQL and Redis to be ready..."
-          kubectl wait --for=condition=ready pod -l app=postgres --timeout=300s
-          kubectl wait --for=condition=ready pod -l app=redis --timeout=300s
 
       - name: Download Go dependencies
         working-directory: tests/integration
