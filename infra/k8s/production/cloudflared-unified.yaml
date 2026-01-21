@@ -69,9 +69,9 @@ data:
           connectTimeout: 10s
           httpHostHeader: app.enclii.dev
 
-      # Admin UI (Dispatch - temporary redirect to Switchyard UI until Dispatch is deployed)
+      # Admin UI (Dispatch - Infrastructure Control Tower)
       - hostname: admin.enclii.dev
-        service: http://switchyard-ui.enclii.svc.cluster.local:80
+        service: http://dispatch.enclii.svc.cluster.local:80
         originRequest:
           httpHostHeader: admin.enclii.dev
 
