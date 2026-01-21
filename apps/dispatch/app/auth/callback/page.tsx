@@ -110,11 +110,13 @@ function AuthCallbackContent() {
       const roleOk = hasAllowedRole(userRoles)
 
       if (!domainOk || !roleOk) {
-        // Clear any stored data
+        // Clear any stored data with proper domain
+        const clearHostname = window.location.hostname
+        const clearDomain = clearHostname.includes('.enclii.dev') ? '; domain=.enclii.dev' : ''
         localStorage.removeItem('dispatch_token')
-        document.cookie = 'dispatch_auth=; Max-Age=0; path=/'
-        document.cookie = 'dispatch_user_email=; Max-Age=0; path=/'
-        document.cookie = 'dispatch_user_roles=; Max-Age=0; path=/'
+        document.cookie = `dispatch_auth=; Max-Age=0; path=/${clearDomain}`
+        document.cookie = `dispatch_user_email=; Max-Age=0; path=/${clearDomain}`
+        document.cookie = `dispatch_user_roles=; Max-Age=0; path=/${clearDomain}`
 
         const reason = !domainOk
           ? 'Your email domain is not authorized.'
@@ -131,16 +133,23 @@ function AuthCallbackContent() {
 
       // Store token and set cookies for middleware
       localStorage.setItem('dispatch_token', access_token)
-      document.cookie = `dispatch_auth=${access_token}; path=/; max-age=86400; SameSite=Strict`
-      document.cookie = `dispatch_user_email=${user.email}; path=/; max-age=86400; SameSite=Strict`
-      document.cookie = `dispatch_user_roles=${userRoles.join(',')}; path=/; max-age=86400; SameSite=Strict`
+
+      // Build cookie options with proper domain for cross-subdomain support
+      const hostname = window.location.hostname
+      const cookieDomain = hostname.includes('.enclii.dev') ? '; domain=.enclii.dev' : ''
+      const secure = window.location.protocol === 'https:' ? '; Secure' : ''
+      const cookieBase = `; path=/; max-age=86400; SameSite=Lax${cookieDomain}${secure}`
+
+      document.cookie = `dispatch_auth=${access_token}${cookieBase}`
+      document.cookie = `dispatch_user_email=${user.email}${cookieBase}`
+      document.cookie = `dispatch_user_roles=${userRoles.join(',')}${cookieBase}`
 
       setStatus('success')
 
-      // Redirect to dashboard
+      // Redirect to dashboard (increased delay for cookie propagation)
       setTimeout(() => {
         router.push('/')
-      }, 1000)
+      }, 1500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed')
       setStatus('error')
