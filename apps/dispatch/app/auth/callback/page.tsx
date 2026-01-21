@@ -131,25 +131,31 @@ function AuthCallbackContent() {
         return
       }
 
-      // Store token and set cookies for middleware
+      // Store token in localStorage for client-side auth state
       localStorage.setItem('dispatch_token', access_token)
 
-      // Build cookie options with proper domain for cross-subdomain support
-      const hostname = window.location.hostname
-      const cookieDomain = hostname.includes('.enclii.dev') ? '; domain=.enclii.dev' : ''
-      const secure = window.location.protocol === 'https:' ? '; Secure' : ''
-      const cookieBase = `; path=/; max-age=86400; SameSite=Lax${cookieDomain}${secure}`
+      // Set cookies via server-side API route to ensure proper Set-Cookie headers
+      // This avoids race conditions with client-side document.cookie
+      const sessionResponse = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: access_token,
+          email: user.email,
+          roles: userRoles.join(','),
+        }),
+      })
 
-      document.cookie = `dispatch_auth=${access_token}${cookieBase}`
-      document.cookie = `dispatch_user_email=${user.email}${cookieBase}`
-      document.cookie = `dispatch_user_roles=${userRoles.join(',')}${cookieBase}`
+      if (!sessionResponse.ok) {
+        throw new Error('Failed to establish session')
+      }
 
       setStatus('success')
 
-      // Redirect to dashboard (increased delay for cookie propagation)
+      // Redirect to dashboard - cookies are now set via Set-Cookie headers
       setTimeout(() => {
         router.push('/')
-      }, 1500)
+      }, 500)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed')
       setStatus('error')
