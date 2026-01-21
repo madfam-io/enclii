@@ -42,6 +42,15 @@ spec:
           value: https://api.enclii.dev
         - name: NEXT_PUBLIC_JANUA_URL
           value: https://auth.madfam.io
+        # Admin access control (domain + role-based authorization)
+        - name: ALLOWED_ADMIN_DOMAINS
+          value: "@madfam.io"
+        - name: ALLOWED_ADMIN_ROLES
+          value: "superadmin,admin,operator"
+        - name: NEXT_PUBLIC_ALLOWED_ADMIN_DOMAINS
+          value: "@madfam.io"
+        - name: NEXT_PUBLIC_ALLOWED_ADMIN_ROLES
+          value: "superadmin,admin,operator"
         - name: CLOUDFLARE_API_TOKEN
           valueFrom:
             secretKeyRef:

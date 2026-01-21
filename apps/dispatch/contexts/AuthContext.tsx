@@ -123,29 +123,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const domainOk = isAllowedDomain(userData.email)
         const roleOk = hasAllowedRole(userRoles)
 
+        // Build cookie options with proper domain for cross-subdomain support
+        const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
+        const cookieDomain = hostname.includes('.enclii.dev') ? '; domain=.enclii.dev' : ''
+        const secure = typeof window !== 'undefined' && window.location.protocol === 'https:' ? '; Secure' : ''
+        const cookieBase = `; path=/; max-age=86400; SameSite=Lax${cookieDomain}${secure}`
+        const cookieClear = `; Max-Age=0; path=/${cookieDomain}`
+
         if (!domainOk || !roleOk) {
           const reason = !domainOk
             ? 'Your email domain is not authorized for Dispatch access.'
             : 'You do not have the required role for Dispatch access.'
           setError(`Access denied. ${reason}`)
           localStorage.removeItem('dispatch_token')
-          document.cookie = 'dispatch_auth=; Max-Age=0; path=/'
-          document.cookie = 'dispatch_user_email=; Max-Age=0; path=/'
-          document.cookie = 'dispatch_user_roles=; Max-Age=0; path=/'
+          document.cookie = `dispatch_auth=${cookieClear}`
+          document.cookie = `dispatch_user_email=${cookieClear}`
+          document.cookie = `dispatch_user_roles=${cookieClear}`
           setUser(null)
         } else {
           // Set user with roles
           setUser({ ...userData, roles: userRoles })
           // Set cookies for middleware (roles as comma-separated string)
-          document.cookie = `dispatch_auth=${token}; path=/; max-age=86400; SameSite=Strict`
-          document.cookie = `dispatch_user_email=${userData.email}; path=/; max-age=86400; SameSite=Strict`
-          document.cookie = `dispatch_user_roles=${userRoles.join(',')}; path=/; max-age=86400; SameSite=Strict`
+          document.cookie = `dispatch_auth=${token}${cookieBase}`
+          document.cookie = `dispatch_user_email=${userData.email}${cookieBase}`
+          document.cookie = `dispatch_user_roles=${userRoles.join(',')}${cookieBase}`
         }
       } else {
         localStorage.removeItem('dispatch_token')
-        document.cookie = 'dispatch_auth=; Max-Age=0; path=/'
-        document.cookie = 'dispatch_user_email=; Max-Age=0; path=/'
-        document.cookie = 'dispatch_user_roles=; Max-Age=0; path=/'
+        const clearDomain = hostname.includes('.enclii.dev') ? '; domain=.enclii.dev' : ''
+        document.cookie = `dispatch_auth=; Max-Age=0; path=/${clearDomain}`
+        document.cookie = `dispatch_user_email=; Max-Age=0; path=/${clearDomain}`
+        document.cookie = `dispatch_user_roles=; Max-Age=0; path=/${clearDomain}`
       }
     } catch (err) {
       console.error('Auth check failed:', err)
@@ -189,9 +197,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       localStorage.removeItem('dispatch_token')
-      document.cookie = 'dispatch_auth=; Max-Age=0; path=/'
-      document.cookie = 'dispatch_user_email=; Max-Age=0; path=/'
-      document.cookie = 'dispatch_user_roles=; Max-Age=0; path=/'
+      // Clear cookies with proper domain
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
+      const clearDomain = hostname.includes('.enclii.dev') ? '; domain=.enclii.dev' : ''
+      document.cookie = `dispatch_auth=; Max-Age=0; path=/${clearDomain}`
+      document.cookie = `dispatch_user_email=; Max-Age=0; path=/${clearDomain}`
+      document.cookie = `dispatch_user_roles=; Max-Age=0; path=/${clearDomain}`
       setUser(null)
       router.push('/login')
     }
