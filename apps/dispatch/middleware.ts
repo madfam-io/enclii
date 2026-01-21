@@ -49,11 +49,12 @@ function hasAllowedRole(rolesString: string | undefined): boolean {
 const publicPaths = [
   '/login',
   '/auth/callback',
-  '/api/auth',
+  '/api/auth', // Includes /api/auth/session for cookie setting
   '/api/health',
   '/_next',
   '/favicon.ico',
   '/public',
+  '/access-denied',
 ]
 
 function isPublicPath(pathname: string): boolean {

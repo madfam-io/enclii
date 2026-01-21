@@ -150,7 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } else {
         localStorage.removeItem('dispatch_token')
-        const clearDomain = hostname.includes('.enclii.dev') ? '; domain=.enclii.dev' : ''
+        const elseHostname = typeof window !== 'undefined' ? window.location.hostname : ''
+        const clearDomain = elseHostname.includes('.enclii.dev') ? '; domain=.enclii.dev' : ''
         document.cookie = `dispatch_auth=; Max-Age=0; path=/${clearDomain}`
         document.cookie = `dispatch_user_email=; Max-Age=0; path=/${clearDomain}`
         document.cookie = `dispatch_user_roles=; Max-Age=0; path=/${clearDomain}`
