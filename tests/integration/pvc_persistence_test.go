@@ -88,15 +88,16 @@ SELECT COUNT(*) FROM persistence_test;
 
 	// Delete the pod to trigger restart
 	t.Log("Deleting PostgreSQL pod to trigger restart...")
-	err = helper.DeletePod(ctx, pod.Name)
+	oldPodName := pod.Name
+	err = helper.DeletePod(ctx, oldPodName)
 	require.NoError(t, err, "should delete pod")
 
-	// Wait for new pod to be ready
+	// Wait for new pod to be ready (skips old pod automatically)
 	t.Log("Waiting for new PostgreSQL pod to be ready...")
-	newPod, err := helper.WaitForPodReady(ctx, "app=postgres", 2*time.Minute)
+	newPod, err := helper.WaitForNewPodReady(ctx, "app=postgres", oldPodName, 2*time.Minute)
 	require.NoError(t, err, "new PostgreSQL pod should become ready")
 	require.NotNil(t, newPod, "new PostgreSQL pod should exist")
-	assert.NotEqual(t, pod.Name, newPod.Name, "new pod should have different name")
+	assert.NotEqual(t, oldPodName, newPod.Name, "new pod should have different name")
 
 	t.Logf("New PostgreSQL pod ready: %s", newPod.Name)
 
@@ -188,15 +189,16 @@ func TestRedisPersistence(t *testing.T) {
 
 	// Delete the pod to trigger restart
 	t.Log("Deleting Redis pod to trigger restart...")
-	err = helper.DeletePod(ctx, pod.Name)
+	oldPodName := pod.Name
+	err = helper.DeletePod(ctx, oldPodName)
 	require.NoError(t, err, "should delete pod")
 
-	// Wait for new pod to be ready
+	// Wait for new pod to be ready (skips old pod automatically)
 	t.Log("Waiting for new Redis pod to be ready...")
-	newPod, err := helper.WaitForPodReady(ctx, "app=redis", 2*time.Minute)
+	newPod, err := helper.WaitForNewPodReady(ctx, "app=redis", oldPodName, 2*time.Minute)
 	require.NoError(t, err, "new Redis pod should become ready")
 	require.NotNil(t, newPod, "new Redis pod should exist")
-	assert.NotEqual(t, pod.Name, newPod.Name, "new pod should have different name")
+	assert.NotEqual(t, oldPodName, newPod.Name, "new pod should have different name")
 
 	t.Logf("New Redis pod ready: %s", newPod.Name)
 

@@ -255,6 +255,65 @@ func (h *TestHelper) DeletePod(ctx context.Context, name string) error {
 	return h.clientset.CoreV1().Pods(h.namespace).Delete(ctx, name, metav1.DeleteOptions{})
 }
 
+// WaitForPodDeleted waits for a specific pod to be fully deleted
+func (h *TestHelper) WaitForPodDeleted(ctx context.Context, name string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		_, err := h.clientset.CoreV1().Pods(h.namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil // Pod is deleted
+			}
+			return err
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	return fmt.Errorf("timeout waiting for pod %s to be deleted", name)
+}
+
+// WaitForNewPodReady waits for a new pod (different from oldPodName) to be ready
+func (h *TestHelper) WaitForNewPodReady(ctx context.Context, labelSelector string, oldPodName string, timeout time.Duration) (*corev1.Pod, error) {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		pods, err := h.clientset.CoreV1().Pods(h.namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: labelSelector,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		for i := range pods.Items {
+			pod := &pods.Items[i]
+			// Skip the old pod and pods that are terminating
+			if pod.Name == oldPodName || pod.DeletionTimestamp != nil {
+				continue
+			}
+
+			if pod.Status.Phase == corev1.PodRunning {
+				// Check all containers are ready
+				allReady := true
+				for _, condition := range pod.Status.Conditions {
+					if condition.Type == corev1.PodReady && condition.Status != corev1.ConditionTrue {
+						allReady = false
+						break
+					}
+				}
+
+				if allReady {
+					return pod, nil
+				}
+			}
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+
+	return nil, fmt.Errorf("timeout waiting for new pod with selector %s (excluding %s)", labelSelector, oldPodName)
+}
+
 // GetIngress gets an Ingress resource
 func (h *TestHelper) GetIngress(ctx context.Context, name string) (*networkingv1.Ingress, error) {
 	return h.clientset.NetworkingV1().Ingresses(h.namespace).Get(ctx, name, metav1.GetOptions{})
