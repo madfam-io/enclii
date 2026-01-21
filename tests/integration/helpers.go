@@ -319,6 +319,122 @@ func (h *TestHelper) GetIngress(ctx context.Context, name string) (*networkingv1
 	return h.clientset.NetworkingV1().Ingresses(h.namespace).Get(ctx, name, metav1.GetOptions{})
 }
 
+// CreateIngress creates an Ingress resource with TLS and cert-manager configuration
+func (h *TestHelper) CreateIngress(ctx context.Context, name, host, serviceName string, servicePort int32, tlsIssuer string) (*networkingv1.Ingress, error) {
+	pathType := networkingv1.PathTypePrefix
+
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: h.namespace,
+			Annotations: map[string]string{
+				"cert-manager.io/cluster-issuer":                 tlsIssuer,
+				"nginx.ingress.kubernetes.io/ssl-redirect":       "true",
+				"nginx.ingress.kubernetes.io/force-ssl-redirect": "true",
+			},
+		},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: ptr.To("nginx"),
+			TLS: []networkingv1.IngressTLS{
+				{
+					Hosts:      []string{host},
+					SecretName: name + "-tls",
+				},
+			},
+			Rules: []networkingv1.IngressRule{
+				{
+					Host: host,
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
+								{
+									Path:     "/",
+									PathType: &pathType,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: serviceName,
+											Port: networkingv1.ServiceBackendPort{
+												Number: servicePort,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return h.clientset.NetworkingV1().Ingresses(h.namespace).Create(ctx, ingress, metav1.CreateOptions{})
+}
+
+// UpdateIngressAnnotation updates an annotation on an Ingress
+func (h *TestHelper) UpdateIngressAnnotation(ctx context.Context, name, key, value string) (*networkingv1.Ingress, error) {
+	ingress, err := h.GetIngress(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if ingress.Annotations == nil {
+		ingress.Annotations = make(map[string]string)
+	}
+	ingress.Annotations[key] = value
+
+	return h.clientset.NetworkingV1().Ingresses(h.namespace).Update(ctx, ingress, metav1.UpdateOptions{})
+}
+
+// DeleteIngress deletes an Ingress resource
+func (h *TestHelper) DeleteIngress(ctx context.Context, name string) error {
+	return h.clientset.NetworkingV1().Ingresses(h.namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+// WaitForIngressDeleted waits for an Ingress to be deleted
+func (h *TestHelper) WaitForIngressDeleted(ctx context.Context, name string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		_, err := h.GetIngress(ctx, name)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+		time.Sleep(2 * time.Second)
+	}
+
+	return fmt.Errorf("timeout waiting for Ingress %s to be deleted", name)
+}
+
+// CreateBackendService creates a simple ClusterIP service for Ingress backend
+func (h *TestHelper) CreateBackendService(ctx context.Context, name string, port int32) error {
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: h.namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"app": name,
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Port:     port,
+					Protocol: corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+
+	_, err := h.clientset.CoreV1().Services(h.namespace).Create(ctx, service, metav1.CreateOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
+}
+
 // WaitForIngressCreated waits for an Ingress to be created
 func (h *TestHelper) WaitForIngressCreated(ctx context.Context, name string, timeout time.Duration) (*networkingv1.Ingress, error) {
 	deadline := time.Now().Add(timeout)
