@@ -407,6 +407,11 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace, 
 							VolumeMounts:   buildVolumeMountsWithKubeconfig(req.Service.Volumes, req.EnvVars),
 						},
 					},
+					// ImagePullSecrets for private registries (GHCR, etc.)
+					// This ensures pods can pull images that require authentication
+					ImagePullSecrets: []corev1.LocalObjectReference{
+						{Name: "enclii-registry-credentials"},
+					},
 					Volumes:                       buildVolumesWithKubeconfig(req.Service.Volumes, req.Service.Name, req.EnvVars),
 					RestartPolicy:                 corev1.RestartPolicyAlways,
 					TerminationGracePeriodSeconds: &[]int64{30}[0],
