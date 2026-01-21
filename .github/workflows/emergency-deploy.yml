@@ -82,7 +82,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-switchyard-api]
     if: always() && (needs.build-switchyard-api.result == 'success' || needs.build-switchyard-api.result == 'skipped')
-    environment: production
 
     steps:
       - uses: actions/checkout@v6
