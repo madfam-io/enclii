@@ -94,7 +94,7 @@ jobs:
             name: standard
           provisioner: rancher.io/local-path
           reclaimPolicy: Delete
-          volumeBindingMode: Immediate
+          volumeBindingMode: WaitForFirstConsumer
           EOF
 
           kubectl get storageclass
@@ -124,6 +124,17 @@ jobs:
           echo "Waiting for ClusterIssuers to be ready..."
           sleep 10
           kubectl get clusterissuer
+
+      - name: Pre-pull test images
+        run: |
+          # Pre-pull images used by integration tests to avoid timeout during pod scheduling
+          echo "Pre-pulling postgres:15-alpine..."
+          docker exec enclii-test-control-plane crictl pull postgres:15-alpine
+          echo "Pre-pulling redis:7-alpine..."
+          docker exec enclii-test-control-plane crictl pull redis:7-alpine
+          echo "Pre-pulling busybox:1.36..."
+          docker exec enclii-test-control-plane crictl pull busybox:1.36
+          echo "Images pre-pulled successfully"
 
       - name: Download Go dependencies
         working-directory: tests/integration
