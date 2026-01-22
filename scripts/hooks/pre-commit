@@ -181,5 +181,41 @@ if [ -n "$GO_FILES" ]; then
     echo -e "${GREEN}  ✓ Go lint passed${NC}"
 fi
 
+# =============================================================================
+# OPERATION RATCHET - Manifest Stability Validation
+# =============================================================================
+
+# Check if any critical manifest files are staged
+MANIFEST_FILES=$(echo "$STAGED_FILES" | grep -E '(infra/k8s/|apps/.*/k8s/|\.github/workflows/)' || true)
+if [ -n "$MANIFEST_FILES" ]; then
+    echo -e "\n${BLUE}🔒 Running Operation Ratchet validation...${NC}"
+
+    # Run manifest audit (quick check for critical config keys)
+    if [ -x "./scripts/validate.sh" ]; then
+        echo -e "${YELLOW}  → Checking manifest critical keys...${NC}"
+        # Run in quick mode to avoid slow build checks
+        if ! ./scripts/validate.sh 2>&1 | grep -E "(MISSING|FAILED)" > /dev/null; then
+            echo -e "${GREEN}  ✓ Manifest audit passed${NC}"
+        else
+            echo -e "${RED}❌ Operation Ratchet: Critical config keys missing!${NC}"
+            echo -e "${YELLOW}Run './scripts/validate.sh' to see details${NC}"
+            exit 1
+        fi
+    fi
+
+    # Run golden config check if golden configs exist
+    if [ -x "./scripts/check-golden.sh" ] && [ -d "tests/golden/k8s" ]; then
+        echo -e "${YELLOW}  → Checking golden config drift...${NC}"
+        if ./scripts/check-golden.sh > /dev/null 2>&1; then
+            echo -e "${GREEN}  ✓ Golden config check passed${NC}"
+        else
+            echo -e "${RED}❌ Operation Ratchet: Golden config drift detected!${NC}"
+            echo -e "${YELLOW}Run './scripts/check-golden.sh' to see diffs${NC}"
+            echo -e "${YELLOW}If changes are intentional, run './scripts/update-golden.sh'${NC}"
+            exit 1
+        fi
+    fi
+fi
+
 echo -e "\n${GREEN}✅ All pre-commit validations passed${NC}"
 exit 0
