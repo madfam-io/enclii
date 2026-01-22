@@ -91,7 +91,7 @@ jobs:
             name: standard
           provisioner: rancher.io/local-path
           reclaimPolicy: Delete
-          volumeBindingMode: WaitForFirstConsumer
+          volumeBindingMode: Immediate
           EOF
 
           kubectl get storageclass

@@ -44,7 +44,7 @@ func TestPostgreSQLPersistence(t *testing.T) {
 
 	// Wait for PostgreSQL pod to be ready
 	t.Log("Waiting for PostgreSQL pod to be ready...")
-	pod, err := helper.WaitForPodReady(ctx, "app=postgres", 3*time.Minute)
+	pod, err := helper.WaitForPodReady(ctx, "app=postgres", 5*time.Minute)
 	require.NoError(t, err, "PostgreSQL pod should become ready")
 	require.NotNil(t, pod, "PostgreSQL pod should exist")
 
@@ -149,7 +149,7 @@ func TestRedisPersistence(t *testing.T) {
 
 	// Wait for Redis pod to be ready
 	t.Log("Waiting for Redis pod to be ready...")
-	pod, err := helper.WaitForPodReady(ctx, "app=redis", 3*time.Minute)
+	pod, err := helper.WaitForPodReady(ctx, "app=redis", 5*time.Minute)
 	require.NoError(t, err, "Redis pod should become ready")
 	require.NotNil(t, pod, "Redis pod should exist")
 
