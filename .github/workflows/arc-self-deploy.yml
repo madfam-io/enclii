@@ -70,7 +70,7 @@ jobs:
 
       - name: Detect changes
         id: changes
-        uses: tj-actions/changed-files@v44
+        uses: tj-actions/changed-files@v47
         with:
           files: |
             infra/helm/arc/**
