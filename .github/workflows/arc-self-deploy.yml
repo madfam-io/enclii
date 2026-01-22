@@ -141,10 +141,22 @@ jobs:
     runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners' || 'ubuntu-latest' }}
     environment: production
     steps:
+      - name: Check KUBECONFIG secret
+        id: check-secret
+        run: |
+          if [ -z "${{ secrets.KUBECONFIG_PRODUCTION }}" ]; then
+            echo "::notice::KUBECONFIG_PRODUCTION secret not configured - skipping deployment"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout
+        if: steps.check-secret.outputs.skip != 'true'
         uses: actions/checkout@v6
 
       - name: Setup kubectl
+        if: steps.check-secret.outputs.skip != 'true'
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
@@ -154,27 +166,31 @@ jobs:
           kubectl cluster-info
 
       - name: Setup Helm
+        if: steps.check-secret.outputs.skip != 'true'
         uses: azure/setup-helm@v4
         with:
           version: ${{ env.HELM_VERSION }}
 
       - name: Check dry run
-        if: ${{ github.event.inputs.dry_run == 'true' }}
+        if: steps.check-secret.outputs.skip != 'true' && github.event.inputs.dry_run == 'true'
         run: |
           echo "::notice::Dry run mode - skipping actual deployment"
           exit 0
 
       - name: Apply base manifests
+        if: steps.check-secret.outputs.skip != 'true'
         run: |
           echo "Applying base Kubernetes manifests..."
           kubectl apply -f infra/k8s/base/arc/
 
       - name: Apply production manifests
+        if: steps.check-secret.outputs.skip != 'true'
         run: |
           echo "Applying production Kubernetes manifests..."
           kubectl apply -f infra/k8s/production/arc/
 
       - name: Upgrade ARC Controller
+        if: steps.check-secret.outputs.skip != 'true'
         run: |
           echo "Upgrading ARC Controller..."
           helm upgrade --install arc-controller \
@@ -186,6 +202,7 @@ jobs:
             --timeout 5m
 
       - name: Determine target color
+        if: steps.check-secret.outputs.skip != 'true'
         id: color
         run: |
           INPUT_COLOR="${{ github.event.inputs.target_color }}"
@@ -210,12 +227,14 @@ jobs:
           echo "::notice::Blue-green switch: ${CURRENT:-blue} -> ${TARGET}"
 
       - name: Execute blue-green switch
+        if: steps.check-secret.outputs.skip != 'true'
         run: |
           echo "Executing blue-green switch to ${{ steps.color.outputs.target }}..."
           chmod +x infra/scripts/arc/blue-green-switch.sh
           ./infra/scripts/arc/blue-green-switch.sh ${{ steps.color.outputs.target }} --force
 
       - name: Record deployment
+        if: steps.check-secret.outputs.skip != 'true'
         run: |
           echo "Recording deployment metadata..."
           kubectl annotate autoscalingrunnerset \
