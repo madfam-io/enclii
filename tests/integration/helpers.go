@@ -370,6 +370,175 @@ func (h *TestHelper) CreateIngress(ctx context.Context, name, host, serviceName 
 	return h.clientset.NetworkingV1().Ingresses(h.namespace).Create(ctx, ingress, metav1.CreateOptions{})
 }
 
+// IngressPath represents a path configuration for an Ingress
+type IngressPath struct {
+	Path     string
+	PathType networkingv1.PathType
+	Service  string
+	Port     int32
+}
+
+// CreateIngressWithPaths creates an Ingress with multiple path configurations
+func (h *TestHelper) CreateIngressWithPaths(ctx context.Context, name, host string, paths []IngressPath, tlsIssuer string) (*networkingv1.Ingress, error) {
+	httpPaths := make([]networkingv1.HTTPIngressPath, len(paths))
+	for i, p := range paths {
+		pathType := p.PathType
+		httpPaths[i] = networkingv1.HTTPIngressPath{
+			Path:     p.Path,
+			PathType: &pathType,
+			Backend: networkingv1.IngressBackend{
+				Service: &networkingv1.IngressServiceBackend{
+					Name: p.Service,
+					Port: networkingv1.ServiceBackendPort{
+						Number: p.Port,
+					},
+				},
+			},
+		}
+	}
+
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: h.namespace,
+			Annotations: map[string]string{
+				"cert-manager.io/cluster-issuer":                 tlsIssuer,
+				"nginx.ingress.kubernetes.io/ssl-redirect":       "true",
+				"nginx.ingress.kubernetes.io/force-ssl-redirect": "true",
+			},
+		},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: ptr.To("nginx"),
+			TLS: []networkingv1.IngressTLS{
+				{
+					Hosts:      []string{host},
+					SecretName: name + "-tls",
+				},
+			},
+			Rules: []networkingv1.IngressRule{
+				{
+					Host: host,
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: httpPaths,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	return h.clientset.NetworkingV1().Ingresses(h.namespace).Create(ctx, ingress, metav1.CreateOptions{})
+}
+
+// CreateIngressWithMultipleHosts creates an Ingress with multiple host rules
+func (h *TestHelper) CreateIngressWithMultipleHosts(ctx context.Context, name string, hosts []string, serviceName string, servicePort int32, tlsIssuer string) (*networkingv1.Ingress, error) {
+	pathType := networkingv1.PathTypePrefix
+
+	rules := make([]networkingv1.IngressRule, len(hosts))
+	for i, host := range hosts {
+		rules[i] = networkingv1.IngressRule{
+			Host: host,
+			IngressRuleValue: networkingv1.IngressRuleValue{
+				HTTP: &networkingv1.HTTPIngressRuleValue{
+					Paths: []networkingv1.HTTPIngressPath{
+						{
+							Path:     "/",
+							PathType: &pathType,
+							Backend: networkingv1.IngressBackend{
+								Service: &networkingv1.IngressServiceBackend{
+									Name: serviceName,
+									Port: networkingv1.ServiceBackendPort{
+										Number: servicePort,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	ingress := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: h.namespace,
+			Annotations: map[string]string{
+				"cert-manager.io/cluster-issuer":                 tlsIssuer,
+				"nginx.ingress.kubernetes.io/ssl-redirect":       "true",
+				"nginx.ingress.kubernetes.io/force-ssl-redirect": "true",
+			},
+		},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: ptr.To("nginx"),
+			TLS: []networkingv1.IngressTLS{
+				{
+					Hosts:      hosts,
+					SecretName: name + "-tls",
+				},
+			},
+			Rules: rules,
+		},
+	}
+
+	return h.clientset.NetworkingV1().Ingresses(h.namespace).Create(ctx, ingress, metav1.CreateOptions{})
+}
+
+// AddIngressPath adds a new path to an existing Ingress
+func (h *TestHelper) AddIngressPath(ctx context.Context, name string, path IngressPath) (*networkingv1.Ingress, error) {
+	ingress, err := h.GetIngress(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ingress.Spec.Rules) == 0 || ingress.Spec.Rules[0].HTTP == nil {
+		return nil, fmt.Errorf("ingress %s has no HTTP rules", name)
+	}
+
+	pathType := path.PathType
+	newPath := networkingv1.HTTPIngressPath{
+		Path:     path.Path,
+		PathType: &pathType,
+		Backend: networkingv1.IngressBackend{
+			Service: &networkingv1.IngressServiceBackend{
+				Name: path.Service,
+				Port: networkingv1.ServiceBackendPort{
+					Number: path.Port,
+				},
+			},
+		},
+	}
+
+	ingress.Spec.Rules[0].HTTP.Paths = append(ingress.Spec.Rules[0].HTTP.Paths, newPath)
+
+	return h.clientset.NetworkingV1().Ingresses(h.namespace).Update(ctx, ingress, metav1.UpdateOptions{})
+}
+
+// RemoveIngressPath removes a path from an existing Ingress
+func (h *TestHelper) RemoveIngressPath(ctx context.Context, name, pathToRemove string) (*networkingv1.Ingress, error) {
+	ingress, err := h.GetIngress(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ingress.Spec.Rules) == 0 || ingress.Spec.Rules[0].HTTP == nil {
+		return nil, fmt.Errorf("ingress %s has no HTTP rules", name)
+	}
+
+	paths := ingress.Spec.Rules[0].HTTP.Paths
+	newPaths := make([]networkingv1.HTTPIngressPath, 0, len(paths))
+	for _, p := range paths {
+		if p.Path != pathToRemove {
+			newPaths = append(newPaths, p)
+		}
+	}
+
+	ingress.Spec.Rules[0].HTTP.Paths = newPaths
+
+	return h.clientset.NetworkingV1().Ingresses(h.namespace).Update(ctx, ingress, metav1.UpdateOptions{})
+}
+
 // UpdateIngressAnnotation updates an annotation on an Ingress
 func (h *TestHelper) UpdateIngressAnnotation(ctx context.Context, name, key, value string) (*networkingv1.Ingress, error) {
 	ingress, err := h.GetIngress(ctx, name)

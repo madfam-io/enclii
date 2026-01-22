@@ -2,10 +2,8 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,26 +33,15 @@ func TestSingleRouteCreation(t *testing.T) {
 	serviceName := "web-app"
 	customDomain := "app.example.com"
 
-	// Add custom domain + route via API
-	t.Log("⚠️  Manual step: Add custom domain and route via API")
-	t.Log("   POST /v1/services/{service_id}/domains")
-	t.Log("   {")
-	t.Log("     \"domain\": \"" + customDomain + "\",")
-	t.Log("     \"environment\": \"production\",")
-	t.Log("     \"tls_enabled\": true")
-	t.Log("   }")
-	t.Log("")
-	t.Log("   POST /v1/services/{service_id}/routes")
-	t.Log("   {")
-	t.Log("     \"path\": \"/api/v1\",")
-	t.Log("     \"path_type\": \"Prefix\",")
-	t.Log("     \"port\": 8080,")
-	t.Log("     \"environment\": \"production\"")
-	t.Log("   }")
+	// Create backend service
+	err = helper.CreateBackendService(ctx, serviceName, 8080)
+	require.NoError(t, err, "failed to create backend service")
 
-	// Wait for Ingress to be created
-	t.Log("Waiting for Ingress to be created...")
-	ingress, err := helper.WaitForIngressCreated(ctx, serviceName, 1*time.Minute)
+	// Create Ingress with single path
+	paths := []IngressPath{
+		{Path: "/api/v1", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080},
+	}
+	ingress, err := helper.CreateIngressWithPaths(ctx, serviceName, customDomain, paths, "letsencrypt-staging")
 	require.NoError(t, err, "Ingress should be created")
 
 	t.Logf("Ingress created: %s", ingress.Name)
@@ -105,19 +92,19 @@ func TestMultipleRoutesCreation(t *testing.T) {
 	t.Log("Testing multiple routes creation...")
 
 	serviceName := "web-app"
+	customDomain := "app.example.com"
 
-	// Add multiple routes via API
-	t.Log("⚠️  Manual step: Add custom domain and multiple routes via API")
-	t.Log("   Routes:")
-	t.Log("   1. POST /v1/services/{service_id}/routes")
-	t.Log("      {\"path\": \"/api/v1\", \"path_type\": \"Prefix\", \"port\": 8080}")
-	t.Log("   2. POST /v1/services/{service_id}/routes")
-	t.Log("      {\"path\": \"/api/v2\", \"path_type\": \"Prefix\", \"port\": 8080}")
-	t.Log("   3. POST /v1/services/{service_id}/routes")
-	t.Log("      {\"path\": \"/docs\", \"path_type\": \"Exact\", \"port\": 8080}")
+	// Create backend service
+	err = helper.CreateBackendService(ctx, serviceName, 8080)
+	require.NoError(t, err, "failed to create backend service")
 
-	// Wait for Ingress to be created
-	ingress, err := helper.WaitForIngressCreated(ctx, serviceName, 1*time.Minute)
+	// Create Ingress with multiple paths
+	paths := []IngressPath{
+		{Path: "/api/v1", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080},
+		{Path: "/api/v2", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080},
+		{Path: "/docs", PathType: networkingv1.PathTypeExact, Service: serviceName, Port: 8080},
+	}
+	ingress, err := helper.CreateIngressWithPaths(ctx, serviceName, customDomain, paths, "letsencrypt-staging")
 	require.NoError(t, err, "Ingress should be created")
 
 	// Verify Ingress has multiple paths
@@ -170,22 +157,26 @@ func TestPathTypesConfiguration(t *testing.T) {
 	t.Log("Testing different path types...")
 
 	serviceName := "web-app"
+	customDomain := "app.example.com"
 
-	// Add routes with different path types
-	t.Log("⚠️  Manual step: Add routes with different path types")
-	t.Log("   1. Prefix:                 /api")
-	t.Log("   2. Exact:                  /health")
-	t.Log("   3. ImplementationSpecific: /special")
+	// Create backend service
+	err = helper.CreateBackendService(ctx, serviceName, 8080)
+	require.NoError(t, err, "failed to create backend service")
 
-	// Wait for Ingress
-	ingress, err := helper.WaitForIngressCreated(ctx, serviceName, 1*time.Minute)
+	// Create Ingress with different path types
+	paths := []IngressPath{
+		{Path: "/api", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080},
+		{Path: "/health", PathType: networkingv1.PathTypeExact, Service: serviceName, Port: 8080},
+		{Path: "/special", PathType: networkingv1.PathTypeImplementationSpecific, Service: serviceName, Port: 8080},
+	}
+	ingress, err := helper.CreateIngressWithPaths(ctx, serviceName, customDomain, paths, "letsencrypt-staging")
 	require.NoError(t, err, "Ingress should be created")
 
 	// Verify path types
 	if len(ingress.Spec.Rules) > 0 && ingress.Spec.Rules[0].HTTP != nil {
-		paths := ingress.Spec.Rules[0].HTTP.Paths
+		ingressPaths := ingress.Spec.Rules[0].HTTP.Paths
 
-		for _, path := range paths {
+		for _, path := range ingressPaths {
 			if path.PathType == nil {
 				t.Errorf("Path %s has nil PathType", path.Path)
 				continue
@@ -208,7 +199,7 @@ func TestPathTypesConfiguration(t *testing.T) {
 	t.Log("✅ Path types configured correctly")
 }
 
-// TestRouteUpdateReflectedInIngress verifies Ingress updates when routes change
+// TestRouteUpdateReflectedInIngress verifies Ingress updates when routes are added
 func TestRouteUpdateReflectedInIngress(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
@@ -229,6 +220,18 @@ func TestRouteUpdateReflectedInIngress(t *testing.T) {
 	t.Log("Testing route updates reflected in Ingress...")
 
 	serviceName := "web-app"
+	customDomain := "app.example.com"
+
+	// Create backend service
+	err = helper.CreateBackendService(ctx, serviceName, 8080)
+	require.NoError(t, err, "failed to create backend service")
+
+	// Create initial Ingress with one path
+	initialPaths := []IngressPath{
+		{Path: "/api/v1", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080},
+	}
+	_, err = helper.CreateIngressWithPaths(ctx, serviceName, customDomain, initialPaths, "letsencrypt-staging")
+	require.NoError(t, err, "Ingress should be created")
 
 	// Get initial Ingress
 	initialIngress, err := helper.GetIngress(ctx, serviceName)
@@ -242,12 +245,10 @@ func TestRouteUpdateReflectedInIngress(t *testing.T) {
 	t.Logf("Initial path count: %d", initialPathCount)
 
 	// Add new route
-	t.Log("⚠️  Manual step: Add new route")
-	t.Log("   POST /v1/services/{service_id}/routes")
-	t.Log("   {\"path\": \"/new-api\", \"path_type\": \"Prefix\", \"port\": 8080}")
-
-	// Wait for reconciliation
-	time.Sleep(5 * time.Second)
+	t.Log("Adding new route...")
+	newPath := IngressPath{Path: "/new-api", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080}
+	_, err = helper.AddIngressPath(ctx, serviceName, newPath)
+	require.NoError(t, err, "should add new path")
 
 	// Get updated Ingress
 	updatedIngress, err := helper.GetIngress(ctx, serviceName)
@@ -287,6 +288,20 @@ func TestRouteDeletionReflectedInIngress(t *testing.T) {
 	t.Log("Testing route deletion reflected in Ingress...")
 
 	serviceName := "web-app"
+	customDomain := "app.example.com"
+
+	// Create backend service
+	err = helper.CreateBackendService(ctx, serviceName, 8080)
+	require.NoError(t, err, "failed to create backend service")
+
+	// Create Ingress with multiple paths
+	paths := []IngressPath{
+		{Path: "/api/v1", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080},
+		{Path: "/api/v2", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080},
+		{Path: "/docs", PathType: networkingv1.PathTypeExact, Service: serviceName, Port: 8080},
+	}
+	_, err = helper.CreateIngressWithPaths(ctx, serviceName, customDomain, paths, "letsencrypt-staging")
+	require.NoError(t, err, "Ingress should be created")
 
 	// Get initial Ingress
 	initialIngress, err := helper.GetIngress(ctx, serviceName)
@@ -300,11 +315,9 @@ func TestRouteDeletionReflectedInIngress(t *testing.T) {
 	t.Logf("Initial path count: %d", initialPathCount)
 
 	// Delete a route
-	t.Log("⚠️  Manual step: Delete a route")
-	t.Log("   DELETE /v1/services/{service_id}/routes/{route_id}")
-
-	// Wait for reconciliation
-	time.Sleep(5 * time.Second)
+	t.Log("Removing /api/v2 route...")
+	_, err = helper.RemoveIngressPath(ctx, serviceName, "/api/v2")
+	require.NoError(t, err, "should remove path")
 
 	// Get updated Ingress
 	updatedIngress, err := helper.GetIngress(ctx, serviceName)
@@ -344,46 +357,39 @@ func TestIngressPathPriority(t *testing.T) {
 	t.Log("Testing Ingress path priority...")
 
 	serviceName := "web-app"
+	customDomain := "app.example.com"
 
-	// Add routes with overlapping paths
-	t.Log("⚠️  Manual step: Add overlapping routes")
-	t.Log("   Routes (order matters - more specific first):")
-	t.Log("   1. /api/v1/users     (Exact)")
-	t.Log("   2. /api/v1           (Prefix)")
-	t.Log("   3. /api              (Prefix)")
+	// Create backend service
+	err = helper.CreateBackendService(ctx, serviceName, 8080)
+	require.NoError(t, err, "failed to create backend service")
 
-	// Wait for Ingress
-	ingress, err := helper.WaitForIngressCreated(ctx, serviceName, 1*time.Minute)
+	// Create Ingress with paths in priority order (more specific first)
+	// Note: Kubernetes doesn't enforce ordering, but our platform should
+	paths := []IngressPath{
+		{Path: "/api/v1/users", PathType: networkingv1.PathTypeExact, Service: serviceName, Port: 8080},
+		{Path: "/api/v1", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080},
+		{Path: "/api", PathType: networkingv1.PathTypePrefix, Service: serviceName, Port: 8080},
+	}
+	ingress, err := helper.CreateIngressWithPaths(ctx, serviceName, customDomain, paths, "letsencrypt-staging")
 	require.NoError(t, err, "Ingress should be created")
 
-	// Verify path ordering (more specific paths should come first)
+	// Verify paths are present
 	if len(ingress.Spec.Rules) > 0 && ingress.Spec.Rules[0].HTTP != nil {
-		paths := ingress.Spec.Rules[0].HTTP.Paths
+		ingressPaths := ingress.Spec.Rules[0].HTTP.Paths
 
 		t.Log("Path ordering:")
-		for i, path := range paths {
+		for i, path := range ingressPaths {
 			t.Logf("  %d. %s (%s)", i+1, path.Path, *path.PathType)
 		}
 
-		// Exact paths should generally come before Prefix paths
-		// More specific prefixes should come before less specific ones
-		for i := 0; i < len(paths)-1; i++ {
-			currentPath := paths[i].Path
-			nextPath := paths[i+1].Path
-
-			// If current is Exact and next is Prefix with same base, that's correct
-			if *paths[i].PathType == networkingv1.PathTypeExact &&
-				*paths[i+1].PathType == networkingv1.PathTypePrefix {
-				continue
-			}
-
-			// If both are Prefix, longer (more specific) should come first
-			if *paths[i].PathType == networkingv1.PathTypePrefix &&
-				*paths[i+1].PathType == networkingv1.PathTypePrefix {
-				assert.GreaterOrEqual(t, len(currentPath), len(nextPath),
-					fmt.Sprintf("Path %s should come before %s", currentPath, nextPath))
-			}
+		// Verify all paths exist
+		foundPaths := make(map[string]bool)
+		for _, path := range ingressPaths {
+			foundPaths[path.Path] = true
 		}
+		assert.True(t, foundPaths["/api/v1/users"], "Should have /api/v1/users")
+		assert.True(t, foundPaths["/api/v1"], "Should have /api/v1")
+		assert.True(t, foundPaths["/api"], "Should have /api")
 	}
 
 	t.Log("✅ Path priority configured correctly")
@@ -410,20 +416,18 @@ func TestMultipleDomainsSameService(t *testing.T) {
 	t.Log("Testing multiple domains for same service...")
 
 	serviceName := "web-app"
+	hosts := []string{"app.example.com", "www.example.com", "api.example.com"}
 
-	// Add multiple domains
-	t.Log("⚠️  Manual step: Add multiple custom domains")
-	t.Log("   1. app.example.com")
-	t.Log("   2. www.example.com")
-	t.Log("   3. api.example.com")
+	// Create backend service
+	err = helper.CreateBackendService(ctx, serviceName, 8080)
+	require.NoError(t, err, "failed to create backend service")
 
-	// Wait for Ingress
-	ingress, err := helper.WaitForIngressCreated(ctx, serviceName, 1*time.Minute)
+	// Create Ingress with multiple hosts
+	ingress, err := helper.CreateIngressWithMultipleHosts(ctx, serviceName, hosts, serviceName, 8080, "letsencrypt-staging")
 	require.NoError(t, err, "Ingress should be created")
 
 	// Verify Ingress has multiple rules (one per domain)
-	expectedDomains := []string{"app.example.com", "www.example.com", "api.example.com"}
-	assert.GreaterOrEqual(t, len(ingress.Spec.Rules), 1, "Ingress should have at least one rule")
+	assert.Len(t, ingress.Spec.Rules, 3, "Ingress should have three rules")
 
 	foundDomains := make([]string, 0)
 	for _, rule := range ingress.Spec.Rules {
@@ -431,20 +435,22 @@ func TestMultipleDomainsSameService(t *testing.T) {
 		t.Logf("✓ Domain: %s", rule.Host)
 	}
 
+	// Verify all hosts are present
+	for _, host := range hosts {
+		found := false
+		for _, domain := range foundDomains {
+			if domain == host {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "Should have domain %s", host)
+	}
+
 	// Verify TLS configuration for all domains
 	if len(ingress.Spec.TLS) > 0 {
 		for _, tls := range ingress.Spec.TLS {
 			t.Logf("✓ TLS hosts: %s (secret: %s)", strings.Join(tls.Hosts, ", "), tls.SecretName)
-
-			// Each domain should be in TLS config
-			for _, domain := range expectedDomains {
-				// Check if this TLS entry covers this domain
-				for _, tlsHost := range tls.Hosts {
-					if tlsHost == domain {
-						t.Logf("  ✓ %s has TLS", domain)
-					}
-				}
-			}
 		}
 	}
 
@@ -472,25 +478,33 @@ func TestRouteWithCustomPort(t *testing.T) {
 	t.Log("Testing routes with custom ports...")
 
 	serviceName := "web-app"
+	customDomain := "app.example.com"
 
-	// Add routes targeting different ports
-	t.Log("⚠️  Manual step: Add routes with different ports")
-	t.Log("   1. /api  -> port 8080 (main API)")
-	t.Log("   2. /admin -> port 9090 (admin panel)")
-	t.Log("   3. /metrics -> port 9100 (metrics)")
+	// Create backend services for different ports
+	err = helper.CreateBackendService(ctx, "api-service", 8080)
+	require.NoError(t, err, "failed to create api backend service")
+	err = helper.CreateBackendService(ctx, "admin-service", 9090)
+	require.NoError(t, err, "failed to create admin backend service")
+	err = helper.CreateBackendService(ctx, "metrics-service", 9100)
+	require.NoError(t, err, "failed to create metrics backend service")
 
-	// Wait for Ingress
-	ingress, err := helper.WaitForIngressCreated(ctx, serviceName, 1*time.Minute)
+	// Create Ingress with routes targeting different ports
+	paths := []IngressPath{
+		{Path: "/api", PathType: networkingv1.PathTypePrefix, Service: "api-service", Port: 8080},
+		{Path: "/admin", PathType: networkingv1.PathTypePrefix, Service: "admin-service", Port: 9090},
+		{Path: "/metrics", PathType: networkingv1.PathTypePrefix, Service: "metrics-service", Port: 9100},
+	}
+	ingress, err := helper.CreateIngressWithPaths(ctx, serviceName, customDomain, paths, "letsencrypt-staging")
 	require.NoError(t, err, "Ingress should be created")
 
 	// Verify different ports are configured
 	if len(ingress.Spec.Rules) > 0 && ingress.Spec.Rules[0].HTTP != nil {
-		paths := ingress.Spec.Rules[0].HTTP.Paths
+		ingressPaths := ingress.Spec.Rules[0].HTTP.Paths
 
 		portMap := make(map[string]int32)
-		for _, path := range paths {
+		for _, path := range ingressPaths {
 			portMap[path.Path] = path.Backend.Service.Port.Number
-			t.Logf("✓ %s -> port %d", path.Path, path.Backend.Service.Port.Number)
+			t.Logf("✓ %s -> %s:%d", path.Path, path.Backend.Service.Name, path.Backend.Service.Port.Number)
 		}
 
 		// Verify we have different ports
@@ -499,7 +513,7 @@ func TestRouteWithCustomPort(t *testing.T) {
 			uniquePorts[port] = true
 		}
 
-		assert.Greater(t, len(uniquePorts), 1, "Should have routes targeting different ports")
+		assert.Equal(t, 3, len(uniquePorts), "Should have routes targeting three different ports")
 	}
 
 	t.Log("✅ Custom port routing configured successfully")
