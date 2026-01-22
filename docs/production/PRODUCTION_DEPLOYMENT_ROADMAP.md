@@ -1151,7 +1151,7 @@ Week 7-8: Testing, Validation & Dogfooding
 
 1. **Create Hetzner account** → https://console.hetzner.cloud/
 2. **Create Cloudflare account** → https://dash.cloudflare.com/sign-up
-3. **Create Ubicloud account** → https://console.ubicloud.com/
+3. **Create Ubicloud account** → https://www.ubicloud.com/
 4. **Review this roadmap** → Confirm approach and budget
 
 ### Week 1 Actions (If Approved)

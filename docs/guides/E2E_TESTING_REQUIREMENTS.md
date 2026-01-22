@@ -329,4 +329,4 @@ test('dashboard accessibility', async ({ page }) => {
 - [Playwright Documentation](https://playwright.dev/docs/intro)
 - [Enclii CLAUDE.md](../../CLAUDE.md)
 - [UI/UX Modernization Plan](~/.claude/plans/serialized-mapping-stonebraker.md)
-- [shadcn/ui Testing Patterns](https://ui.shadcn.com/docs/testing)
+- [shadcn/ui Documentation](https://ui.shadcn.com/docs)
