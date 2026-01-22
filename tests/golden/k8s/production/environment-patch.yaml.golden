@@ -1,0 +1,135 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: switchyard-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: switchyard-api
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        env:
+        # Redis - K8s internal DNS (locked from external access)
+        - name: ENCLII_REDIS_URL
+          value: "redis://redis.data.svc.cluster.local:6379"
+        - name: ENCLII_LOG_LEVEL
+          value: "warn"
+        - name: ENCLII_RATE_LIMIT_REQUESTS_PER_MINUTE
+          value: "10000"
+        - name: ENCLII_DB_POOL_SIZE
+          value: "50"
+        - name: ENCLII_CACHE_TTL_SECONDS
+          value: "7200"
+        - name: ENCLII_ENABLE_PROFILING
+          value: "false"
+        - name: ENCLII_MAX_REQUEST_SIZE
+          value: "10MB"
+        # SSO Configuration - Janua Integration (Full OIDC mode)
+        # Web UI uses OIDC login flow, CLI uses PKCE direct auth
+        - name: ENCLII_AUTH_MODE
+          value: "oidc"
+        # OIDC Provider Configuration
+        - name: ENCLII_OIDC_ISSUER
+          value: "https://auth.madfam.io"
+        - name: ENCLII_OIDC_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: enclii-oidc-credentials
+              key: client-id
+        - name: ENCLII_OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: enclii-oidc-credentials
+              key: client-secret
+        - name: ENCLII_OIDC_REDIRECT_URL
+          value: "https://api.enclii.dev/v1/auth/callback"
+        - name: ENCLII_POST_LOGIN_REDIRECT_URL
+          value: "https://app.enclii.dev/auth/callback"
+        # External JWKS for CLI/API token validation
+        # Note: Janua issues tokens with iss=auth.madfam.io (Operation ALIAS)
+        - name: ENCLII_EXTERNAL_JWKS_URL
+          value: "https://auth.madfam.io/.well-known/jwks.json"
+        - name: ENCLII_EXTERNAL_ISSUER
+          value: "https://auth.madfam.io"
+        # Admin email mapping for OIDC providers that don't include roles in JWT
+        - name: ENCLII_ADMIN_EMAILS
+          value: "admin@madfam.io"
+        # Container Registry Credentials (for pushing built images)
+        - name: ENCLII_REGISTRY
+          value: "ghcr.io/madfam-org"
+        - name: ENCLII_REGISTRY_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: enclii-registry-credentials
+              key: username
+        - name: ENCLII_REGISTRY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: enclii-registry-credentials
+              key: password
+        # GitHub Webhook Secret (for verifying webhook signatures)
+        - name: ENCLII_GITHUB_WEBHOOK_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: enclii-github-webhook
+              key: secret
+        # Build Worker Configuration
+        - name: ENCLII_BUILD_MODE
+          value: "roundhouse"
+        - name: ENCLII_ROUNDHOUSE_URL
+          value: "http://roundhouse:80"
+        - name: ENCLII_SELF_URL
+          value: "http://switchyard-api:4200"
+        # Janua API URL for GitHub token retrieval
+        - name: ENCLII_JANUA_API_URL
+          value: "https://auth.madfam.io"
+        # Cloudflare Integration (for domain status sync)
+        - name: ENCLII_CLOUDFLARE_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: enclii-cloudflare-credentials
+              key: api-token
+              optional: true
+        - name: ENCLII_CLOUDFLARE_ACCOUNT_ID
+          valueFrom:
+            secretKeyRef:
+              name: enclii-cloudflare-credentials
+              key: account-id
+              optional: true
+        - name: ENCLII_CLOUDFLARE_ZONE_ID
+          valueFrom:
+            secretKeyRef:
+              name: enclii-cloudflare-credentials
+              key: zone-id
+              optional: true
+        - name: ENCLII_CLOUDFLARE_TUNNEL_ID
+          valueFrom:
+            secretKeyRef:
+              name: enclii-cloudflare-credentials
+              key: tunnel-id
+              optional: true
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 3
+          timeoutSeconds: 2
+          successThreshold: 2
+          failureThreshold: 2
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 2

@@ -100,3 +100,91 @@ kubectl rollout restart deployment/cloudflared -n cloudflare-tunnel
 - [CLAUDE.md](./CLAUDE.md) - Full development guide
 - [Janua System Context](/Users/aldoruizluna/labspace/janua/SYSTEM_CONTEXT.md)
 - [Dhanam System Context](/Users/aldoruizluna/labspace/dhanam/SYSTEM_CONTEXT.md)
+
+---
+
+## Operation Ratchet - Rules of Engagement
+
+**Purpose:** Stability enforcement to prevent configuration drift and regression.
+
+### Rule 1: Always Validate Before Confirming Task Complete
+
+```bash
+./scripts/validate.sh --golden
+```
+
+Run this before confirming any task is complete. The script checks:
+- Critical config keys in K8s manifests
+- Golden config drift detection
+- Go linting (when available)
+
+### Rule 2: Never Remove Protected Config Keys
+
+The following keys are **protected** and must never be removed from manifests:
+
+| Key | File | Impact |
+|-----|------|--------|
+| `ENCLII_OIDC_ISSUER` | environment-patch.yaml | Breaks SSO |
+| `ENCLII_OIDC_CLIENT_ID` | environment-patch.yaml | Breaks SSO |
+| `ENCLII_OIDC_CLIENT_SECRET` | environment-patch.yaml | Breaks SSO |
+| `ENCLII_EXTERNAL_JWKS_URL` | environment-patch.yaml | Breaks JWT validation |
+| `ALLOWED_ADMIN_DOMAINS` | dispatch/deployment.yaml | Breaks admin access |
+| `ALLOWED_ADMIN_ROLES` | dispatch/deployment.yaml | Breaks admin access |
+| `imagePullSecrets:` | roundhouse.yaml, dispatch/deployment.yaml | Breaks image pulls |
+| `hostname: api.enclii.dev` | cloudflared-unified.yaml | Breaks API routing |
+| `hostname: app.enclii.dev` | cloudflared-unified.yaml | Breaks UI routing |
+| `hostname: admin.enclii.dev` | cloudflared-unified.yaml | Breaks Dispatch routing |
+| `hostname: auth.madfam.io` | cloudflared-unified.yaml | Breaks Janua SSO |
+
+### Rule 3: Check for NEXT_PUBLIC_* Env Vars in Dockerfiles
+
+Next.js build-time environment variables (`NEXT_PUBLIC_*`) must be defined in:
+- `apps/switchyard-ui/Dockerfile`
+- `apps/dispatch/Dockerfile`
+
+Specifically verify:
+- `NEXT_PUBLIC_JANUA_URL` - Required for SSO to work
+
+### Rule 4: If Golden Config Fails, Fix or Explicitly Update
+
+When `./scripts/check-golden.sh` fails:
+
+1. **Review the diff** - Understand what changed
+2. **If intentional:** Run `./scripts/update-golden.sh` to update snapshots
+3. **If unintentional:** Revert the manifest changes
+
+**Never** update golden configs just to make CI pass without understanding the changes.
+
+### Protected Manifests
+
+Golden snapshots are maintained for:
+
+| Manifest | Golden Snapshot | Purpose |
+|----------|-----------------|---------|
+| `infra/k8s/production/environment-patch.yaml` | `tests/golden/k8s/production/environment-patch.yaml.golden` | SSO/OIDC config |
+| `infra/k8s/production/cloudflared-unified.yaml` | `tests/golden/k8s/production/cloudflared-unified.yaml.golden` | Tunnel routes |
+| `infra/k8s/production/security-patch.yaml` | `tests/golden/k8s/production/security-patch.yaml.golden` | Security context |
+| `infra/k8s/base/roundhouse.yaml` | `tests/golden/k8s/base/roundhouse.yaml.golden` | Build pipeline |
+| `apps/dispatch/k8s/deployment.yaml` | `tests/golden/k8s/apps/dispatch-deployment.yaml.golden` | Admin UI |
+
+### CI Integration
+
+Two CI jobs enforce these rules:
+
+1. **manifest-audit** - Checks for protected config keys
+2. **golden-config** - Compares manifests against golden snapshots
+
+Both must pass for CI to succeed.
+
+### Quick Reference
+
+```bash
+# Run full validation
+./scripts/validate.sh --golden
+
+# Update golden configs (after intentional changes)
+./scripts/update-golden.sh
+
+# Check golden configs only
+./scripts/check-golden.sh
+```
