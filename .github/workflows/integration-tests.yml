@@ -83,6 +83,9 @@ jobs:
             deployment/local-path-provisioner \
             -n local-path-storage
 
+          # Delete existing 'standard' StorageClass if present (volumeBindingMode is immutable)
+          kubectl delete storageclass standard --ignore-not-found
+
           # Create 'standard' StorageClass (tests expect this name)
           cat <<EOF | kubectl apply -f -
           apiVersion: storage.k8s.io/v1
