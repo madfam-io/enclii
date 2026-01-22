@@ -88,7 +88,7 @@ export default defineConfig({
 
   // Local dev server configuration
   webServer: {
-    command: 'NEXT_PUBLIC_SKIP_SILENT_AUTH=true NEXT_PUBLIC_AUTH_MODE=oidc pnpm dev',
+    command: 'NEXT_PUBLIC_SKIP_SILENT_AUTH=true NEXT_PUBLIC_AUTH_MODE=oidc npm run dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,

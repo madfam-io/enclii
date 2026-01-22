@@ -24,10 +24,11 @@ securityContext:
   seccompProfile:
     type: RuntimeDefault
 
-# Metrics for Prometheus
+# Metrics for Prometheus (ARC chart 0.10.1+ format)
+# See: https://github.com/actions/actions-runner-controller/issues/3731
 metrics:
-  enabled: true
-  port: 8080
+  controllerManagerAddr: ":8080"
+  controllerManagerEndpoint: "/metrics"
 
 # Pod disruption budget for HA
 podDisruptionBudget:

@@ -9,6 +9,12 @@
 # ARC's merge behavior doesn't work properly, causing runners to exit immediately.
 # SOLUTION: Don't use custom containers - let ARC handle everything.
 
+# Controller service account reference (required for helm template validation)
+# Without this, helm template fails because it can't discover the controller in a cluster
+controllerServiceAccount:
+  name: arc-gha-rs-controller
+  namespace: arc-system
+
 # Org-level registration - GitHub App has org permissions
 # The runner will be registered to run for all repos in the org
 githubConfigUrl: "https://github.com/madfam-org"
