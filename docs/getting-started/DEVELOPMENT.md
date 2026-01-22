@@ -550,5 +550,5 @@ go mod download
 ## Support
 
 - Slack: #enclii-dev
-- Issues: [GitHub Issues](https://github.com/madfam/enclii/issues)
+- Issues: [GitHub Issues](https://github.com/madfam-org/enclii/issues)
 - Wiki: [Internal Wiki](https://wiki.enclii.dev)

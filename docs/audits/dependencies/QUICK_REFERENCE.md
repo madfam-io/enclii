@@ -532,7 +532,7 @@ K8s:         Run in integration test cluster
 - **Go Modules:** https://golang.org/doc/modules
 - **npm documentation:** https://docs.npmjs.com/
 - **Kubernetes:** https://kubernetes.io/docs/
-- **Container Security:** https://www.owasp.org/index.php/Container_Security_Top_10
+- **Container Security:** https://owasp.org/www-project-docker-top-10/
 - **SBOM:** https://www.cisa.gov/sbom
 - **Trivy:** https://aquasecurity.github.io/trivy/
 
