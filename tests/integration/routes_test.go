@@ -31,7 +31,7 @@ func TestSingleRouteCreation(t *testing.T) {
 	t.Log("Testing single route creation...")
 
 	serviceName := "web-app"
-	customDomain := "app.example.com"
+	customDomain := "single-route.example.com"
 
 	// Create backend service
 	err = helper.CreateBackendService(ctx, serviceName, 8080)
@@ -92,7 +92,7 @@ func TestMultipleRoutesCreation(t *testing.T) {
 	t.Log("Testing multiple routes creation...")
 
 	serviceName := "web-app"
-	customDomain := "app.example.com"
+	customDomain := "multi-routes.example.com"
 
 	// Create backend service
 	err = helper.CreateBackendService(ctx, serviceName, 8080)
@@ -157,7 +157,7 @@ func TestPathTypesConfiguration(t *testing.T) {
 	t.Log("Testing different path types...")
 
 	serviceName := "web-app"
-	customDomain := "app.example.com"
+	customDomain := "path-types.example.com"
 
 	// Create backend service
 	err = helper.CreateBackendService(ctx, serviceName, 8080)
@@ -220,7 +220,7 @@ func TestRouteUpdateReflectedInIngress(t *testing.T) {
 	t.Log("Testing route updates reflected in Ingress...")
 
 	serviceName := "web-app"
-	customDomain := "app.example.com"
+	customDomain := "route-update.example.com"
 
 	// Create backend service
 	err = helper.CreateBackendService(ctx, serviceName, 8080)
@@ -288,7 +288,7 @@ func TestRouteDeletionReflectedInIngress(t *testing.T) {
 	t.Log("Testing route deletion reflected in Ingress...")
 
 	serviceName := "web-app"
-	customDomain := "app.example.com"
+	customDomain := "route-deletion.example.com"
 
 	// Create backend service
 	err = helper.CreateBackendService(ctx, serviceName, 8080)
@@ -357,7 +357,7 @@ func TestIngressPathPriority(t *testing.T) {
 	t.Log("Testing Ingress path priority...")
 
 	serviceName := "web-app"
-	customDomain := "app.example.com"
+	customDomain := "path-priority.example.com"
 
 	// Create backend service
 	err = helper.CreateBackendService(ctx, serviceName, 8080)
@@ -416,7 +416,7 @@ func TestMultipleDomainsSameService(t *testing.T) {
 	t.Log("Testing multiple domains for same service...")
 
 	serviceName := "web-app"
-	hosts := []string{"app.example.com", "www.example.com", "api.example.com"}
+	hosts := []string{"multi-domains-1.example.com", "multi-domains-2.example.com", "multi-domains-3.example.com"}
 
 	// Create backend service
 	err = helper.CreateBackendService(ctx, serviceName, 8080)
@@ -478,7 +478,7 @@ func TestRouteWithCustomPort(t *testing.T) {
 	t.Log("Testing routes with custom ports...")
 
 	serviceName := "web-app"
-	customDomain := "app.example.com"
+	customDomain := "custom-port.example.com"
 
 	// Create backend services for different ports
 	err = helper.CreateBackendService(ctx, "api-service", 8080)
