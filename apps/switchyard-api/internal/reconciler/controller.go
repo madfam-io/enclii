@@ -797,9 +797,11 @@ func (c *Controller) runK8sSync(ctx context.Context, logger *logrus.Entry) {
 		return
 	}
 
-	// Build unique namespace set including core namespaces
+	// Build unique namespace set for scanning.
+	// The ownership check (enclii.dev/managed-by: switchyard) ensures only Enclii-created
+	// deployments are imported, regardless of which namespace they're in.
 	namespaceSet := make(map[string]bool)
-	// Always include core namespaces
+	// Include core namespaces for health monitoring
 	for _, ns := range []string{"enclii", "janua", "data", "monitoring"} {
 		namespaceSet[ns] = true
 	}
@@ -833,22 +835,34 @@ func (c *Controller) runK8sSync(ctx context.Context, logger *logrus.Entry) {
 	}
 }
 
-// syncDeploymentToDatabase checks if a K8s deployment has corresponding DB records
+// syncDeploymentToDatabase checks if a K8s deployment has corresponding DB records.
+// IMPORTANT: Only syncs deployments that Enclii created (have enclii.dev/managed-by: switchyard label).
+// This prevents auto-importing external services that happen to share names with registered services.
 func (c *Controller) syncDeploymentToDatabase(ctx context.Context, namespace string, k8sDep appsv1.Deployment, logger *logrus.Entry) {
 	deploymentName := k8sDep.Name
 
-	// Check if deployment has opted out of reconciliation via annotation
-	// This allows manually-deployed services to be excluded from Switchyard management
+	// PRIMARY GATE: Only sync deployments that Enclii created.
+	// This prevents importing external services (Janua, ingress, etc.) that happen to
+	// have a matching name in the services table.
+	if !isEncliiManagedDeployment(&k8sDep) {
+		// Not managed by Enclii - skip silently (expected for most deployments)
+		return
+	}
+
+	// Secondary check: respect opt-out annotation (for temporarily disabling reconciliation)
 	if val, ok := k8sDep.Annotations["enclii.dev/reconcile"]; ok && val == "disabled" {
 		logger.WithField("deployment", deploymentName).Debug("Deployment has reconciliation disabled, skipping")
 		return
 	}
 
-	// 1. Find matching service by name (skip if not registered)
+	// Find matching service by name
 	service, err := c.repositories.Services.GetByName(deploymentName)
 	if err != nil {
-		// Service not registered in database, skip silently
-		// (This is expected for system deployments like ingress, etc.)
+		// Orphaned Enclii deployment - service record may have been deleted
+		logger.WithFields(logrus.Fields{
+			"deployment": deploymentName,
+			"namespace":  namespace,
+		}).Warn("Enclii-managed deployment has no matching service in database")
 		return
 	}
 
@@ -1055,4 +1069,16 @@ func extractGitSHAFromImage(imageURI string) string {
 // GetPodEnvVars retrieves environment variables from a running pod (delegates to ServiceReconciler)
 func (c *Controller) GetPodEnvVars(ctx context.Context, namespace, podName string) (map[string]string, error) {
 	return c.serviceReconciler.GetPodEnvVars(ctx, namespace, podName)
+}
+
+// isEncliiManagedDeployment checks if a K8s deployment is managed by Enclii.
+// Only deployments created by Enclii have the "enclii.dev/managed-by: switchyard" label.
+// This prevents auto-importing external services (Janua, ingress, etc.) that happen to
+// have a matching name in the services table.
+func isEncliiManagedDeployment(dep *appsv1.Deployment) bool {
+	if dep.Labels == nil {
+		return false
+	}
+	managedBy, exists := dep.Labels["enclii.dev/managed-by"]
+	return exists && managedBy == "switchyard"
 }
