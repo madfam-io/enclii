@@ -57,13 +57,21 @@ RUN curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${
 ENV PACK_VERSION=0.35.1
 RUN curl -sSL "https://github.com/buildpacks/pack/releases/download/v${PACK_VERSION}/pack-v${PACK_VERSION}-linux.tgz" | tar -xz -C /usr/local/bin
 
-WORKDIR /root/
+# Create non-root user for running the application
+RUN addgroup -g 65532 nonroot && \
+    adduser -u 65532 -G nonroot -s /bin/sh -D nonroot
 
-# Create build directories
-RUN mkdir -p /tmp/enclii-builds /var/cache/enclii-buildpacks
+WORKDIR /app
 
-# Copy the binary from builder stage
+# Create build directories with proper permissions
+RUN mkdir -p /tmp/enclii-builds /var/cache/enclii-buildpacks && \
+    chown -R nonroot:nonroot /tmp/enclii-builds /var/cache/enclii-buildpacks
+
+# Copy the binary from builder stage and set permissions
 COPY --from=builder /app/switchyard-api .
+RUN chmod +x /app/switchyard-api && chown nonroot:nonroot /app/switchyard-api
+
+USER nonroot
 
 EXPOSE 4200
 
