@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /roundhouse-api ./cmd/api
 # Build Worker binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o /roundhouse-worker ./cmd/worker
 
-# API runtime stage
+# API runtime stage (lightweight)
 FROM alpine:3.19 AS api
 
 RUN apk add --no-cache ca-certificates tzdata
@@ -51,6 +51,8 @@ RUN curl -sSfL https://github.com/sigstore/cosign/releases/latest/download/cosig
 # Install pack CLI for buildpacks
 RUN curl -sSfL https://github.com/buildpacks/pack/releases/download/v0.32.1/pack-v0.32.1-linux.tgz | tar -xz -C /usr/local/bin
 
+# Copy BOTH binaries so this image can run as either API or worker
+COPY --from=builder /roundhouse-api /usr/local/bin/roundhouse-api
 COPY --from=builder /roundhouse-worker /usr/local/bin/roundhouse-worker
 
 # Create build work directory
@@ -58,4 +60,5 @@ RUN mkdir -p /var/lib/roundhouse/builds
 
 ENV BUILD_WORK_DIR=/var/lib/roundhouse/builds
 
+# Default to worker mode; override with command to run API
 ENTRYPOINT ["/usr/local/bin/roundhouse-worker"]
