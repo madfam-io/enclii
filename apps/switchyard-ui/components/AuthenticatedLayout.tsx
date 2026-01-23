@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { CommandPalette } from '@/components/command/command-palette';
 import { SystemHealthBadge } from '@/components/dashboard/system-health';
@@ -15,10 +14,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Menu, ChevronDown } from 'lucide-react';
+import { Menu, ChevronDown, Sun, Moon, Monitor } from 'lucide-react';
 import { useScrollShadow } from '@/hooks/use-scroll-shadow';
 import { ScopeSwitcher } from '@/components/navigation/scope-switcher';
+import { UserMenu } from '@/components/navigation/user-menu';
 import { useScope } from '@/contexts/ScopeContext';
+import { useTheme } from 'next-themes';
 
 interface AuthenticatedLayoutProps {
   children: React.ReactNode;
@@ -53,6 +54,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isScrolled, shadowClass } = useScrollShadow();
   const { currentScope, scopes, switchScope } = useScope();
+  const { theme, setTheme } = useTheme();
 
   // Primary navigation - always visible at lg+ breakpoint
   const primaryNav: NavItem[] = [
@@ -188,58 +190,27 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                 </div>
               </div>
             </div>
-            <div className="flex items-center space-x-1 lg:space-x-2 min-w-0 flex-shrink-0">
+            <div className="flex items-center gap-2 min-w-0 flex-shrink-0">
               {/* Command Palette - Always visible */}
               <CommandPalette />
 
-              {/* Secondary Navigation - Hidden on mobile */}
-              <div className="hidden md:flex items-center space-x-1 mr-2 border-r border-border pr-2 lg:mr-4 lg:pr-4">
-                {secondaryNav.map((item) => {
-                  const isActive = pathname === item.href || pathname.startsWith(item.href);
-                  return (
-                    <Link
-                      key={item.name}
-                      href={item.href}
-                      className={`px-2 py-1 text-sm font-medium transition-colors duration-150 rounded ${
-                        isActive
-                          ? 'text-enclii-blue bg-accent'
-                          : 'text-muted-foreground hover:text-enclii-blue hover:bg-accent'
-                      }`}
-                    >
-                      {item.name}
-                    </Link>
-                  );
-                })}
-              </div>
+              {/* Notifications - Always visible */}
+              <NotificationBell />
 
               {/* System Health - Hidden on mobile/tablet, visible at lg+ */}
               <div className="hidden lg:block">
                 <SystemHealthBadge />
               </div>
 
-              {/* Notifications - Always visible */}
-              <NotificationBell />
-
-              {/* Theme Toggle - Always visible */}
-              <ThemeToggle />
-
-              {/* User Menu - Hidden until xl, shown in hamburger otherwise */}
-              <div className="hidden xl:flex relative items-center gap-2">
-                <span className="text-sm text-muted-foreground truncate max-w-[120px]">
-                  {user?.name || user?.email}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="text-sm text-muted-foreground hover:text-foreground px-2 py-1 rounded border border-border hover:bg-accent transition-colors"
-                >
-                  Sign out
-                </button>
+              {/* User Menu - visible at lg+ (desktop) */}
+              <div className="hidden lg:block">
+                <UserMenu user={user} onLogout={handleLogout} />
               </div>
 
-              {/* Mobile/Tablet Hamburger Menu - visible below xl */}
+              {/* Mobile/Tablet Hamburger Menu - visible below lg */}
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <SheetTrigger asChild>
-                  <button className="xl:hidden p-2 rounded-md hover:bg-accent">
+                  <button className="lg:hidden p-2 rounded-md hover:bg-accent">
                     <Menu className="h-6 w-6 text-foreground" />
                     <span className="sr-only">Open menu</span>
                   </button>
@@ -316,6 +287,48 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
                           </Link>
                         );
                       })}
+                    </div>
+
+                    {/* Theme Toggle - Mobile */}
+                    <div className="border-t border-border pt-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-3">
+                        Theme
+                      </p>
+                      <div className="flex gap-2 px-3">
+                        <button
+                          onClick={() => setTheme('light')}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                            theme === 'light'
+                              ? 'bg-accent text-enclii-blue'
+                              : 'text-foreground hover:bg-accent'
+                          }`}
+                        >
+                          <Sun className="h-4 w-4" />
+                          Light
+                        </button>
+                        <button
+                          onClick={() => setTheme('dark')}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                            theme === 'dark'
+                              ? 'bg-accent text-enclii-blue'
+                              : 'text-foreground hover:bg-accent'
+                          }`}
+                        >
+                          <Moon className="h-4 w-4" />
+                          Dark
+                        </button>
+                        <button
+                          onClick={() => setTheme('system')}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                            theme === 'system'
+                              ? 'bg-accent text-enclii-blue'
+                              : 'text-foreground hover:bg-accent'
+                          }`}
+                        >
+                          <Monitor className="h-4 w-4" />
+                          Auto
+                        </button>
+                      </div>
                     </div>
 
                     {/* System Status - visible in mobile menu */}
