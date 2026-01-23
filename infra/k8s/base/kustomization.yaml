@@ -19,8 +19,8 @@ resources:
   - monitoring.yaml
   - network-policies.yaml
 
-commonLabels:
-  app.kubernetes.io/part-of: enclii
+# Note: commonLabels removed - it adds to selectors which are immutable.
+# Labels are already defined in individual manifests.
 
 images:
   - name: switchyard-api
