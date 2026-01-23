@@ -101,6 +101,9 @@ type Config struct {
 	// Request Size Limits
 	MaxRequestSizeBytes int64 // Maximum request body size in bytes (default: 10MB)
 
+	// WebSocket Configuration
+	WebSocketAllowedOrigins []string // Allowed origins for WebSocket connections (comma-separated)
+
 	// Profiling
 	ProfilingEnabled bool // Enable pprof profiling endpoints (default: false)
 
@@ -169,13 +172,14 @@ func Load() (*Config, error) {
 	viper.SetDefault("function-base-domain", "fn.enclii.dev")
 
 	// K8s environment variable defaults (wired from infra/k8s docs)
-	viper.SetDefault("db-pool-size", 25)                        // DB_POOL_SIZE
-	viper.SetDefault("cache-ttl-seconds", 3600)                 // CACHE_TTL_SECONDS (1 hour)
-	viper.SetDefault("rate-limit-requests-per-minute", 1000)    // RATE_LIMIT_REQUESTS_PER_MINUTE
-	viper.SetDefault("rate-limit-enabled", true)                // RATE_LIMIT_ENABLED
-	viper.SetDefault("max-request-size-bytes", int64(10485760)) // MAX_REQUEST_SIZE (10MB)
-	viper.SetDefault("profiling-enabled", false)                // ENABLE_PROFILING
-	viper.SetDefault("admin-emails", "")                        // ADMIN_EMAILS (comma-separated)
+	viper.SetDefault("db-pool-size", 25)                                                                                // DB_POOL_SIZE
+	viper.SetDefault("cache-ttl-seconds", 3600)                                                                         // CACHE_TTL_SECONDS (1 hour)
+	viper.SetDefault("rate-limit-requests-per-minute", 1000)                                                            // RATE_LIMIT_REQUESTS_PER_MINUTE
+	viper.SetDefault("rate-limit-enabled", true)                                                                        // RATE_LIMIT_ENABLED
+	viper.SetDefault("max-request-size-bytes", int64(10485760))                                                         // MAX_REQUEST_SIZE (10MB)
+	viper.SetDefault("websocket-allowed-origins", "http://localhost:3000,http://localhost:4201,https://app.enclii.dev") // WS_ALLOWED_ORIGINS (comma-separated)
+	viper.SetDefault("profiling-enabled", false)                                                                        // ENABLE_PROFILING
+	viper.SetDefault("admin-emails", "")                                                                                // ADMIN_EMAILS (comma-separated)
 
 	// Email configuration
 	viper.SetDefault("resend-api-key", "")                       // RESEND_API_KEY
@@ -243,6 +247,7 @@ func Load() (*Config, error) {
 		RateLimitRequestsPerMinute: viper.GetInt("rate-limit-requests-per-minute"),
 		RateLimitEnabled:           viper.GetBool("rate-limit-enabled"),
 		MaxRequestSizeBytes:        viper.GetInt64("max-request-size-bytes"),
+		WebSocketAllowedOrigins:    parseCommaSeparatedList(viper.GetString("websocket-allowed-origins")),
 		ProfilingEnabled:           viper.GetBool("profiling-enabled"),
 		AdminEmails:                parseAdminEmails(viper.GetString("admin-emails")),
 		EmailAPIKey:                viper.GetString("resend-api-key"),
@@ -267,18 +272,23 @@ func Load() (*Config, error) {
 	return config, nil
 }
 
-// parseAdminEmails parses a comma-separated list of admin email addresses
-func parseAdminEmails(emails string) []string {
-	if emails == "" {
+// parseCommaSeparatedList parses a comma-separated list of strings
+func parseCommaSeparatedList(value string) []string {
+	if value == "" {
 		return []string{}
 	}
-	parts := strings.Split(emails, ",")
+	parts := strings.Split(value, ",")
 	result := make([]string, 0, len(parts))
-	for _, email := range parts {
-		trimmed := strings.TrimSpace(email)
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
 		if trimmed != "" {
 			result = append(result, trimmed)
 		}
 	}
 	return result
+}
+
+// parseAdminEmails parses a comma-separated list of admin email addresses
+func parseAdminEmails(emails string) []string {
+	return parseCommaSeparatedList(emails)
 }

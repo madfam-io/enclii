@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: enclii-production
+namespace: enclii
 
 resources:
   - ../base
@@ -32,8 +32,9 @@ configMapGenerator:
 
 images:
   - name: switchyard-api
-    newName: ghcr.io/madfam/switchyard-api
-    digest: sha256:abcdef123456 # Use specific digest in production
+    newName: ghcr.io/madfam-org/enclii/switchyard-api
+  - name: switchyard-ui
+    newName: ghcr.io/madfam-org/enclii/switchyard-ui
 
 commonLabels:
   environment: production

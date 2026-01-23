@@ -13,6 +13,7 @@ resources:
   - redis.yaml
   - rbac.yaml
   - switchyard-api.yaml
+  - switchyard-ui.yaml
   - landing-page.yaml
   - ingress-nginx.yaml
   - monitoring.yaml
@@ -23,6 +24,8 @@ commonLabels:
 
 images:
   - name: switchyard-api
+    newTag: latest
+  - name: switchyard-ui
     newTag: latest
 
 namespace: default
