@@ -833,20 +833,21 @@ func (e *KanikoExecutor) generateImageTag(job *queue.BuildJob) string {
 		shortSHA = shortSHA[:8]
 	}
 
-	return fmt.Sprintf("%s/%s/%s:%s",
+	// Use human-readable service name instead of UUID prefixes
+	// Produces: ghcr.io/madfam-org/service-name:abc12345
+	return fmt.Sprintf("%s/%s:%s",
 		e.registry,
-		job.ProjectID.String()[:8],
-		job.ServiceID.String()[:8],
+		job.ServiceName,
 		shortSHA,
 	)
 }
 
 // generateLatestTag generates the :latest tag variant
 func (e *KanikoExecutor) generateLatestTag(job *queue.BuildJob) string {
-	return fmt.Sprintf("%s/%s/%s:latest",
+	// Use human-readable service name instead of UUID prefixes
+	return fmt.Sprintf("%s/%s:latest",
 		e.registry,
-		job.ProjectID.String()[:8],
-		job.ServiceID.String()[:8],
+		job.ServiceName,
 	)
 }
 

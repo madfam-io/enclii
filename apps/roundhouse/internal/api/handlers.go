@@ -35,6 +35,7 @@ func (h *Handlers) Enqueue(c *gin.Context) {
 	job := &queue.BuildJob{
 		ReleaseID:   req.ReleaseID,
 		ServiceID:   req.ServiceID,
+		ServiceName: req.ServiceName,
 		ProjectID:   req.ProjectID,
 		GitRepo:     req.GitRepo,
 		GitSHA:      req.GitSHA,
@@ -189,6 +190,7 @@ func (h *Handlers) RetryJob(c *gin.Context) {
 	newJob := &queue.BuildJob{
 		ReleaseID:   job.ReleaseID,
 		ServiceID:   job.ServiceID,
+		ServiceName: job.ServiceName,
 		ProjectID:   job.ProjectID,
 		GitRepo:     job.GitRepo,
 		GitSHA:      job.GitSHA,

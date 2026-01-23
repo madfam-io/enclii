@@ -11,6 +11,7 @@ type BuildJob struct {
 	ID          uuid.UUID   `json:"id"`
 	ReleaseID   uuid.UUID   `json:"release_id"`
 	ServiceID   uuid.UUID   `json:"service_id"`
+	ServiceName string      `json:"service_name"` // Human-readable service name for image tagging
 	ProjectID   uuid.UUID   `json:"project_id"`
 	GitRepo     string      `json:"git_repo"`
 	GitSHA      string      `json:"git_sha"`
@@ -75,6 +76,7 @@ type WebhookPayload struct {
 type EnqueueRequest struct {
 	ReleaseID   uuid.UUID   `json:"release_id" binding:"required"`
 	ServiceID   uuid.UUID   `json:"service_id" binding:"required"`
+	ServiceName string      `json:"service_name" binding:"required"` // Human-readable service name for image tagging
 	ProjectID   uuid.UUID   `json:"project_id" binding:"required"`
 	GitRepo     string      `json:"git_repo" binding:"required"`
 	GitSHA      string      `json:"git_sha" binding:"required"`

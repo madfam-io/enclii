@@ -119,6 +119,7 @@ func (h *Handler) enqueueToRoundhouse(ctx context.Context, service *types.Servic
 	req := &clients.EnqueueRequest{
 		ReleaseID:   release.ID,
 		ServiceID:   service.ID,
+		ServiceName: service.Name, // Human-readable name for correct image tagging
 		ProjectID:   project.ID,
 		GitRepo:     service.GitRepo,
 		GitSHA:      gitSHA,

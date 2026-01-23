@@ -325,10 +325,11 @@ func (e *Executor) generateImageTag(job *queue.BuildJob) string {
 		shortSHA = shortSHA[:8]
 	}
 
-	return fmt.Sprintf("%s/%s/%s:%s",
+	// Use human-readable service name instead of UUID prefixes
+	// Produces: ghcr.io/madfam-org/service-name:abc12345
+	return fmt.Sprintf("%s/%s:%s",
 		e.registry,
-		job.ProjectID.String()[:8],
-		job.ServiceID.String()[:8],
+		job.ServiceName,
 		shortSHA,
 	)
 }

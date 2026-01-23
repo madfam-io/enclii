@@ -45,6 +45,7 @@ type RoundhouseBuildConfig struct {
 type EnqueueRequest struct {
 	ReleaseID   uuid.UUID             `json:"release_id"`
 	ServiceID   uuid.UUID             `json:"service_id"`
+	ServiceName string                `json:"service_name"` // Human-readable service name for image tagging
 	ProjectID   uuid.UUID             `json:"project_id"`
 	GitRepo     string                `json:"git_repo"`
 	GitSHA      string                `json:"git_sha"`
