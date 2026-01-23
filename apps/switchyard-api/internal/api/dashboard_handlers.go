@@ -195,6 +195,8 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 	todayStart := time.Now().Truncate(24 * time.Hour)
 	healthyCount := 0
 	deploymentsToday := 0
+	var totalDeployDuration time.Duration
+	completedDeploys := 0
 
 	// Process services in parallel batches
 	g2, ctx := errgroup.WithContext(ctx)
@@ -222,6 +224,14 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 			if err == nil && deployment != nil && deployment.CreatedAt.After(todayStart) {
 				countMu.Lock()
 				deploymentsToday++
+				// Track deploy duration for completed (running) deployments
+				if deployment.Status == types.DeploymentStatusRunning && !deployment.UpdatedAt.IsZero() {
+					duration := deployment.UpdatedAt.Sub(deployment.CreatedAt)
+					if duration > 0 && duration < 30*time.Minute { // Sanity check: ignore unrealistic times
+						totalDeployDuration += duration
+						completedDeploys++
+					}
+				}
 				countMu.Unlock()
 			}
 
@@ -269,8 +279,23 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 	stats.HealthyServices = healthyCount
 	stats.DeploymentsToday = deploymentsToday
 
-	if deploymentsToday > 0 {
-		stats.AvgDeployTime = "2.3m" // Placeholder - would calculate from actual metrics
+	// Calculate average deploy time from tracked deployments
+	if completedDeploys > 0 {
+		avgDuration := totalDeployDuration / time.Duration(completedDeploys)
+		// Format as human-readable duration
+		if avgDuration < time.Minute {
+			stats.AvgDeployTime = fmt.Sprintf("%ds", int(avgDuration.Seconds()))
+		} else if avgDuration < time.Hour {
+			minutes := int(avgDuration.Minutes())
+			seconds := int(avgDuration.Seconds()) % 60
+			if seconds > 0 {
+				stats.AvgDeployTime = fmt.Sprintf("%dm %ds", minutes, seconds)
+			} else {
+				stats.AvgDeployTime = fmt.Sprintf("%dm", minutes)
+			}
+		} else {
+			stats.AvgDeployTime = fmt.Sprintf("%.1fh", avgDuration.Hours())
+		}
 	}
 
 	return stats, nil

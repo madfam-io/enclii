@@ -13,9 +13,9 @@ metadata:
     # ArgoCD Image Updater Configuration
     # Watches ghcr.io for new image versions and auto-updates deployments
     argocd-image-updater.argoproj.io/image-list: |
-      switchyard-api=ghcr.io/madfam-org/switchyard-api,
-      switchyard-ui=ghcr.io/madfam-org/switchyard-ui,
-      roundhouse=ghcr.io/madfam-org/roundhouse-worker
+      switchyard-api=ghcr.io/madfam-org/enclii/switchyard-api,
+      switchyard-ui=ghcr.io/madfam-org/enclii/switchyard-ui,
+      roundhouse=ghcr.io/madfam-org/enclii/roundhouse
 
     # Update strategies per image
     argocd-image-updater.argoproj.io/switchyard-api.update-strategy: semver
@@ -27,9 +27,9 @@ metadata:
     argocd-image-updater.argoproj.io/write-back-target: kustomization
 
     # Kustomize image path mappings
-    argocd-image-updater.argoproj.io/switchyard-api.kustomize.image-name: ghcr.io/madfam-org/switchyard-api
-    argocd-image-updater.argoproj.io/switchyard-ui.kustomize.image-name: ghcr.io/madfam-org/switchyard-ui
-    argocd-image-updater.argoproj.io/roundhouse.kustomize.image-name: ghcr.io/madfam-org/roundhouse-worker
+    argocd-image-updater.argoproj.io/switchyard-api.kustomize.image-name: ghcr.io/madfam-org/enclii/switchyard-api
+    argocd-image-updater.argoproj.io/switchyard-ui.kustomize.image-name: ghcr.io/madfam-org/enclii/switchyard-ui
+    argocd-image-updater.argoproj.io/roundhouse.kustomize.image-name: ghcr.io/madfam-org/enclii/roundhouse
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:

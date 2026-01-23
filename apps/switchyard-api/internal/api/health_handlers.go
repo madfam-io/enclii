@@ -1,18 +1,159 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// Health returns the health status of the API
+// ComponentHealth represents the health status of a component
+type ComponentHealth struct {
+	Status    string `json:"status"`
+	LatencyMs int64  `json:"latency_ms,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// HealthResponse represents the detailed health response
+type HealthResponse struct {
+	Status     string                     `json:"status"`
+	Service    string                     `json:"service"`
+	Version    string                     `json:"version"`
+	Components map[string]ComponentHealth `json:"components"`
+}
+
+// Health returns the health status of the API with component details
 func (h *Handler) Health(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "healthy",
-		"service": "switchyard-api",
-		"version": "0.1.0",
-	})
+	ctx := c.Request.Context()
+
+	response := HealthResponse{
+		Status:     "healthy",
+		Service:    "switchyard-api",
+		Version:    "0.1.0",
+		Components: make(map[string]ComponentHealth),
+	}
+
+	// Check database health
+	dbHealth := h.checkDatabaseHealth(ctx)
+	response.Components["database"] = dbHealth
+	if dbHealth.Status != "healthy" {
+		response.Status = "degraded"
+	}
+
+	// Check cache health
+	cacheHealth := h.checkCacheHealth(ctx)
+	response.Components["cache"] = cacheHealth
+	if cacheHealth.Status != "healthy" && response.Status == "healthy" {
+		response.Status = "degraded"
+	}
+
+	// Check Kubernetes connectivity
+	k8sHealth := h.checkK8sHealth(ctx)
+	response.Components["kubernetes"] = k8sHealth
+	if k8sHealth.Status != "healthy" && response.Status == "healthy" {
+		response.Status = "degraded"
+	}
+
+	statusCode := http.StatusOK
+	if response.Status == "degraded" {
+		statusCode = http.StatusOK // Still return 200, but indicate degraded in body
+	}
+
+	c.JSON(statusCode, response)
+}
+
+// checkDatabaseHealth checks database connectivity with timeout
+func (h *Handler) checkDatabaseHealth(ctx context.Context) ComponentHealth {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	err := h.repos.Ping(ctx)
+	latency := time.Since(start).Milliseconds()
+
+	if err != nil {
+		return ComponentHealth{
+			Status:    "unhealthy",
+			LatencyMs: latency,
+			Error:     err.Error(),
+		}
+	}
+
+	return ComponentHealth{
+		Status:    "healthy",
+		LatencyMs: latency,
+	}
+}
+
+// checkCacheHealth checks Redis cache connectivity with timeout
+func (h *Handler) checkCacheHealth(ctx context.Context) ComponentHealth {
+	if h.cache == nil {
+		return ComponentHealth{
+			Status: "disabled",
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	err := h.cache.Ping(ctx)
+	latency := time.Since(start).Milliseconds()
+
+	if err != nil {
+		return ComponentHealth{
+			Status:    "unhealthy",
+			LatencyMs: latency,
+			Error:     err.Error(),
+		}
+	}
+
+	return ComponentHealth{
+		Status:    "healthy",
+		LatencyMs: latency,
+	}
+}
+
+// checkK8sHealth checks Kubernetes API connectivity
+func (h *Handler) checkK8sHealth(ctx context.Context) ComponentHealth {
+	if h.k8sClient == nil {
+		return ComponentHealth{
+			Status: "disabled",
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	// Use MetricsServerAvailable as a proxy for K8s API health
+	// It makes an API call to check the metrics server
+	available := h.k8sClient.MetricsServerAvailable(ctx)
+	latency := time.Since(start).Milliseconds()
+
+	// If metrics server is available, K8s API is definitely reachable
+	// If not, K8s API might still be reachable but metrics-server isn't installed
+	// We consider this healthy since the core K8s API is what matters
+	status := "healthy"
+	if !available {
+		// Try a simple namespace list to verify K8s connectivity
+		_, err := h.k8sClient.ListPods(ctx, "default", "")
+		if err != nil {
+			return ComponentHealth{
+				Status:    "unhealthy",
+				LatencyMs: latency,
+				Error:     "kubernetes API unreachable",
+			}
+		}
+		// K8s API is reachable, just metrics-server is missing
+		status = "healthy"
+	}
+
+	return ComponentHealth{
+		Status:    status,
+		LatencyMs: latency,
+	}
 }
 
 // LivenessProbe returns a simple health check for Kubernetes liveness probe
