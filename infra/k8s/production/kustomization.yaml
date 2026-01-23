@@ -37,9 +37,8 @@ images:
   - name: switchyard-ui
     newName: ghcr.io/madfam-org/enclii/switchyard-ui
 
-commonLabels:
-  environment: production
-  app.kubernetes.io/part-of: enclii
+# Note: commonLabels removed - it adds to selectors which are immutable.
+# Labels are already defined in base manifests.
 
 # Production-specific annotations
 commonAnnotations:
