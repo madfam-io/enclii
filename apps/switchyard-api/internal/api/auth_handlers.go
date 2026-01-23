@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -662,10 +663,30 @@ func (h *Handler) OIDCCallback(c *gin.Context) {
 
 	tokens, err := oidcMgr.HandleCallback(ctx, code)
 	if err != nil {
-		logrus.WithError(err).Error("OIDC callback failed")
+		logrus.WithError(err).WithField("code_length", len(code)).Error("OIDC callback failed")
+
+		// Provide more specific error hints based on the failure type
+		hint := "Could not complete OIDC authentication. Please try again."
+		errStr := err.Error()
+
+		if strings.Contains(errStr, "exchange token") {
+			hint = "Token exchange failed. The authorization code may have expired or the OIDC provider is unavailable."
+		} else if strings.Contains(errStr, "no id_token") {
+			hint = "OIDC provider did not return an ID token. Check client configuration."
+		} else if strings.Contains(errStr, "verify ID token") {
+			hint = "ID token signature verification failed. Check JWKS configuration."
+		} else if strings.Contains(errStr, "email not verified") {
+			hint = "Your email address is not verified. Please verify your email in the identity provider."
+		} else if strings.Contains(errStr, "parse claims") {
+			hint = "Failed to parse identity claims from the OIDC provider."
+		} else if strings.Contains(errStr, "get/create user") {
+			hint = "Failed to create or retrieve user account. Database may be unavailable."
+		}
+
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Authentication failed",
-			"hint":  "Could not complete OIDC authentication. Please try again.",
+			"hint":  hint,
+			"debug": errStr, // Include actual error for debugging (remove in production)
 		})
 		return
 	}
