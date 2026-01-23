@@ -12,7 +12,8 @@ resources:
   # Re-enable when multi-node cluster is deployed:
   # - redis-sentinel.yaml
   # oidc-secrets.yaml not needed - using local mode with external JWKS
-  - build-secrets.yaml
+  # build-secrets.yaml not in git - apply manually via kubectl
+  # - build-secrets.yaml
   # cloudflare-secrets.yaml for domain status sync (optional - create secret directly via kubectl)
   # - cloudflare-secrets.yaml
 
