@@ -26,6 +26,8 @@ spec:
         app.kubernetes.io/component: marketing
         app.kubernetes.io/part-of: enclii
     spec:
+      imagePullSecrets:
+        - name: registry-secret
       containers:
         - name: landing-page
           image: ghcr.io/madfam-org/enclii/landing-page:latest

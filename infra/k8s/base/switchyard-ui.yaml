@@ -26,6 +26,8 @@ spec:
         app.kubernetes.io/component: ui
         app.kubernetes.io/part-of: enclii
     spec:
+      imagePullSecrets:
+        - name: registry-secret
       containers:
         - name: switchyard-ui
           image: switchyard-ui:latest

@@ -31,6 +31,8 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: switchyard-api
+      imagePullSecrets:
+        - name: registry-secret
       containers:
         - name: switchyard-api
           image: switchyard-api:latest
