@@ -32,7 +32,7 @@ spec:
     spec:
       serviceAccountName: switchyard-api
       imagePullSecrets:
-        - name: registry-secret
+        - name: enclii-registry-credentials
       containers:
         - name: switchyard-api
           image: switchyard-api:latest

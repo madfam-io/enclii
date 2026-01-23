@@ -27,7 +27,7 @@ spec:
         app.kubernetes.io/part-of: enclii
     spec:
       imagePullSecrets:
-        - name: registry-secret
+        - name: enclii-registry-credentials
       containers:
         - name: landing-page
           image: ghcr.io/madfam-org/enclii/landing-page:latest
