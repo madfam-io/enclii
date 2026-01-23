@@ -129,6 +129,39 @@ fi
 echo -e "${GREEN}✓ No secrets detected in staged files${NC}"
 
 # =============================================================================
+# GOFMT AUTO-FORMATTING - Automatically fix Go formatting before commit
+# =============================================================================
+
+GO_FILES=$(echo "$STAGED_FILES" | grep -E '\.go$' || true)
+if [ -n "$GO_FILES" ]; then
+    echo -e "\n${BLUE}🔧 Auto-formatting Go files...${NC}"
+    FORMATTED_FILES=""
+
+    for file in $GO_FILES; do
+        if [ -f "$file" ]; then
+            # Check if file needs formatting
+            if ! gofmt -l "$file" | grep -q .; then
+                continue  # Already formatted
+            fi
+
+            # Auto-format the file
+            gofmt -w "$file"
+            git add "$file"
+            FORMATTED_FILES="$FORMATTED_FILES $file"
+        fi
+    done
+
+    if [ -n "$FORMATTED_FILES" ]; then
+        echo -e "${GREEN}  ✓ Auto-formatted and staged:${NC}"
+        for f in $FORMATTED_FILES; do
+            echo -e "    - $f"
+        done
+    else
+        echo -e "${GREEN}  ✓ All Go files already formatted${NC}"
+    fi
+fi
+
+# =============================================================================
 # LINT VALIDATION - Catch errors before they reach CI
 # =============================================================================
 

@@ -9,6 +9,7 @@ linters:
   default: none
   enable:
     - govet
+    - gofmt
     # - errcheck      # TODO: Re-enable after fixing unchecked error returns
     # - staticcheck   # TODO: Re-enable after fixing staticcheck warnings (QF/SA/ST/S rules)
     # - unused        # TODO: Re-enable after removing unused code

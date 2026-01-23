@@ -415,7 +415,7 @@ func (h *Handler) ensureRegistryCredentials(ctx context.Context, targetNamespace
 			Name:      secretName,
 			Namespace: targetNamespace,
 			Labels: map[string]string{
-				"enclii.dev/managed-by": "switchyard",
+				"enclii.dev/managed-by":  "switchyard",
 				"enclii.dev/copied-from": sourceNamespace,
 			},
 		},
