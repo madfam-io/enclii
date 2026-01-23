@@ -71,12 +71,12 @@ spec:
         - name: ENCLII_REGISTRY_USERNAME
           valueFrom:
             secretKeyRef:
-              name: enclii-registry-credentials
+              name: roundhouse-registry-credentials
               key: username
         - name: ENCLII_REGISTRY_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: enclii-registry-credentials
+              name: roundhouse-registry-credentials
               key: password
         # GitHub Webhook Secret (for verifying webhook signatures)
         - name: ENCLII_GITHUB_WEBHOOK_SECRET
