@@ -27,7 +27,7 @@ spec:
         app.kubernetes.io/part-of: enclii
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
+        prometheus.io/port: "4200"
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: switchyard-api
@@ -44,7 +44,7 @@ spec:
             - name: ENCLII_REDIS_URL
               value: "redis://redis:6379"
             - name: ENCLII_PORT
-              value: "8080"
+              value: "4200"
             - name: ENCLII_LOG_LEVEL
               value: "info"
             - name: ENCLII_JWT_SECRET
@@ -63,7 +63,7 @@ spec:
             - name: ENCLII_RATE_LIMIT_REQUESTS_PER_MINUTE
               value: "1000"
           ports:
-            - containerPort: 8080
+            - containerPort: 4200
               name: http
               protocol: TCP
           resources:
@@ -76,7 +76,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /health/ready
-              port: 8080
+              port: 4200
               scheme: HTTP
             initialDelaySeconds: 10
             periodSeconds: 5
@@ -86,7 +86,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /health/live
-              port: 8080
+              port: 4200
               scheme: HTTP
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -125,7 +125,7 @@ metadata:
     app: switchyard-api
 spec:
   ports:
-    - port: 8080
-      targetPort: 8080
+    - port: 80
+      targetPort: 4200
   selector:
     app: switchyard-api

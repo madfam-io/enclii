@@ -280,7 +280,7 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace, 
 			"enclii_port":  req.EnvVars["ENCLII_PORT"],
 			"error":        portErr.Error(),
 			"default_port": 8080,
-		}).Warn("Invalid ENCLII_PORT value, using default port 8080")
+		}).Warn("Invalid ENCLII_PORT value, using default port 4200")
 	} else if _, ok := req.EnvVars["ENCLII_PORT"]; ok {
 		logrus.WithFields(logrus.Fields{
 			"service": req.Service.Name,
@@ -290,7 +290,7 @@ func (r *ServiceReconciler) generateManifests(req *ReconcileRequest, namespace, 
 		logrus.WithFields(logrus.Fields{
 			"service": req.Service.Name,
 			"port":    containerPort,
-		}).Debug("No ENCLII_PORT set, using default port 8080")
+		}).Debug("No ENCLII_PORT set, using default port 4200")
 	}
 
 	// Build environment variables
@@ -718,9 +718,9 @@ func mustParseQuantity(s string) resource.Quantity {
 }
 
 // parseContainerPort extracts and validates the container port from environment variables.
-// Returns the port number (defaulting to 8080) and any validation error.
+// Returns the port number (defaulting to 4200 per Enclii port allocation) and any validation error.
 func parseContainerPort(envVars map[string]string) (int32, error) {
-	const defaultPort int32 = 8080
+	const defaultPort int32 = 4200
 	const minPort = 1
 	const maxPort = 65535
 

@@ -128,13 +128,37 @@ jobs:
             fi
           done
 
+          # --- Port consistency check (Operation Fortification) ---
+          echo ""
+          echo "🔒 Port Consistency Check (Fortification)"
+          echo "Checking: infra/k8s/base/switchyard-api.yaml"
+          API_MANIFEST="infra/k8s/base/switchyard-api.yaml"
+          if grep -q "containerPort: 8080" "$API_MANIFEST"; then
+            echo "  ❌ FORBIDDEN: containerPort: 8080 (must be 4200)"
+            FAILED=1
+          else
+            echo "  ✅ containerPort: 4200"
+          fi
+          if grep -q "targetPort: 8080" "$API_MANIFEST"; then
+            echo "  ❌ FORBIDDEN: targetPort: 8080 (must be 4200)"
+            FAILED=1
+          else
+            echo "  ✅ targetPort: 4200"
+          fi
+          if grep -E "port: 8080" "$API_MANIFEST"; then
+            echo "  ❌ FORBIDDEN: port 8080 found in manifest"
+            FAILED=1
+          else
+            echo "  ✅ All ports use 4200"
+          fi
+
           echo ""
           if [ $FAILED -eq 1 ]; then
             echo "❌ Manifest audit FAILED - critical config keys missing!"
             echo "   See SYSTEM_CONTEXT.md 'Operation Ratchet - Rules of Engagement'"
             exit 1
           fi
-          echo "✅ Manifest audit passed!"
+          echo "✅ Manifest audit passed (including port consistency)!"
 
   golden-config:
     name: Golden Config Check (Ratchet)
@@ -310,6 +334,51 @@ jobs:
         working-directory: apps/switchyard-ui
         run: npm run build
 
+  # =============================================================================
+  # OPERATION FORTIFICATION: Ecosystem E2E Tests (Blocking)
+  # =============================================================================
+  ecosystem-e2e:
+    name: Ecosystem E2E (Blocking)
+    runs-on: ubuntu-latest
+    needs: [build, ui-tests]
+    # Only run on main branch pushes (production validation)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: tests/e2e-ecosystem/package-lock.json
+
+      - name: Install dependencies
+        working-directory: tests/e2e-ecosystem
+        run: npm ci || npm install
+
+      - name: Install Playwright browsers
+        working-directory: tests/e2e-ecosystem
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        working-directory: tests/e2e-ecosystem
+        run: npx playwright test
+        env:
+          CI: true
+          API_BASE_URL: https://api.enclii.dev
+          APP_BASE_URL: https://app.enclii.dev
+          JANUA_URL: https://auth.madfam.io
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: e2e-ecosystem-report
+          path: tests/e2e-ecosystem/playwright-report/
+          retention-days: 7
+
   security-scan:
     name: Security Scan
     runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
@@ -405,12 +474,15 @@ jobs:
     name: Docker Build
     # Docker builds benefit most from self-hosted runners (DinD, build cache)
     runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
-    needs: [build, ui-tests, detect-changes]
-    # Use always() to run even when detect-changes is skipped (workflow_dispatch)
+    # HARD GATE 1: E2E must pass before Docker build (Operation Fortification)
+    needs: [build, ui-tests, detect-changes, ecosystem-e2e]
+    # Use always() to run even when detect-changes/ecosystem-e2e is skipped
+    # E2E must pass on main branch pushes (Operation Fortification HARD GATE)
     if: |
       always() &&
       (needs.build.result == 'success') &&
       (needs.ui-tests.result == 'success') &&
+      (needs.ecosystem-e2e.result == 'success' || needs.ecosystem-e2e.result == 'skipped') &&
       ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch')
     permissions:
       contents: read
@@ -549,7 +621,7 @@ jobs:
   test-summary:
     name: Test Summary
     runs-on: ${{ vars.ARC_BOOTSTRAP_COMPLETE == 'true' && 'enclii-runners-blue' || 'ubuntu-latest' }}
-    needs: [lint, unit-tests, ui-tests, security-scan, manifest-audit, golden-config]
+    needs: [lint, unit-tests, ui-tests, security-scan, manifest-audit, golden-config, ecosystem-e2e]
     if: always()
 
     steps:
@@ -575,4 +647,9 @@ jobs:
             echo "❌ Golden config check failed (Operation Ratchet)"
             exit 1
           fi
-          echo "✅ All CI checks passed (including Operation Ratchet)!"
+          # Ecosystem E2E is only required on main branch pushes
+          if [ "${{ needs.ecosystem-e2e.result }}" == "failure" ]; then
+            echo "❌ Ecosystem E2E failed (Operation Fortification)"
+            exit 1
+          fi
+          echo "✅ All CI checks passed (including Operation Ratchet + Fortification)!"

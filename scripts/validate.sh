@@ -214,6 +214,58 @@ manifest_audit() {
 }
 
 # ==============================================================================
+# Section 1.5: Port Consistency Check (Operation Fortification)
+# ==============================================================================
+
+port_consistency_check() {
+    echo ""
+    echo -e "${YELLOW}[1.5/4] Port Consistency Check (Fortification)${NC}"
+    echo ""
+
+    local check_failed=0
+
+    API_MANIFEST="${REPO_ROOT}/infra/k8s/base/switchyard-api.yaml"
+
+    echo "  Checking: switchyard-api.yaml for forbidden port 8080"
+
+    # Check for containerPort: 8080
+    if grep -q "containerPort: 8080" "${API_MANIFEST}" 2>/dev/null; then
+        echo -e "    ${RED}FORBIDDEN: containerPort: 8080 found${NC}"
+        echo -e "    ${RED}Must use containerPort: 4200${NC}"
+        check_failed=1
+    else
+        echo -e "    ${GREEN}containerPort: 4200 (correct)${NC}"
+    fi
+
+    # Check for targetPort: 8080
+    if grep -q "targetPort: 8080" "${API_MANIFEST}" 2>/dev/null; then
+        echo -e "    ${RED}FORBIDDEN: targetPort: 8080 found${NC}"
+        echo -e "    ${RED}Must use targetPort: 4200${NC}"
+        check_failed=1
+    else
+        echo -e "    ${GREEN}targetPort: 4200 (correct)${NC}"
+    fi
+
+    # Check probe ports
+    if grep -E "port: 8080" "${API_MANIFEST}" 2>/dev/null; then
+        echo -e "    ${RED}FORBIDDEN: port 8080 found in probes${NC}"
+        check_failed=1
+    else
+        echo -e "    ${GREEN}probe ports: 4200 (correct)${NC}"
+    fi
+
+    echo ""
+    if [[ ${check_failed} -eq 1 ]]; then
+        echo -e "${RED}Port consistency check FAILED${NC}"
+        echo -e "${RED}Switchyard API MUST use port 4200, not 8080${NC}"
+        return 1
+    else
+        echo -e "${GREEN}Port consistency check passed${NC}"
+        return 0
+    fi
+}
+
+# ==============================================================================
 # Section 2: Go Lint (golangci-lint)
 # ==============================================================================
 
@@ -331,6 +383,11 @@ build_check() {
 
 # Run manifest audit (always)
 if ! manifest_audit; then
+    ERRORS=$((ERRORS + 1))
+fi
+
+# Run port consistency check (Operation Fortification - always)
+if ! port_consistency_check; then
     ERRORS=$((ERRORS + 1))
 fi
 
