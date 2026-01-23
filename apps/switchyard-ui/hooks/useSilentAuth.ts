@@ -64,6 +64,27 @@ export function useSilentAuth(): UseSilentAuthReturn {
       return;
     }
 
+    // Early bailout: Skip silent auth if localStorage has valid, non-expired tokens
+    // This prevents unnecessary network requests for returning users
+    if (typeof window !== 'undefined') {
+      const storedTokens = localStorage.getItem('enclii_tokens');
+      if (storedTokens) {
+        try {
+          const tokens = JSON.parse(storedTokens);
+          // Skip silent auth if token has more than 5 minutes remaining
+          // The user will be redirected by AuthContext's existing token check
+          if (tokens.expiresAt && Date.now() < new Date(tokens.expiresAt).getTime() - 5 * 60 * 1000) {
+            console.debug('Silent auth skipped - valid tokens exist in localStorage');
+            setIsChecking(false);
+            setHasValidSession(false);
+            return;
+          }
+        } catch {
+          // Invalid JSON, continue with silent auth check
+        }
+      }
+    }
+
     setIsChecking(true);
     setError(null);
     setHasValidSession(false);
@@ -72,7 +93,7 @@ export function useSilentAuth(): UseSilentAuthReturn {
     try {
       // Step 1: Get silent auth URL from backend with timeout
       const controller = new AbortController();
-      const fetchTimeout = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      const fetchTimeout = setTimeout(() => controller.abort(), 1500); // 1.5 second timeout (reduced from 3s)
 
       let response: Response;
       try {
@@ -147,14 +168,14 @@ export function useSilentAuth(): UseSilentAuthReturn {
 
       window.addEventListener('message', messageHandler);
 
-      // Step 4: Set timeout for iframe load (5 seconds)
+      // Step 4: Set timeout for iframe load (2.5 seconds, reduced from 5s)
       timeoutRef.current = setTimeout(() => {
         window.removeEventListener('message', messageHandler);
         cleanup();
         setError('Silent auth timeout');
         setHasValidSession(false);
         setIsChecking(false);
-      }, 5000);
+      }, 2500);
 
       // Step 5: Navigate iframe to auth URL
       iframe.src = auth_url;

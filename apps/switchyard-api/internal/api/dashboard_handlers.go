@@ -216,6 +216,15 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 		g2.Go(func() error {
 			svc := serviceMap[svcID]
 
+			// Always check deployment table for today's deployments count
+			// This must run regardless of which phase provides health status
+			deployment, err := h.repos.Deployments.GetLatestByService(ctx, svcID)
+			if err == nil && deployment != nil && deployment.CreatedAt.After(todayStart) {
+				countMu.Lock()
+				deploymentsToday++
+				countMu.Unlock()
+			}
+
 			// Phase 1: Check service-level health (from Cartographer)
 			if svc != nil && svc.Health == types.HealthStatusHealthy {
 				countMu.Lock()
@@ -224,15 +233,11 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 				return nil
 			}
 
-			// Phase 2: Fall back to deployment table (Enclii-deployed services)
-			deployment, err := h.repos.Deployments.GetLatestByService(ctx, svcID)
-			if err == nil && deployment != nil {
+			// Phase 2: Fall back to deployment table for health (already fetched above)
+			if deployment != nil {
 				countMu.Lock()
 				if deployment.Health == types.HealthStatusHealthy {
 					healthyCount++
-				}
-				if deployment.CreatedAt.After(todayStart) {
-					deploymentsToday++
 				}
 				countMu.Unlock()
 				return nil

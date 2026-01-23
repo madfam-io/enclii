@@ -71,20 +71,18 @@ export default function LoginPage() {
   };
 
   // Determine if we're in a loading state
-  const showLoading = isLoading || (authMode === "oidc" && isSilentAuthChecking) || isProcessingSilentAuth;
+  // NOTE: We no longer block on isSilentAuthChecking - show login form immediately
+  // while silent auth runs in background. If successful, useEffect handles redirect.
+  const showLoading = isLoading || isProcessingSilentAuth;
 
-  // Show loading while checking auth state or performing silent auth
+  // Show loading only for initial auth check or when processing silent auth redirect
   if (showLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-enclii-blue mx-auto"></div>
           <p className="mt-4 text-gray-600">
-            {isProcessingSilentAuth
-              ? "Signing you in..."
-              : isSilentAuthChecking
-                ? "Checking session..."
-                : "Loading..."}
+            {isProcessingSilentAuth ? "Signing you in..." : "Loading..."}
           </p>
         </div>
       </div>
@@ -135,6 +133,13 @@ export default function LoginPage() {
         {/* OIDC Login (Primary for production) */}
         {authMode === "oidc" ? (
           <div className="space-y-6">
+            {/* Subtle indicator while silent auth checks for existing session */}
+            {isSilentAuthChecking && (
+              <div className="text-center text-xs text-gray-400 animate-pulse">
+                Checking for existing session...
+              </div>
+            )}
+
             <button
               onClick={handleOIDCLogin}
               className="w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-enclii-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-enclii-blue transition-colors"
