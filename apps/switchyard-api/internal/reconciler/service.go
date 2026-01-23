@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -249,10 +250,83 @@ func (r *ServiceReconciler) ensureNamespace(ctx context.Context, namespace strin
 		},
 	}
 
+	created := false
 	_, err := r.k8sClient.Clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("failed to create namespace %s: %w", namespace, err)
+	if err != nil {
+		if !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create namespace %s: %w", namespace, err)
+		}
+	} else {
+		created = true
+		r.logger.WithField("namespace", namespace).Info("Created new namespace")
 	}
+
+	// GUARDRAIL: Copy registry credentials to new namespaces
+	// This ensures pods can pull images from private registries (GHCR)
+	if err := r.ensureRegistryCredentials(ctx, namespace); err != nil {
+		// Log but don't fail - the credential check in triggerAutoDeploy is the primary guardrail
+		r.logger.WithFields(logrus.Fields{
+			"namespace": namespace,
+			"created":   created,
+		}).WithError(err).Warn("Failed to ensure registry credentials in namespace")
+	}
+
+	return nil
+}
+
+// ensureRegistryCredentials copies the registry credentials secret to the target namespace if missing
+func (r *ServiceReconciler) ensureRegistryCredentials(ctx context.Context, targetNamespace string) error {
+	const secretName = "enclii-registry-credentials"
+	const sourceNamespace = "enclii"
+
+	secretClient := r.k8sClient.Clientset.CoreV1().Secrets(targetNamespace)
+
+	// Check if secret already exists
+	_, err := secretClient.Get(ctx, secretName, metav1.GetOptions{})
+	if err == nil {
+		return nil // Already exists
+	}
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for registry credentials: %w", err)
+	}
+
+	// Get source secret
+	sourceClient := r.k8sClient.Clientset.CoreV1().Secrets(sourceNamespace)
+	sourceSecret, err := sourceClient.Get(ctx, secretName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.logger.WithField("source_namespace", sourceNamespace).Warn("Source registry credentials not found - skipping copy")
+			return nil // Source doesn't exist, nothing to copy
+		}
+		return fmt.Errorf("failed to get source registry credentials: %w", err)
+	}
+
+	// Create copy in target namespace
+	newSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: targetNamespace,
+			Labels: map[string]string{
+				"enclii.dev/managed-by":  "switchyard-reconciler",
+				"enclii.dev/copied-from": sourceNamespace,
+			},
+		},
+		Type: sourceSecret.Type,
+		Data: sourceSecret.Data,
+	}
+
+	_, err = secretClient.Create(ctx, newSecret, metav1.CreateOptions{})
+	if err != nil {
+		if errors.IsAlreadyExists(err) {
+			return nil // Race condition - another process created it
+		}
+		return fmt.Errorf("failed to create registry credentials: %w", err)
+	}
+
+	r.logger.WithFields(logrus.Fields{
+		"namespace": targetNamespace,
+		"secret":    secretName,
+	}).Info("Copied registry credentials to namespace")
 
 	return nil
 }
@@ -599,6 +673,7 @@ func (r *ServiceReconciler) ensureEnvSecret(ctx context.Context, req *ReconcileR
 
 func (r *ServiceReconciler) waitForDeploymentReady(ctx context.Context, namespace, name string, timeout time.Duration) (bool, error) {
 	deploymentClient := r.k8sClient.Clientset.AppsV1().Deployments(namespace)
+	podClient := r.k8sClient.Clientset.CoreV1().Pods(namespace)
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -619,9 +694,76 @@ func (r *ServiceReconciler) waitForDeploymentReady(ctx context.Context, namespac
 				return true, nil
 			}
 
+			// GUARDRAIL: Check for fatal pod conditions that won't self-heal
+			// This provides early failure detection for issues like missing credentials
+			pods, err := podClient.List(ctx, metav1.ListOptions{
+				LabelSelector: fmt.Sprintf("app=%s", name),
+			})
+			if err == nil && len(pods.Items) > 0 {
+				for _, pod := range pods.Items {
+					if fatalErr := r.checkPodForFatalErrors(&pod); fatalErr != nil {
+						r.logger.WithFields(logrus.Fields{
+							"namespace":  namespace,
+							"deployment": name,
+							"pod":        pod.Name,
+							"error":      fatalErr.Error(),
+						}).Error("Pod has fatal error that won't self-heal")
+						return false, fatalErr
+					}
+				}
+			}
+
 			time.Sleep(5 * time.Second)
 		}
 	}
+}
+
+// checkPodForFatalErrors examines a pod for conditions that indicate permanent failure
+// Returns an error describing the fatal condition, or nil if the pod might still recover
+func (r *ServiceReconciler) checkPodForFatalErrors(pod *corev1.Pod) error {
+	// Check container statuses for fatal errors
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.State.Waiting != nil {
+			reason := cs.State.Waiting.Reason
+			message := cs.State.Waiting.Message
+
+			switch reason {
+			case "ImagePullBackOff", "ErrImagePull":
+				// Image pull failures are typically due to missing credentials or non-existent images
+				// Check if it's a credentials issue (401/403)
+				if strings.Contains(message, "401") || strings.Contains(message, "unauthorized") ||
+					strings.Contains(message, "403") || strings.Contains(message, "forbidden") {
+					return fmt.Errorf("image pull failed due to missing registry credentials: %s - ensure enclii-registry-credentials secret exists in namespace", message)
+				}
+				if strings.Contains(message, "not found") || strings.Contains(message, "manifest unknown") {
+					return fmt.Errorf("image not found: %s - verify the image exists and tag is correct", message)
+				}
+				// After multiple backoffs, treat as fatal
+				if cs.RestartCount > 0 || strings.Contains(reason, "BackOff") {
+					return fmt.Errorf("image pull failed: %s - check registry credentials and image availability", message)
+				}
+
+			case "InvalidImageName":
+				return fmt.Errorf("invalid image name: %s", message)
+
+			case "CreateContainerConfigError":
+				// Usually indicates missing secrets or configmaps
+				if strings.Contains(message, "secret") {
+					return fmt.Errorf("container config error - missing secret: %s", message)
+				}
+				return fmt.Errorf("container config error: %s", message)
+			}
+		}
+
+		// Check for crash loops that indicate code/config issues
+		if cs.State.Waiting != nil && cs.State.Waiting.Reason == "CrashLoopBackOff" {
+			if cs.RestartCount >= 5 {
+				return fmt.Errorf("container in CrashLoopBackOff after %d restarts - check application logs", cs.RestartCount)
+			}
+		}
+	}
+
+	return nil
 }
 
 // Rollback rolls back a deployment to the previous version

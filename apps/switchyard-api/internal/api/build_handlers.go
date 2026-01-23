@@ -9,6 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/clients"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
@@ -304,6 +307,16 @@ func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service,
 			logging.String("kube_namespace", kubeNamespace))
 	}
 
+	// GUARDRAIL: Ensure registry credentials exist in target namespace before deploying
+	// This prevents ImagePullBackOff errors that cause 502s
+	if err := h.ensureRegistryCredentials(ctx, env.KubeNamespace); err != nil {
+		h.logger.Error(ctx, "Auto-deploy blocked: failed to ensure registry credentials",
+			logging.String("namespace", env.KubeNamespace),
+			logging.String("service", service.Name),
+			logging.Error("error", err))
+		return
+	}
+
 	// Check if a deployment already exists for this release + environment
 	existingDeployments, err := h.repos.Deployments.ListByRelease(ctx, release.ID.String())
 	if err != nil {
@@ -363,6 +376,67 @@ func (h *Handler) triggerAutoDeploy(ctx context.Context, service *types.Service,
 		logging.String("deployment_id", deployment.ID.String()),
 		logging.String("service_name", service.Name),
 		logging.String("environment", service.AutoDeployEnv))
+}
+
+// ensureRegistryCredentials ensures the target namespace has the registry credentials secret
+// If missing, it copies from the enclii namespace. This prevents ImagePullBackOff errors.
+func (h *Handler) ensureRegistryCredentials(ctx context.Context, targetNamespace string) error {
+	const secretName = "enclii-registry-credentials"
+	const sourceNamespace = "enclii"
+
+	// Check if secret already exists in target namespace
+	_, err := h.k8sClient.Clientset.CoreV1().Secrets(targetNamespace).Get(ctx, secretName, metav1.GetOptions{})
+	if err == nil {
+		// Secret exists, nothing to do
+		h.logger.Debug(ctx, "Registry credentials already exist in namespace",
+			logging.String("namespace", targetNamespace))
+		return nil
+	}
+
+	// If error is not "not found", return it
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to check for registry credentials: %w", err)
+	}
+
+	// Secret doesn't exist - copy from source namespace
+	h.logger.Info(ctx, "Copying registry credentials to namespace",
+		logging.String("source", sourceNamespace),
+		logging.String("target", targetNamespace))
+
+	// Get the source secret
+	sourceSecret, err := h.k8sClient.Clientset.CoreV1().Secrets(sourceNamespace).Get(ctx, secretName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get source registry credentials from %s: %w", sourceNamespace, err)
+	}
+
+	// Create a copy for the target namespace
+	newSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: targetNamespace,
+			Labels: map[string]string{
+				"enclii.dev/managed-by": "switchyard",
+				"enclii.dev/copied-from": sourceNamespace,
+			},
+		},
+		Type: sourceSecret.Type,
+		Data: sourceSecret.Data,
+	}
+
+	_, err = h.k8sClient.Clientset.CoreV1().Secrets(targetNamespace).Create(ctx, newSecret, metav1.CreateOptions{})
+	if err != nil {
+		// If it already exists (race condition), that's fine
+		if errors.IsAlreadyExists(err) {
+			h.logger.Debug(ctx, "Registry credentials created by another process",
+				logging.String("namespace", targetNamespace))
+			return nil
+		}
+		return fmt.Errorf("failed to create registry credentials in %s: %w", targetNamespace, err)
+	}
+
+	h.logger.Info(ctx, "Successfully copied registry credentials to namespace",
+		logging.String("namespace", targetNamespace))
+	return nil
 }
 
 // ListReleases returns all releases for a given service

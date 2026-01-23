@@ -254,7 +254,10 @@ func (j *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	// SECURITY: Check if session has been revoked (logout, security event, etc.)
-	// Fail-closed: if we can't verify session status, deny access for security
+	// Fail-open: if we can't verify session status (Redis unavailable), allow access
+	// for availability. This prioritizes user experience over strict revocation checking
+	// when Redis connectivity is intermittent. Explicit logout still works when Redis is up.
+	// See: Investigation - app.enclii.dev Authentication Session Loss (Jan 2026)
 	if j.cache != nil && claims.SessionID != "" {
 		revoked, err := j.cache.IsSessionRevoked(context.Background(), claims.SessionID)
 		if err != nil {
@@ -262,8 +265,9 @@ func (j *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 				"session_id": claims.SessionID,
 				"user_id":    claims.UserID,
 				"error":      err.Error(),
-			}).Error("Failed to check session revocation - denying access (fail-closed)")
-			return nil, fmt.Errorf("unable to verify session status")
+			}).Warn("Failed to check session revocation - allowing access (fail-open for availability)")
+			// Continue without blocking - prioritize availability over strict revocation
+			revoked = false
 		}
 		if revoked {
 			return nil, fmt.Errorf("session has been revoked")

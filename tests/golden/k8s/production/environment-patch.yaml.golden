@@ -19,6 +19,10 @@ spec:
         # Redis - K8s internal DNS (locked from external access)
         - name: ENCLII_REDIS_URL
           value: "redis://redis.data.svc.cluster.local:6379"
+        # Token Expiration - 8 hours for better UX (default: 15 min)
+        # See: Investigation - app.enclii.dev Authentication Session Loss (Jan 2026)
+        - name: ENCLII_ACCESS_TOKEN_EXPIRE_MINUTES
+          value: "480"
         - name: ENCLII_LOG_LEVEL
           value: "warn"
         - name: ENCLII_RATE_LIMIT_REQUESTS_PER_MINUTE
