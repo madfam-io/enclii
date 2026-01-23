@@ -1,0 +1,21 @@
+---
+# Prometheus ServiceMonitor for Switchyard API
+# NOTE: Requires Prometheus Operator (monitoring.coreos.com CRDs) to be installed
+# Only include this file in kustomization when Prometheus Operator is deployed
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: switchyard-api
+  labels:
+    app.kubernetes.io/name: switchyard-api
+    app.kubernetes.io/component: control-plane
+    app.kubernetes.io/part-of: enclii
+spec:
+  selector:
+    matchLabels:
+      app: switchyard-api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s

@@ -1,23 +1,4 @@
 ---
-# Prometheus ServiceMonitor for Switchyard API
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: switchyard-api
-  labels:
-    app.kubernetes.io/name: switchyard-api
-    app.kubernetes.io/component: control-plane
-    app.kubernetes.io/part-of: enclii
-spec:
-  selector:
-    matchLabels:
-      app: switchyard-api
-  endpoints:
-  - port: http
-    path: /metrics
-    interval: 30s
-    scrapeTimeout: 10s
----
 # Jaeger Tracing (simplified deployment for dev)
 apiVersion: apps/v1
 kind: Deployment
