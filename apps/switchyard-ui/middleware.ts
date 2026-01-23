@@ -14,6 +14,8 @@ const publicPaths = [
   "/register",
   "/auth/callback",
   "/api/auth",
+  "/api/health",  // Health check endpoint for K8s probes
+  "/health",      // Alternative health endpoint
   "/_next",
   "/favicon.ico",
   "/public",
