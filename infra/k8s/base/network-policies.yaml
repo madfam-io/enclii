@@ -20,7 +20,7 @@ spec:
     ports:
     - protocol: UDP
       port: 53
-  # Allow access to Postgres
+  # Allow access to Postgres (in same namespace)
   - to:
     - podSelector:
         matchLabels:
@@ -28,9 +28,31 @@ spec:
     ports:
     - protocol: TCP
       port: 5432
-  # Allow access to Redis
+  # Allow access to Postgres in data namespace (cross-namespace)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: data
+      podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow access to Redis (in same namespace)
   - to:
     - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  # Allow access to Redis in data namespace (cross-namespace)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: data
+      podSelector:
         matchLabels:
           app: redis
     ports:
