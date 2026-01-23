@@ -1,4 +1,6 @@
 ---
+# TEMPORARY: Running as root until new image with proper permissions is built
+# TODO: Restore non-root after new switchyard-api image is deployed
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,18 +9,14 @@ spec:
   template:
     spec:
       securityContext:
-        fsGroup: 65532
-        runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
       containers:
       - name: switchyard-api
         securityContext:
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 65532
-          runAsGroup: 65532
+          readOnlyRootFilesystem: false
+          runAsNonRoot: false
           capabilities:
             drop:
               - ALL
