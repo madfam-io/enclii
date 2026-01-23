@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/k8s"
@@ -265,6 +266,29 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 			Message: "Failed to retrieve environment",
 			Error:   err,
 		}
+	}
+
+	// CRITICAL: Check if K8s deployment has reconciliation disabled BEFORE reconciling
+	// This prevents the reconciler from overwriting manually-managed deployments like Janua
+	// The annotation check in syncDeploymentToDatabase only applies during K8s→DB sync,
+	// this check applies during actual reconciliation of existing DB records
+	if c.k8sClient != nil {
+		existing, err := c.k8sClient.Clientset.AppsV1().Deployments(environment.KubeNamespace).Get(
+			ctx, service.Name, metav1.GetOptions{},
+		)
+		if err == nil {
+			if val, ok := existing.Annotations["enclii.dev/reconcile"]; ok && val == "disabled" {
+				logger.WithFields(logrus.Fields{
+					"deployment": service.Name,
+					"namespace":  environment.KubeNamespace,
+				}).Info("Skipping reconciliation - disabled via annotation")
+				return &ReconcileResult{
+					Success: true,
+					Message: "Reconciliation disabled via annotation",
+				}
+			}
+		}
+		// If the deployment doesn't exist yet, or we can't fetch it, proceed with reconciliation
 	}
 
 	// Get environment variables (decrypted) for this service and environment
