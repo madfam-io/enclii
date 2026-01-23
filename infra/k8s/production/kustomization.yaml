@@ -5,7 +5,9 @@ namespace: enclii
 
 resources:
   - ../base
-  - cloudflared.yaml
+  # NOTE: cloudflared.yaml removed - using existing cloudflared in cloudflare-tunnel namespace
+  # The cloudflare-tunnel namespace has working cloudflared pods with proper credentials
+  # - cloudflared.yaml
   # Redis Sentinel (redis-sentinel.yaml) is NOT enabled on single-node cluster.
   # Reason: podAntiAffinity requires 3 different nodes; only 1 pod would schedule.
   # The base redis.yaml (single instance) is used instead.
@@ -34,8 +36,12 @@ configMapGenerator:
 images:
   - name: switchyard-api
     newName: ghcr.io/madfam-org/enclii/switchyard-api
+    newTag: "e62d899ba05f1c43c6c21984ff3c6692780084b3"
   - name: switchyard-ui
     newName: ghcr.io/madfam-org/enclii/switchyard-ui
+    newTag: "b50ffed54bba2a43eb09e9836c8a45ed93fad513"
+  - name: ghcr.io/madfam-org/enclii/landing-page
+    newTag: "76fc3dae6d902b3230934b6f1f8ca17302fc8b66"
 
 # Note: commonLabels removed - it adds to selectors which are immutable.
 # Labels are already defined in base manifests.
