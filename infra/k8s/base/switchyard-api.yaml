@@ -34,7 +34,7 @@ spec:
       containers:
         - name: switchyard-api
           image: switchyard-api:latest
-          imagePullPolicy: Never # For local development
+          imagePullPolicy: Always
           env:
             - name: ENCLII_DB_URL
               valueFrom:
