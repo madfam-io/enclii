@@ -106,7 +106,7 @@ spec:
       serviceAccountName: cloudflared
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:2024.1.0
+          image: cloudflare/cloudflared:2024.12.0
           args:
             - tunnel
             - --config
