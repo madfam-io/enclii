@@ -46,7 +46,9 @@ RUN adduser --system --uid 1001 nextjs
 WORKDIR /app
 
 # Copy standalone build
-COPY --from=builder /app/status/public ./public
+# Create public directory and copy contents (handle empty public dir)
+RUN mkdir -p ./public
+COPY --from=builder /app/status/public/ ./public/
 COPY --from=builder --chown=nextjs:nodejs /app/status/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/status/.next/static ./.next/static
 
