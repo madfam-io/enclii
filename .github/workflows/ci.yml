@@ -666,18 +666,43 @@ jobs:
       github.ref == 'refs/heads/main'
 
     steps:
-      - name: Setup kubectl
+      - name: Setup and Validate kubectl
+        id: kubectl-setup
         run: |
+          # Check if KUBECONFIG_PRODUCTION secret is configured
+          KUBECONFIG_B64="${{ secrets.KUBECONFIG_PRODUCTION }}"
+
+          if [ -z "$KUBECONFIG_B64" ]; then
+            echo "⚠️  KUBECONFIG_PRODUCTION secret not configured"
+            echo "   Deployment verification will be skipped"
+            echo "   To enable: Add KUBECONFIG_PRODUCTION secret with base64-encoded kubeconfig"
+            echo "has_cluster_access=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Setup kubeconfig
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+          echo "$KUBECONFIG_B64" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
+          # Validate cluster connectivity (5s timeout)
+          if kubectl cluster-info --request-timeout=5s &>/dev/null; then
+            echo "✅ Cluster access verified"
+            echo "has_cluster_access=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  Cannot connect to cluster (kubeconfig may be invalid or cluster unreachable)"
+            echo "   Deployment verification will be skipped"
+            echo "has_cluster_access=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Wait for ArgoCD Image Updater
+        if: steps.kubectl-setup.outputs.has_cluster_access == 'true'
         run: |
           echo "⏳ Waiting 90s for Image Updater to detect new images..."
           sleep 90
 
       - name: Check ArgoCD Application Status
+        if: steps.kubectl-setup.outputs.has_cluster_access == 'true'
         run: |
           echo "🔍 Checking ArgoCD core-services application..."
 
@@ -703,6 +728,7 @@ jobs:
           echo "   Sync: $APP_STATUS | Health: $HEALTH_STATUS"
 
       - name: Check for Image Updates
+        if: steps.kubectl-setup.outputs.has_cluster_access == 'true'
         run: |
           echo "📋 Checking if images were updated..."
 
@@ -711,6 +737,18 @@ jobs:
             IMAGE=$(kubectl get deployment $deploy -n enclii -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || echo "not found")
             echo "  $deploy: $IMAGE"
           done
+
+      - name: Skip Notice
+        if: steps.kubectl-setup.outputs.has_cluster_access != 'true'
+        run: |
+          echo "ℹ️  Deployment verification skipped (no cluster access)"
+          echo ""
+          echo "To enable deployment verification:"
+          echo "  1. Generate kubeconfig with cluster access"
+          echo "  2. Base64 encode: cat kubeconfig | base64 -w0"
+          echo "  3. Add as repository secret: KUBECONFIG_PRODUCTION"
+          echo ""
+          echo "This job will pass but deployment status was not verified."
 
   test-summary:
     name: Test Summary
