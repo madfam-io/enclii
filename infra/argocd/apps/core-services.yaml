@@ -12,15 +12,16 @@ metadata:
   annotations:
     # ArgoCD Image Updater Configuration
     # Watches ghcr.io for new image versions and auto-updates deployments
+    # Uses digest strategy: detects when :latest tag points to new SHA
     argocd-image-updater.argoproj.io/image-list: |
-      switchyard-api=ghcr.io/madfam-org/enclii/switchyard-api,
-      switchyard-ui=ghcr.io/madfam-org/enclii/switchyard-ui,
-      roundhouse=ghcr.io/madfam-org/enclii/roundhouse
+      switchyard-api=ghcr.io/madfam-org/enclii/switchyard-api:latest,
+      switchyard-ui=ghcr.io/madfam-org/enclii/switchyard-ui:latest,
+      roundhouse=ghcr.io/madfam-org/enclii/roundhouse:latest
 
-    # Update strategies per image
-    argocd-image-updater.argoproj.io/switchyard-api.update-strategy: semver
-    argocd-image-updater.argoproj.io/switchyard-ui.update-strategy: semver
-    argocd-image-updater.argoproj.io/roundhouse.update-strategy: semver
+    # Update strategies per image (digest: detect SHA changes on :latest tag)
+    argocd-image-updater.argoproj.io/switchyard-api.update-strategy: digest
+    argocd-image-updater.argoproj.io/switchyard-ui.update-strategy: digest
+    argocd-image-updater.argoproj.io/roundhouse.update-strategy: digest
 
     # Git write-back (commits updated tags to Git for GitOps audit trail)
     argocd-image-updater.argoproj.io/write-back-method: git
