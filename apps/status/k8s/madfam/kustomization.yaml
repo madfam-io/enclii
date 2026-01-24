@@ -48,4 +48,5 @@ patches:
 
 images:
   - name: ghcr.io/madfam-org/enclii-status
-    newTag: latest
+    newName: ghcr.io/madfam-org/enclii/enclii-status
+    newTag: cf9e506859feacf51159da11f27bba116d9d9180
