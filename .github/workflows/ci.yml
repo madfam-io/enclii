@@ -434,6 +434,7 @@ jobs:
       waybill: ${{ steps.filter.outputs.waybill }}
       landing: ${{ steps.filter.outputs.landing }}
       dispatch: ${{ steps.filter.outputs.dispatch }}
+      status: ${{ steps.filter.outputs.status }}
     steps:
       - uses: actions/checkout@v6
 
@@ -459,6 +460,8 @@ jobs:
             dispatch:
               - 'apps/dispatch/**'
               - 'packages/ui/**'
+            status:
+              - 'apps/status/**'
 
       - name: Log detected changes
         run: |
@@ -469,6 +472,7 @@ jobs:
           echo "  waybill:        ${{ steps.filter.outputs.waybill }}"
           echo "  landing:        ${{ steps.filter.outputs.landing }}"
           echo "  dispatch:       ${{ steps.filter.outputs.dispatch }}"
+          echo "  status:         ${{ steps.filter.outputs.status }}"
 
   docker-build:
     name: Docker Build
@@ -617,6 +621,22 @@ jobs:
       - name: Skip dispatch (no changes)
         if: needs.detect-changes.outputs.dispatch != 'true' && github.event_name != 'workflow_dispatch'
         run: echo "⏭️ Skipping dispatch build (Conservation Law - no changes detected)"
+
+      # Conservation Law: Only build if changes detected
+      - name: Build and push status
+        if: needs.detect-changes.outputs.status == 'true' || github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/status/Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}/enclii-status:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Skip status (no changes)
+        if: needs.detect-changes.outputs.status != 'true' && github.event_name != 'workflow_dispatch'
+        run: echo "⏭️ Skipping status build (Conservation Law - no changes detected)"
 
   test-summary:
     name: Test Summary
