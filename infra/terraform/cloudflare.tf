@@ -68,6 +68,12 @@ resource "cloudflare_tunnel_config" "enclii" {
       service  = "http://docs-site:80"
     }
 
+    # Status page (Enclii Platform)
+    ingress_rule {
+      hostname = "status.${var.domain}"
+      service  = "http://status-enclii.enclii.svc.cluster.local:80"
+    }
+
     # Default catch-all
     ingress_rule {
       service = "http_status:404"
@@ -136,6 +142,15 @@ resource "cloudflare_record" "www" {
 resource "cloudflare_record" "docs" {
   zone_id = data.cloudflare_zone.main.id
   name    = "docs"
+  value   = cloudflare_tunnel.enclii.cname
+  type    = "CNAME"
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_record" "status" {
+  zone_id = data.cloudflare_zone.main.id
+  name    = "status"
   value   = cloudflare_tunnel.enclii.cname
   type    = "CNAME"
   proxied = true
