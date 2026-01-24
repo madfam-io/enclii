@@ -78,10 +78,10 @@ export default function LoginPage() {
   // Show loading only for initial auth check or when processing silent auth redirect
   if (showLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-enclii-blue mx-auto"></div>
-          <p className="mt-4 text-gray-600">
+          <p className="mt-4 text-muted-foreground">
             {isProcessingSilentAuth ? "Signing you in..." : "Loading..."}
           </p>
         </div>
@@ -95,13 +95,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         {/* Header */}
         <div className="text-center">
           <h1 className="text-4xl font-bold text-enclii-blue mb-2">🚂 Enclii</h1>
-          <p className="text-gray-500 text-sm mb-6">Switchyard Platform</p>
-          <h2 className="text-2xl font-semibold text-gray-900">
+          <p className="text-muted-foreground text-sm mb-6">Switchyard Platform</p>
+          <h2 className="text-2xl font-semibold text-foreground">
             Sign in to your account
           </h2>
         </div>
@@ -135,7 +135,7 @@ export default function LoginPage() {
           <div className="space-y-6">
             {/* Subtle indicator while silent auth checks for existing session */}
             {isSilentAuthChecking && (
-              <div className="text-center text-xs text-gray-400 animate-pulse">
+              <div className="text-center text-xs text-muted-foreground animate-pulse">
                 Checking for existing session...
               </div>
             )}
@@ -150,7 +150,7 @@ export default function LoginPage() {
               Sign in with Janua SSO
             </button>
 
-            <div className="text-center text-sm text-gray-500">
+            <div className="text-center text-sm text-muted-foreground">
               <p>
                 You will be redirected to your organization's identity provider.
               </p>
@@ -161,7 +161,7 @@ export default function LoginPage() {
           <form className="mt-8 space-y-6" onSubmit={handleLocalLogin}>
             <div className="space-y-4">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="email" className="block text-sm font-medium text-foreground">
                   Email address
                 </label>
                 <input
@@ -172,13 +172,13 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-enclii-blue focus:border-enclii-blue focus:z-10 sm:text-sm"
+                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-input bg-background placeholder:text-muted-foreground text-foreground rounded-md focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
                   placeholder="you@example.com"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="password" className="block text-sm font-medium text-foreground">
                   Password
                 </label>
                 <input
@@ -189,7 +189,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-enclii-blue focus:border-enclii-blue focus:z-10 sm:text-sm"
+                  className="mt-1 appearance-none relative block w-full px-3 py-2 border border-input bg-background placeholder:text-muted-foreground text-foreground rounded-md focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
                   placeholder="••••••••"
                 />
               </div>
@@ -242,7 +242,7 @@ export default function LoginPage() {
         )}
 
         {/* Footer */}
-        <div className="text-center text-xs text-gray-400 mt-8">
+        <div className="text-center text-xs text-muted-foreground mt-8">
           <p>© {new Date().getFullYear()} Enclii Platform. Built with ❤️ for developers.</p>
         </div>
       </div>
