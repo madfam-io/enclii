@@ -1,0 +1,159 @@
+/**
+ * Service status types
+ */
+export type ServiceStatus = 'operational' | 'degraded' | 'outage' | 'maintenance' | 'unknown'
+
+/**
+ * Incident status types
+ */
+export type IncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved'
+
+/**
+ * Incident severity levels
+ */
+export type IncidentSeverity = 'minor' | 'major' | 'critical'
+
+/**
+ * Service configuration from environment
+ */
+export interface ServiceConfig {
+  name: string
+  url: string
+  group: string
+  description?: string
+}
+
+/**
+ * Real-time health check result
+ */
+export interface HealthCheckResult {
+  service: string
+  url: string
+  group: string
+  description?: string
+  status: ServiceStatus
+  responseTime: number | null
+  lastChecked: string
+  statusCode?: number
+  error?: string
+}
+
+/**
+ * Historical uptime data from Prometheus
+ */
+export interface UptimeData {
+  service: string
+  uptime24h: number | null
+  uptime7d: number | null
+  uptime30d: number | null
+  uptime90d: number | null
+  dailyHistory: DayStatus[]
+}
+
+/**
+ * Daily status for uptime bar visualization
+ */
+export interface DayStatus {
+  date: string
+  status: ServiceStatus
+  uptimePercent: number
+}
+
+/**
+ * Aggregated status response
+ */
+export interface StatusResponse {
+  overall: ServiceStatus
+  lastUpdated: string
+  services: HealthCheckResult[]
+  uptimeData?: Record<string, UptimeData>
+}
+
+/**
+ * Incident record
+ */
+export interface Incident {
+  id: string
+  title: string
+  status: IncidentStatus
+  severity: IncidentSeverity
+  affectedServices: string[]
+  createdAt: string
+  resolvedAt?: string
+  updates: IncidentUpdate[]
+}
+
+/**
+ * Incident update
+ */
+export interface IncidentUpdate {
+  id: string
+  incidentId: string
+  message: string
+  status?: IncidentStatus
+  createdAt: string
+}
+
+/**
+ * Scheduled maintenance
+ */
+export interface ScheduledMaintenance {
+  id: string
+  title: string
+  description?: string
+  affectedServices: string[]
+  scheduledStart: string
+  scheduledEnd: string
+  createdAt: string
+}
+
+/**
+ * Site configuration
+ */
+export interface SiteConfig {
+  name: string
+  url: string
+  services: ServiceConfig[]
+}
+
+/**
+ * Response time thresholds for visual indicators
+ */
+export const RESPONSE_TIME_THRESHOLDS = {
+  fast: 200,    // < 200ms = green
+  normal: 500,  // 200-500ms = yellow
+  slow: 1000,   // 500-1000ms = orange
+  // > 1000ms = red
+} as const
+
+/**
+ * Get status from response time
+ */
+export function getResponseTimeStatus(ms: number | null): 'fast' | 'normal' | 'slow' | 'critical' | 'unknown' {
+  if (ms === null) return 'unknown'
+  if (ms < RESPONSE_TIME_THRESHOLDS.fast) return 'fast'
+  if (ms < RESPONSE_TIME_THRESHOLDS.normal) return 'normal'
+  if (ms < RESPONSE_TIME_THRESHOLDS.slow) return 'slow'
+  return 'critical'
+}
+
+/**
+ * Calculate overall status from service statuses
+ */
+export function calculateOverallStatus(services: HealthCheckResult[]): ServiceStatus {
+  if (services.length === 0) return 'unknown'
+
+  const hasOutage = services.some(s => s.status === 'outage')
+  if (hasOutage) return 'outage'
+
+  const hasDegraded = services.some(s => s.status === 'degraded')
+  if (hasDegraded) return 'degraded'
+
+  const hasMaintenance = services.some(s => s.status === 'maintenance')
+  if (hasMaintenance) return 'maintenance'
+
+  const allOperational = services.every(s => s.status === 'operational')
+  if (allOperational) return 'operational'
+
+  return 'degraded'
+}

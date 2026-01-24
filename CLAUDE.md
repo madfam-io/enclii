@@ -24,6 +24,7 @@ Per [PORT_ALLOCATION.md](https://github.com/madfam-org/solarpunk-foundry/blob/ma
 | Web UI | 4201 | enclii-ui | app.enclii.dev |
 | Agent | 4202 | enclii-agent | - |
 | Dispatch | 4203 | dispatch | admin.enclii.dev |
+| Status Page | 4204 | enclii-status | status.enclii.dev, status.madfam.io |
 | Metrics | 4290 | enclii-metrics | - |
 
 ### Quick Start (Production Deployment)
@@ -280,7 +281,8 @@ Access to Dispatch requires BOTH:
 - ✅ `janua` → auth.madfam.io (SSO authentication)
 - ✅ `docs-site` → docs.enclii.dev (documentation)
 - ✅ `landing-page` → enclii.dev (deployed)
-- 🔲 `status-page` → status.enclii.dev (pending)
+- ✅ `status-page` → status.enclii.dev (implemented, pending deployment)
+- ✅ `status-page-madfam` → status.madfam.io (implemented, pending deployment)
 
 **Build Pipeline Status:**
 - ✅ GitHub webhook configured with HMAC verification

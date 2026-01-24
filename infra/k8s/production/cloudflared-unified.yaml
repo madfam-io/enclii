@@ -93,6 +93,18 @@ data:
         originRequest:
           httpHostHeader: docs.enclii.dev
 
+      # Status Page (Enclii Platform)
+      - hostname: status.enclii.dev
+        service: http://status-enclii.enclii.svc.cluster.local:80
+        originRequest:
+          httpHostHeader: status.enclii.dev
+
+      # Status Page (MADFAM Ecosystem)
+      - hostname: status.madfam.io
+        service: http://status-madfam.enclii.svc.cluster.local:80
+        originRequest:
+          httpHostHeader: status.madfam.io
+
       # ============================================
       # MADFAM Automation Services (Enclii-managed)
       # ============================================

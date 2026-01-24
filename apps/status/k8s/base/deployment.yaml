@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: status
+  labels:
+    app: status
+    enclii.dev/managed-by: manual
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: status
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: status
+    spec:
+      containers:
+      - name: status
+        image: ghcr.io/madfam-org/enclii-status:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 4204
+          name: http
+          protocol: TCP
+        env:
+        - name: PORT
+          value: "4204"
+        - name: NODE_ENV
+          value: production
+        - name: HOSTNAME
+          value: "0.0.0.0"
+        # Site configuration (overridden by overlays)
+        - name: SITE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: status-config
+              key: site-name
+        - name: SITE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: status-config
+              key: site-url
+        - name: NEXT_PUBLIC_APP_URL
+          valueFrom:
+            configMapKeyRef:
+              name: status-config
+              key: site-url
+        # Services to monitor (JSON array)
+        - name: SERVICES_CONFIG
+          valueFrom:
+            configMapKeyRef:
+              name: status-config
+              key: services-config
+        # Health check configuration
+        - name: HEALTH_CHECK_TIMEOUT_MS
+          value: "10000"
+        - name: HEALTH_CHECK_CACHE_TTL_SECONDS
+          value: "30"
+        # Prometheus integration (optional)
+        - name: PROMETHEUS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: status-config
+              key: prometheus-url
+              optional: true
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 4204
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 4204
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+      imagePullSecrets:
+      - name: ghcr-credentials

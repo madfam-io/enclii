@@ -1,0 +1,51 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: status-madfam
+
+namespace: enclii
+
+resources:
+  - ../base
+  - configmap.yaml
+
+# Instance-specific labels
+commonLabels:
+  app.kubernetes.io/instance: status-madfam
+
+# Name suffix for this instance
+nameSuffix: -madfam
+
+# Patches for MADFAM-specific configuration
+patches:
+  # Update deployment name and selectors
+  - patch: |-
+      - op: replace
+        path: /metadata/name
+        value: status-madfam
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: status-madfam
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: status-madfam
+    target:
+      kind: Deployment
+      name: status
+
+  # Update service name and selector
+  - patch: |-
+      - op: replace
+        path: /metadata/name
+        value: status-madfam
+      - op: replace
+        path: /spec/selector/app
+        value: status-madfam
+    target:
+      kind: Service
+      name: status
+
+images:
+  - name: ghcr.io/madfam-org/enclii-status
+    newTag: latest

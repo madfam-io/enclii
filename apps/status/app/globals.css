@@ -1,0 +1,233 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================================================
+   STATUS PAGE - THEME CONFIGURATION
+
+   Clean, professional status page with clear visual hierarchy.
+   Dark theme by default for better readability of status indicators.
+   ============================================================================= */
+
+:root {
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-geist-mono), 'SF Mono', 'Fira Code', monospace;
+}
+
+@layer base {
+  /* Dark Theme (Default) */
+  :root,
+  html,
+  body,
+  [data-theme="dark"] {
+    --background: 220 20% 8%;
+    --foreground: 210 10% 92%;
+    --card: 220 18% 10%;
+    --card-foreground: 210 10% 92%;
+    --popover: 220 18% 12%;
+    --popover-foreground: 210 10% 92%;
+
+    --primary: 160 100% 45%;
+    --primary-foreground: 220 20% 8%;
+
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 210 10% 92%;
+
+    --muted: 220 12% 16%;
+    --muted-foreground: 210 10% 55%;
+
+    --accent: 160 60% 20%;
+    --accent-foreground: 210 10% 92%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 210 10% 92%;
+
+    --border: 220 12% 18%;
+    --input: 220 12% 15%;
+    --ring: 160 100% 45%;
+    --radius: 0.5rem;
+
+    /* Status Colors - Vibrant for visibility */
+    --status-operational: 160 100% 45%;
+    --status-operational-foreground: 220 20% 8%;
+    --status-operational-muted: 160 80% 15%;
+
+    --status-degraded: 45 95% 50%;
+    --status-degraded-foreground: 220 20% 8%;
+    --status-degraded-muted: 45 80% 15%;
+
+    --status-outage: 0 80% 55%;
+    --status-outage-foreground: 210 10% 98%;
+    --status-outage-muted: 0 70% 15%;
+
+    --status-maintenance: 200 75% 50%;
+    --status-maintenance-foreground: 220 20% 8%;
+    --status-maintenance-muted: 200 60% 15%;
+  }
+
+  /* Light Theme */
+  [data-theme="light"] {
+    --background: 0 0% 100%;
+    --foreground: 220 15% 15%;
+    --card: 0 0% 98%;
+    --card-foreground: 220 15% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 15%;
+
+    --primary: 160 85% 35%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 10% 92%;
+    --secondary-foreground: 220 15% 15%;
+
+    --muted: 220 10% 95%;
+    --muted-foreground: 220 10% 45%;
+
+    --accent: 160 50% 90%;
+    --accent-foreground: 160 85% 25%;
+
+    --destructive: 0 80% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 10% 88%;
+    --input: 220 10% 92%;
+    --ring: 160 85% 35%;
+
+    /* Status Colors - Light Theme */
+    --status-operational: 160 85% 35%;
+    --status-operational-foreground: 0 0% 100%;
+    --status-operational-muted: 160 60% 92%;
+
+    --status-degraded: 40 90% 45%;
+    --status-degraded-foreground: 0 0% 100%;
+    --status-degraded-muted: 40 80% 92%;
+
+    --status-outage: 0 75% 50%;
+    --status-outage-foreground: 0 0% 100%;
+    --status-outage-muted: 0 70% 95%;
+
+    --status-maintenance: 200 70% 45%;
+    --status-maintenance-foreground: 0 0% 100%;
+    --status-maintenance-muted: 200 60% 92%;
+  }
+}
+
+/* =============================================================================
+   BASE STYLES
+   ============================================================================= */
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Custom scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+/* =============================================================================
+   UTILITIES
+   ============================================================================= */
+
+@layer utilities {
+  /* Status indicator glow effects */
+  .status-glow {
+    box-shadow: 0 0 12px currentColor;
+  }
+
+  .status-glow-sm {
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  /* Fade in animation */
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Subtle pulse for operational status */
+  .animate-pulse-slow {
+    animation: pulseSlow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulseSlow {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+}
+
+/* =============================================================================
+   COMPONENT STYLES
+   ============================================================================= */
+
+@layer components {
+  /* Card with subtle border glow on hover */
+  .status-card {
+    @apply border rounded-lg bg-card p-4 transition-all duration-200;
+  }
+
+  .status-card:hover {
+    @apply border-primary/20;
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.05);
+  }
+
+  /* Service status indicator */
+  .status-indicator {
+    @apply size-2.5 rounded-full;
+  }
+
+  .status-indicator.operational {
+    @apply bg-status-operational;
+    box-shadow: 0 0 8px hsl(var(--status-operational));
+  }
+
+  .status-indicator.degraded {
+    @apply bg-status-degraded;
+    box-shadow: 0 0 8px hsl(var(--status-degraded));
+  }
+
+  .status-indicator.outage {
+    @apply bg-status-outage;
+    box-shadow: 0 0 8px hsl(var(--status-outage));
+  }
+
+  .status-indicator.maintenance {
+    @apply bg-status-maintenance;
+    box-shadow: 0 0 8px hsl(var(--status-maintenance));
+  }
+}

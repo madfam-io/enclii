@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: status-config
+  namespace: enclii
+data:
+  site-name: "Enclii Status"
+  site-url: "https://status.enclii.dev"
+  prometheus-url: "http://prometheus.monitoring.svc.cluster.local:9090"
+  # Services to monitor for Enclii Platform
+  services-config: |
+    [
+      {
+        "name": "Switchyard API",
+        "url": "https://api.enclii.dev/health/ready",
+        "group": "Core Platform",
+        "description": "Control plane API"
+      },
+      {
+        "name": "Web Dashboard",
+        "url": "https://app.enclii.dev",
+        "group": "Core Platform",
+        "description": "User dashboard"
+      },
+      {
+        "name": "Admin Console",
+        "url": "https://admin.enclii.dev",
+        "group": "Core Platform",
+        "description": "Infrastructure admin"
+      },
+      {
+        "name": "Documentation",
+        "url": "https://docs.enclii.dev",
+        "group": "Resources",
+        "description": "Documentation site"
+      }
+    ]

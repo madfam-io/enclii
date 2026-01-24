@@ -1,0 +1,60 @@
+# Production Dockerfile for Enclii Status Page
+# Build context should be the enclii root directory, not apps/status
+# Usage: docker build -f apps/status/Dockerfile -t enclii-status .
+
+FROM node:20-alpine AS base
+RUN apk add --no-cache libc6-compat
+RUN corepack enable pnpm
+WORKDIR /app
+
+# Install dependencies
+FROM base AS deps
+WORKDIR /app/status
+COPY apps/status/package.json ./
+# Use pnpm fetch for better caching
+RUN pnpm install --frozen-lockfile=false
+
+# Build the application
+FROM base AS builder
+WORKDIR /app
+
+# Copy status app
+COPY apps/status ./status
+
+# Install dependencies from deps stage
+COPY --from=deps /app/status/node_modules ./status/node_modules
+
+# Build arguments for public env vars (defaults can be overridden at build time)
+ARG NEXT_PUBLIC_APP_URL=https://status.enclii.dev
+ARG SITE_NAME="Enclii Status"
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV SITE_NAME=$SITE_NAME
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build the static site
+WORKDIR /app/status
+RUN pnpm run build
+
+# Production image
+FROM base AS runner
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+WORKDIR /app
+
+# Copy standalone build
+COPY --from=builder /app/status/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/status/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/status/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 4204
+
+ENV PORT=4204
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["node", "server.js"]
