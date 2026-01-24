@@ -242,6 +242,37 @@ phase4_config_integrity() {
         check_fail "api.janua.dev OIDC endpoint: $api_oidc"
     fi
 
+    # 4.1b OIDC Client Credentials Validation
+    print_section "OIDC Client Credentials"
+
+    local client_id=$(sudo kubectl -n enclii get secret enclii-oidc-credentials -o jsonpath='{.data.client-id}' 2>/dev/null | base64 -d || echo "")
+    local client_secret=$(sudo kubectl -n enclii get secret enclii-oidc-credentials -o jsonpath='{.data.client-secret}' 2>/dev/null | base64 -d || echo "")
+
+    if [[ -z "$client_id" ]] || [[ -z "$client_secret" ]]; then
+        check_fail "OIDC credentials not found in K8s secret"
+    elif [[ "$client_secret" == "REPLACE_WITH_ACTUAL_SECRET" ]]; then
+        check_fail "OIDC client secret is placeholder value!"
+    else
+        check_info "Client ID: ${client_id:0:15}..."
+        # Test credentials with client_credentials grant
+        local token_response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "https://auth.madfam.io/oauth/token" \
+            -H "Content-Type: application/x-www-form-urlencoded" \
+            -d "grant_type=client_credentials" \
+            -d "client_id=$client_id" \
+            -d "client_secret=$client_secret" \
+            -d "scope=openid" 2>/dev/null || echo "000")
+
+        if [[ "$token_response" == "200" ]]; then
+            check_pass "OIDC client credentials VALID"
+        elif [[ "$token_response" == "401" ]]; then
+            check_fail "OIDC client credentials INVALID (secret mismatch)"
+            check_info "Fix: Run ./scripts/rotate-oidc-secret.sh"
+        else
+            check_warn "OIDC credential check returned HTTP $token_response"
+        fi
+    fi
+
     # 4.2 Image pull policies
     print_section "Image Pull Policies"
 

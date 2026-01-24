@@ -74,6 +74,25 @@ else
     FAILED=$((FAILED+1))
 fi
 
+# Validate OIDC credentials (if kubectl available)
+echo -n "Testing OIDC client credentials... "
+if command -v kubectl &> /dev/null; then
+    OIDC_SCRIPT_DIR="$(dirname "$0")"
+    if [[ -x "${OIDC_SCRIPT_DIR}/validate-oidc.sh" ]]; then
+        if "${OIDC_SCRIPT_DIR}/validate-oidc.sh" > /dev/null 2>&1; then
+            echo -e "${GREEN}OK${NC}"
+        else
+            echo -e "${RED}FAIL${NC}: OIDC credentials invalid"
+            echo "  Run: ./scripts/rotate-oidc-secret.sh to fix"
+            FAILED=$((FAILED+1))
+        fi
+    else
+        echo -e "${YELLOW}SKIP${NC} (validate-oidc.sh not found)"
+    fi
+else
+    echo -e "${YELLOW}SKIP${NC} (kubectl not available)"
+fi
+
 echo ""
 echo "=========================================="
 if [[ $FAILED -gt 0 ]]; then
