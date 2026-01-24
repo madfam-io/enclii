@@ -323,7 +323,9 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
+	// Use custom recovery middleware that logs panics with full stack trace
+	// and returns proper JSON error responses instead of empty body
+	router.Use(middleware.RecoveryMiddleware(logger))
 
 	// Initialize security middleware with CORS support
 	securityMiddleware := middleware.NewSecurityMiddleware(nil) // Uses default config with CORS

@@ -1,0 +1,134 @@
+# Generic Deployment Template for Enclii Services
+# Use Kustomize replacements to customize for each service
+#
+# Required replacements:
+#   - APP_NAME: Service name (e.g., switchyard-api)
+#   - NAMESPACE: Target namespace (e.g., enclii)
+#   - IMAGE: Container image reference
+#   - CONTAINER_PORT: Port the app listens on
+#
+# Optional replacements:
+#   - REPLICAS: Number of replicas (default: 2)
+#   - CPU_REQUEST, CPU_LIMIT: CPU resources
+#   - MEMORY_REQUEST, MEMORY_LIMIT: Memory resources
+#   - SERVICE_ACCOUNT: Service account name (default: APP_NAME)
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: APP_NAME
+  namespace: NAMESPACE
+  labels:
+    app: APP_NAME
+    app.kubernetes.io/name: APP_NAME
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: enclii
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: APP_NAME
+  namespace: NAMESPACE
+  labels:
+    app: APP_NAME
+    app.kubernetes.io/name: APP_NAME
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: enclii
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: APP_NAME
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: APP_NAME
+        app.kubernetes.io/name: APP_NAME
+        app.kubernetes.io/component: service
+        app.kubernetes.io/part-of: enclii
+    spec:
+      serviceAccountName: APP_NAME
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: APP_NAME
+          image: IMAGE
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: CONTAINER_PORT
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: APP_NAME
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: APP_NAME
+  namespace: NAMESPACE
+  labels:
+    app: APP_NAME
+    app.kubernetes.io/name: APP_NAME
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: enclii
+spec:
+  type: ClusterIP
+  selector:
+    app: APP_NAME
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

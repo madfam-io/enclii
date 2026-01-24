@@ -65,6 +65,14 @@ func (h *Handler) Health(c *gin.Context) {
 
 // checkDatabaseHealth checks database connectivity with timeout
 func (h *Handler) checkDatabaseHealth(ctx context.Context) ComponentHealth {
+	// Defensive nil check - prevent panic if repos not initialized
+	if h.repos == nil {
+		return ComponentHealth{
+			Status: "unhealthy",
+			Error:  "database connection not initialized",
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
@@ -116,7 +124,18 @@ func (h *Handler) checkCacheHealth(ctx context.Context) ComponentHealth {
 }
 
 // checkK8sHealth checks Kubernetes API connectivity
-func (h *Handler) checkK8sHealth(ctx context.Context) ComponentHealth {
+// This function includes panic recovery to handle unexpected errors from the K8s client
+func (h *Handler) checkK8sHealth(ctx context.Context) (result ComponentHealth) {
+	// Recover from any panics in the K8s client calls
+	defer func() {
+		if r := recover(); r != nil {
+			result = ComponentHealth{
+				Status: "unhealthy",
+				Error:  "kubernetes health check panicked - client in bad state",
+			}
+		}
+	}()
+
 	if h.k8sClient == nil {
 		return ComponentHealth{
 			Status: "disabled",
@@ -167,6 +186,16 @@ func (h *Handler) LivenessProbe(c *gin.Context) {
 // ReadinessProbe checks if the service is ready to accept traffic
 // This checks critical dependencies (database) before returning healthy
 func (h *Handler) ReadinessProbe(c *gin.Context) {
+	// Defensive nil check - return 503 if dependencies not initialized
+	if h.repos == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "unhealthy",
+			"error":   "database connection not initialized",
+			"message": "service initialization incomplete",
+		})
+		return
+	}
+
 	// Check database connectivity via a simple query
 	ctx := c.Request.Context()
 	if err := h.repos.Ping(ctx); err != nil {
@@ -184,6 +213,16 @@ func (h *Handler) ReadinessProbe(c *gin.Context) {
 
 // GetBuildStatus returns the status of the build pipeline and available tools
 func (h *Handler) GetBuildStatus(c *gin.Context) {
+	// Defensive nil check
+	if h.builder == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"status":  "unavailable",
+			"error":   "build service not initialized",
+			"message": "Build pipeline is not configured",
+		})
+		return
+	}
+
 	status := h.builder.GetBuildStatus()
 
 	// Determine overall health

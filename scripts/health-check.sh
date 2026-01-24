@@ -5,6 +5,11 @@
 
 set -euo pipefail
 
+# Source shared logging library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/logging.sh
+source "$SCRIPT_DIR/lib/logging.sh"
+
 # Configuration
 SLACK_WEBHOOK="${ENCLII_SLACK_WEBHOOK:-}"
 ENDPOINTS=(
@@ -14,12 +19,6 @@ ENDPOINTS=(
     "https://docs.enclii.dev|Documentation"
     "https://auth.madfam.io/.well-known/openid-configuration|OIDC Discovery"
 )
-
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
 
 # Results
 FAILED=()

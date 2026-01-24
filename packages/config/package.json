@@ -1,0 +1,14 @@
+{
+  "name": "@enclii/config",
+  "version": "0.1.0",
+  "description": "Shared configuration for Enclii frontend applications",
+  "license": "AGPL-3.0",
+  "exports": {
+    "./tailwind/base": "./tailwind/base.js",
+    "./tailwind/switchyard": "./tailwind/switchyard.js",
+    "./tailwind/dispatch": "./tailwind/dispatch.js"
+  },
+  "peerDependencies": {
+    "tailwindcss": "^3.0.0"
+  }
+}

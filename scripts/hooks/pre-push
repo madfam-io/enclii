@@ -1,0 +1,89 @@
+#!/bin/bash
+# Enclii Pre-push Hook - Production Health Gate
+# Prevents pushing to main when production is unhealthy
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Parse arguments
+REMOTE="$1"
+URL="$2"
+
+# Read stdin for refs being pushed
+while read local_ref local_sha remote_ref remote_sha; do
+    # Only check when pushing to main/master
+    if [[ "$remote_ref" == "refs/heads/main" || "$remote_ref" == "refs/heads/master" ]]; then
+        echo -e "${BLUE}🔍 Checking production health before push to main...${NC}"
+
+        # Configuration
+        MAX_RETRIES=3
+        RETRY_DELAY=2
+        API_TIMEOUT=10
+
+        # Function to check endpoint with retries
+        check_endpoint() {
+            local url="$1"
+            local name="$2"
+            local retries=0
+
+            while [ $retries -lt $MAX_RETRIES ]; do
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout $API_TIMEOUT "$url" 2>/dev/null || echo "000")
+
+                if [ "$HTTP_CODE" == "200" ]; then
+                    echo -e "${GREEN}  ✓ $name is healthy (HTTP $HTTP_CODE)${NC}"
+                    return 0
+                fi
+
+                retries=$((retries + 1))
+                if [ $retries -lt $MAX_RETRIES ]; then
+                    echo -e "${YELLOW}  ⚠ $name returned HTTP $HTTP_CODE, retrying ($retries/$MAX_RETRIES)...${NC}"
+                    sleep $RETRY_DELAY
+                fi
+            done
+
+            echo -e "${RED}  ✗ $name is unhealthy (HTTP $HTTP_CODE after $MAX_RETRIES attempts)${NC}"
+            return 1
+        }
+
+        FAILED=0
+
+        # Check API health (use /health/ready for K8s readiness probe - more reliable)
+        if ! check_endpoint "https://api.enclii.dev/health/ready" "Production API"; then
+            FAILED=1
+        fi
+
+        # Check UI health (just verify it responds, don't require 200)
+        UI_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout $API_TIMEOUT "https://app.enclii.dev" 2>/dev/null || echo "000")
+        if [ "$UI_CODE" -ge 500 ] || [ "$UI_CODE" == "000" ]; then
+            echo -e "${RED}  ✗ Production UI is unhealthy (HTTP $UI_CODE)${NC}"
+            FAILED=1
+        else
+            echo -e "${GREEN}  ✓ Production UI is responding (HTTP $UI_CODE)${NC}"
+        fi
+
+        if [ $FAILED -eq 1 ]; then
+            echo ""
+            echo -e "${RED}❌ PUSH BLOCKED: Production is unhealthy${NC}"
+            echo ""
+            echo -e "${YELLOW}Please investigate and fix production before pushing to main.${NC}"
+            echo -e "${YELLOW}Diagnostic commands:${NC}"
+            echo -e "  curl -s https://api.enclii.dev/health | jq"
+            echo -e "  kubectl logs -n enclii -l app=switchyard-api --tail=50"
+            echo ""
+            echo -e "${YELLOW}To bypass this check (not recommended):${NC}"
+            echo -e "  git push --no-verify"
+            exit 1
+        fi
+
+        echo -e "${GREEN}✅ Production health check passed${NC}"
+        echo ""
+    fi
+done
+
+exit 0

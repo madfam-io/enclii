@@ -19,40 +19,18 @@
 
 set -euo pipefail
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 TF_DIR="$ROOT_DIR/infra/terraform"
 K8S_DIR="$ROOT_DIR/infra/k8s"
 
-# Functions
-log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
-log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+# Source shared logging library
+# shellcheck source=lib/logging.sh
+source "$SCRIPT_DIR/lib/logging.sh"
 
-banner() {
-    echo ""
-    echo -e "${GREEN}╔═══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║                                                               ║${NC}"
-    echo -e "${GREEN}║   ███████╗███╗   ██╗ ██████╗██╗     ██╗██╗                   ║${NC}"
-    echo -e "${GREEN}║   ██╔════╝████╗  ██║██╔════╝██║     ██║██║                   ║${NC}"
-    echo -e "${GREEN}║   █████╗  ██╔██╗ ██║██║     ██║     ██║██║                   ║${NC}"
-    echo -e "${GREEN}║   ██╔══╝  ██║╚██╗██║██║     ██║     ██║██║                   ║${NC}"
-    echo -e "${GREEN}║   ███████╗██║ ╚████║╚██████╗███████╗██║██║                   ║${NC}"
-    echo -e "${GREEN}║   ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚══════╝╚═╝╚═╝                   ║${NC}"
-    echo -e "${GREEN}║                                                               ║${NC}"
-    echo -e "${GREEN}║           Production Deployment Script                        ║${NC}"
-    echo -e "${GREEN}╚═══════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-}
+# Alias for backward compatibility
+banner() { enclii_banner "Production Deployment Script"; }
 
 # Check prerequisites
 check_prerequisites() {

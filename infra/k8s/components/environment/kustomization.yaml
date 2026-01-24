@@ -1,0 +1,46 @@
+# Environment Configuration Component
+#
+# This component provides consolidated environment variable management.
+#
+# Files:
+#   - common.env: Shared across all environments
+#   - production.env: Production-specific overrides
+#   - staging.env: Staging-specific overrides
+#
+# Usage in overlay kustomization.yaml:
+#
+#   # Production example:
+#   configMapGenerator:
+#     - name: env-config
+#       envs:
+#         - ../../components/environment/common.env
+#         - ../../components/environment/production.env
+#       behavior: merge
+#
+#   # Staging example:
+#   configMapGenerator:
+#     - name: env-config
+#       envs:
+#         - ../../components/environment/common.env
+#         - ../../components/environment/staging.env
+#       behavior: merge
+#
+# Then reference in deployments:
+#
+#   spec:
+#     template:
+#       spec:
+#         containers:
+#           - name: my-service
+#             envFrom:
+#               - configMapRef:
+#                   name: env-config
+#
+# Note: Secrets should still be referenced via secretKeyRef in patches.
+# This component only manages non-sensitive configuration.
+#
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# This component doesn't define resources - it provides env files
+# for use with configMapGenerator in overlays

@@ -170,9 +170,21 @@ echo -e "\n${BLUE}🔧 Running lint validations...${NC}"
 # Check if any UI files are staged
 UI_FILES=$(echo "$STAGED_FILES" | grep -E '^apps/switchyard-ui/.*\.(ts|tsx|js|jsx|mjs)$' || true)
 if [ -n "$UI_FILES" ]; then
-    echo -e "${YELLOW}  → Checking switchyard-ui ESLint...${NC}"
+    echo -e "${YELLOW}  → Checking switchyard-ui TypeScript...${NC}"
     if [ -f "apps/switchyard-ui/package.json" ]; then
         cd apps/switchyard-ui
+
+        # Run TypeScript type checking first (catches type errors before ESLint)
+        if npm run typecheck 2>&1 | grep -qE "error TS|Error:"; then
+            echo -e "${RED}❌ TypeScript errors found in switchyard-ui${NC}"
+            echo -e "${YELLOW}Run 'npm run typecheck' in apps/switchyard-ui to see details${NC}"
+            cd ../..
+            exit 1
+        fi
+        echo -e "${GREEN}  ✓ switchyard-ui typecheck passed${NC}"
+
+        # Then run ESLint
+        echo -e "${YELLOW}  → Checking switchyard-ui ESLint...${NC}"
         # Only run lint on staged files for speed, but check plugin availability first
         if ! npm run lint -- --quiet --max-warnings 0 2>&1 | head -20; then
             # If lint fails with errors, block commit

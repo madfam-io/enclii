@@ -1,0 +1,89 @@
+# Example: Using the deployment template for a service
+#
+# Copy this to your service's k8s directory and customize.
+# Place at: apps/<service>/k8s/kustomization.yaml
+#
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Include the deployment template component
+components:
+  - ../../../../infra/k8s/components/deployment-template
+
+# Apply patches to customize for this service
+patches:
+  # Customize ServiceAccount
+  - target:
+      kind: ServiceAccount
+      name: APP_NAME
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: my-service
+      - op: replace
+        path: /metadata/namespace
+        value: enclii
+
+  # Customize Deployment
+  - target:
+      kind: Deployment
+      name: APP_NAME
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: my-service
+      - op: replace
+        path: /metadata/namespace
+        value: enclii
+      - op: replace
+        path: /spec/selector/matchLabels/app
+        value: my-service
+      - op: replace
+        path: /spec/template/metadata/labels/app
+        value: my-service
+      - op: replace
+        path: /spec/template/spec/serviceAccountName
+        value: my-service
+      - op: replace
+        path: /spec/template/spec/containers/0/name
+        value: my-service
+      - op: replace
+        path: /spec/template/spec/containers/0/image
+        value: ghcr.io/madfam-org/my-service:latest
+      - op: replace
+        path: /spec/template/spec/containers/0/ports/0/containerPort
+        value: 4200
+
+  # Customize Service
+  - target:
+      kind: Service
+      name: APP_NAME
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: my-service
+      - op: replace
+        path: /metadata/namespace
+        value: enclii
+      - op: replace
+        path: /spec/selector/app
+        value: my-service
+
+# Add environment-specific configuration
+configMapGenerator:
+  - name: my-service-config
+    literals:
+      - LOG_LEVEL=info
+      - PORT=4200
+
+# Reference the generated ConfigMap in the deployment
+patches:
+  - target:
+      kind: Deployment
+      name: APP_NAME
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom
+        value:
+          - configMapRef:
+              name: my-service-config

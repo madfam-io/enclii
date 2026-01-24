@@ -17,11 +17,13 @@ bootstrap:
 	@echo "🔐 Installing git hooks..."
 	@cp scripts/hooks/pre-commit .git/hooks/pre-commit 2>/dev/null || true
 	@chmod +x .git/hooks/pre-commit 2>/dev/null || true
+	@cp scripts/hooks/pre-push .git/hooks/pre-push 2>/dev/null || true
+	@chmod +x .git/hooks/pre-push 2>/dev/null || true
 	@echo "✅ Bootstrap complete"
 
-# Install pre-commit hooks (requires pre-commit to be installed)
+# Install git hooks (pre-commit and pre-push)
 install-hooks:
-	@echo "🔐 Installing pre-commit hooks..."
+	@echo "🔐 Installing git hooks..."
 	@if command -v pre-commit &> /dev/null; then \
 		pre-commit install; \
 	else \
@@ -29,7 +31,10 @@ install-hooks:
 		cp scripts/hooks/pre-commit .git/hooks/pre-commit; \
 		chmod +x .git/hooks/pre-commit; \
 	fi
-	@echo "✅ Hooks installed"
+	@echo "🔐 Installing pre-push hook (production health gate)..."
+	@cp scripts/hooks/pre-push .git/hooks/pre-push
+	@chmod +x .git/hooks/pre-push
+	@echo "✅ All hooks installed"
 
 # Build all components
 build-all: build-api build-cli build-ui build-reconcilers

@@ -1,0 +1,52 @@
+# Deployment Template Component
+#
+# This component provides a standardized deployment pattern for Enclii services.
+# Use Kustomize replacements to customize values per-service.
+#
+# Example usage in a service's kustomization.yaml:
+#
+#   apiVersion: kustomize.config.k8s.io/v1beta1
+#   kind: Kustomization
+#
+#   components:
+#     - ../../../infra/k8s/components/deployment-template
+#
+#   replacements:
+#     - source:
+#         kind: ConfigMap
+#         name: service-config
+#         fieldPath: data.APP_NAME
+#       targets:
+#         - select:
+#             kind: Deployment
+#           fieldPaths:
+#             - metadata.name
+#             - spec.selector.matchLabels.app
+#             - spec.template.metadata.labels.app
+#             - spec.template.spec.containers.0.name
+#
+# Or use a simpler patch-based approach in the overlay:
+#
+#   patches:
+#     - target:
+#         kind: Deployment
+#         name: APP_NAME
+#       patch: |
+#         - op: replace
+#           path: /metadata/name
+#           value: my-service
+#
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - deployment.yaml
+
+# Default labels applied to all resources
+labels:
+  - pairs:
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: false
+
+# Transformers can be added here for common modifications
+# Example: Add common annotations, labels, etc.
