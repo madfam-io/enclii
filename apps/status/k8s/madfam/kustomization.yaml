@@ -14,9 +14,6 @@ resources:
 commonLabels:
   app.kubernetes.io/instance: status-madfam
 
-# Name suffix for this instance
-nameSuffix: -madfam
-
 # Patches for MADFAM-specific configuration
 patches:
   # Update deployment name and selectors

@@ -14,9 +14,6 @@ resources:
 commonLabels:
   app.kubernetes.io/instance: status-enclii
 
-# Name suffix for this instance
-nameSuffix: -enclii
-
 # Patches for Enclii-specific configuration
 patches:
   # Update deployment name and selectors
