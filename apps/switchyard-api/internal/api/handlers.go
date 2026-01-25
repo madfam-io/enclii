@@ -1,8 +1,6 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/addons"
