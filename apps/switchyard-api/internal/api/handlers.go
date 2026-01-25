@@ -172,36 +172,18 @@ func (h *Handler) SetTunnelRoutesService(svc services.TunnelRoutesManager) {
 // - webhook_handlers.go: GitHub webhook handlers
 // - observability_handlers.go: Metrics and monitoring endpoints
 func SetupRoutes(router *gin.Engine, h *Handler) {
-	// HTTP metrics middleware - TEMPORARILY DISABLED to debug panic
-	// router.Use(h.metrics.HTTPMetricsMiddleware())
+	// HTTP metrics middleware
+	if h.metrics != nil {
+		router.Use(h.metrics.HTTPMetricsMiddleware())
+	}
 
 	// Prometheus metrics endpoint (for scraping by Prometheus/Grafana)
 	if h.metrics != nil {
 		router.GET("/metrics", gin.WrapH(h.metrics.Handler()))
 	}
 
-	// Health check (no auth required)
-	// TEMPORARY: Using inline function to debug panic
-	// Also adding /healthz as alternate route to test if /health specifically has issues
-	healthHandler := func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "healthy",
-			"service": "switchyard-api-inline",
-			"version": "0.1.0-debug5",
-		})
-	}
-	router.GET("/health", healthHandler)
-	router.GET("/healthz", healthHandler)
-
-	// DEBUG: Completely new test route to verify deployment
-	router.GET("/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "pong",
-			"version": "0.1.0-debug5",
-		})
-	})
-
-	// Kubernetes probes (no auth required)
+	// Health check endpoints (no auth required)
+	router.GET("/health", h.Health)
 	router.GET("/health/live", h.LivenessProbe)
 	router.GET("/health/ready", h.ReadinessProbe)
 

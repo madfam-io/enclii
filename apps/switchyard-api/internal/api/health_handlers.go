@@ -26,12 +26,40 @@ type HealthResponse struct {
 
 // Health returns the health status of the API with component details
 func (h *Handler) Health(c *gin.Context) {
-	// TEMPORARY: Return simplest possible response to debug panic
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "healthy",
-		"service": "switchyard-api",
-		"version": "0.1.0-debug2",
-	})
+	ctx := c.Request.Context()
+
+	// Check each component's health
+	dbHealth := h.checkDatabaseHealth(ctx)
+	cacheHealth := h.checkCacheHealth(ctx)
+	k8sHealth := h.checkK8sHealth(ctx)
+
+	// Determine overall status
+	overallStatus := "healthy"
+	if dbHealth.Status == "unhealthy" {
+		overallStatus = "unhealthy"
+	} else if k8sHealth.Status == "unhealthy" || cacheHealth.Status == "unhealthy" {
+		overallStatus = "degraded"
+	}
+
+	// Build response
+	response := HealthResponse{
+		Status:  overallStatus,
+		Service: "switchyard-api",
+		Version: "0.1.0",
+		Components: map[string]ComponentHealth{
+			"database":   dbHealth,
+			"cache":      cacheHealth,
+			"kubernetes": k8sHealth,
+		},
+	}
+
+	// Return appropriate HTTP status
+	statusCode := http.StatusOK
+	if overallStatus == "unhealthy" {
+		statusCode = http.StatusServiceUnavailable
+	}
+
+	c.JSON(statusCode, response)
 }
 
 // checkDatabaseHealth checks database connectivity with timeout

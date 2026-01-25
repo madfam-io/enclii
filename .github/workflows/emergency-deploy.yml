@@ -71,10 +71,8 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/switchyard-api:latest
             ${{ env.IMAGE_PREFIX }}/switchyard-api:${{ github.sha }}
-          # TEMPORARILY DISABLED CACHE to debug deployment issues
-          no-cache: true
-          # cache-from: type=gha
-          # cache-to: type=gha,mode=max
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
     outputs:
       image: ${{ env.IMAGE_PREFIX }}/switchyard-api:${{ github.sha }}
