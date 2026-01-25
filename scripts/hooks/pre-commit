@@ -227,6 +227,70 @@ if [ -n "$GO_FILES" ]; then
 fi
 
 # =============================================================================
+# FILE LENGTH VALIDATION - Prevent large files from growing
+# =============================================================================
+
+echo -e "\n${BLUE}📏 Checking file lengths...${NC}"
+
+FILE_LENGTH_ERRORS=0
+FILE_LENGTH_WARNINGS=0
+ERROR_FILES=""
+WARNING_FILES=""
+
+for file in $STAGED_FILES; do
+    # Skip non-source files
+    if ! echo "$file" | grep -qE '\.(go|ts|tsx|js|jsx|py)$'; then
+        continue
+    fi
+
+    # Skip test files (more lenient)
+    if echo "$file" | grep -qE '(_test\.go|\.test\.(ts|tsx|js)|\.spec\.(ts|tsx|js)|/tests?/)'; then
+        continue
+    fi
+
+    # Skip generated files
+    if echo "$file" | grep -qE '(generated|\.gen\.|mock_)'; then
+        continue
+    fi
+
+    if [ -f "$file" ]; then
+        LINES=$(wc -l < "$file" | tr -d ' ')
+
+        if [ "$LINES" -gt 800 ]; then
+            FILE_LENGTH_ERRORS=1
+            ERROR_FILES="$ERROR_FILES\n  ${RED}❌ $file: $LINES lines (>800)${NC}"
+        elif [ "$LINES" -gt 600 ]; then
+            FILE_LENGTH_WARNINGS=1
+            WARNING_FILES="$WARNING_FILES\n  ${YELLOW}⚠️  $file: $LINES lines (>600)${NC}"
+        fi
+    fi
+done
+
+if [ -n "$ERROR_FILES" ]; then
+    echo -e "${RED}Files exceeding 800 lines:${NC}$ERROR_FILES"
+fi
+
+if [ -n "$WARNING_FILES" ]; then
+    echo -e "${YELLOW}Files exceeding 600 lines (warning):${NC}$WARNING_FILES"
+fi
+
+if [ $FILE_LENGTH_ERRORS -eq 1 ]; then
+    echo -e "\n${RED}❌ FILE LENGTH ERROR: Files over 800 lines must be refactored${NC}"
+    echo -e "${YELLOW}Suggestions:${NC}"
+    echo -e "  - Split into smaller focused modules"
+    echo -e "  - Extract helper functions to separate files"
+    echo -e "  - Move types to dedicated type files"
+    echo -e "  - Use 'git commit --no-verify' to bypass (not recommended)"
+    exit 1
+fi
+
+if [ $FILE_LENGTH_WARNINGS -eq 1 ]; then
+    echo -e "${YELLOW}⚠️  Warning: Consider refactoring files approaching 800 lines${NC}"
+fi
+
+echo -e "${GREEN}✓ File length check passed${NC}"
+
+# =============================================================================
 # OPERATION RATCHET - Manifest Stability Validation
 # =============================================================================
 
