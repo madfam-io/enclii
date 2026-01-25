@@ -187,11 +187,19 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "healthy",
 			"service": "switchyard-api-inline",
-			"version": "0.1.0-debug4",
+			"version": "0.1.0-debug5",
 		})
 	}
 	router.GET("/health", healthHandler)
 	router.GET("/healthz", healthHandler)
+
+	// DEBUG: Completely new test route to verify deployment
+	router.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "pong",
+			"version": "0.1.0-debug5",
+		})
+	})
 
 	// Kubernetes probes (no auth required)
 	router.GET("/health/live", h.LivenessProbe)
