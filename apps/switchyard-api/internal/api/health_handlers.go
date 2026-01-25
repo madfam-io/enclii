@@ -26,16 +26,11 @@ type HealthResponse struct {
 
 // Health returns the health status of the API with component details
 func (h *Handler) Health(c *gin.Context) {
-	// TEMPORARY: Return static response to debug panic
-	// If this works, the panic is in the component checks
-	// If this fails, the panic is elsewhere
-	c.JSON(http.StatusOK, HealthResponse{
-		Status:  "healthy",
-		Service: "switchyard-api",
-		Version: "0.1.0-debug",
-		Components: map[string]ComponentHealth{
-			"test": {Status: "healthy"},
-		},
+	// TEMPORARY: Return simplest possible response to debug panic
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "healthy",
+		"service": "switchyard-api",
+		"version": "0.1.0-debug2",
 	})
 }
 

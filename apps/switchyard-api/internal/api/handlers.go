@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/addons"
@@ -177,7 +179,14 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	router.GET("/metrics", gin.WrapH(h.metrics.Handler()))
 
 	// Health check (no auth required)
-	router.GET("/health", h.Health)
+	// TEMPORARY: Using inline function to debug panic
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "healthy",
+			"service": "switchyard-api-inline",
+			"version": "0.1.0-debug3",
+		})
+	})
 
 	// Kubernetes probes (no auth required)
 	router.GET("/health/live", h.LivenessProbe)
