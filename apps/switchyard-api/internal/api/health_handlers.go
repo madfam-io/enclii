@@ -26,6 +26,23 @@ type HealthResponse struct {
 
 // Health returns the health status of the API with component details
 func (h *Handler) Health(c *gin.Context) {
+	// Top-level panic recovery to catch any panics that escape from component checks
+	defer func() {
+		if r := recover(); r != nil {
+			c.JSON(http.StatusOK, HealthResponse{
+				Status:  "degraded",
+				Service: "switchyard-api",
+				Version: "0.1.0",
+				Components: map[string]ComponentHealth{
+					"internal": {
+						Status: "unhealthy",
+						Error:  fmt.Sprintf("health check panicked: %v", r),
+					},
+				},
+			})
+		}
+	}()
+
 	ctx := c.Request.Context()
 
 	response := HealthResponse{
