@@ -40,6 +40,9 @@ type Repositories struct {
 
 // Ping checks database connectivity for health probes
 func (r *Repositories) Ping(ctx context.Context) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("database connection not initialized")
+	}
 	return r.db.PingContext(ctx)
 }
 

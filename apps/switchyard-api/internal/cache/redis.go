@@ -246,6 +246,9 @@ func (r *RedisCache) Subscribe(ctx context.Context, channels ...string) <-chan *
 }
 
 func (r *RedisCache) Ping(ctx context.Context) error {
+	if r == nil || r.client == nil {
+		return fmt.Errorf("redis client not initialized")
+	}
 	return r.client.Ping(ctx).Err()
 }
 
