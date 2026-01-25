@@ -172,11 +172,13 @@ func (h *Handler) SetTunnelRoutesService(svc services.TunnelRoutesManager) {
 // - webhook_handlers.go: GitHub webhook handlers
 // - observability_handlers.go: Metrics and monitoring endpoints
 func SetupRoutes(router *gin.Engine, h *Handler) {
-	// HTTP metrics middleware (collect request metrics for all routes)
-	router.Use(h.metrics.HTTPMetricsMiddleware())
+	// HTTP metrics middleware - TEMPORARILY DISABLED to debug panic
+	// router.Use(h.metrics.HTTPMetricsMiddleware())
 
 	// Prometheus metrics endpoint (for scraping by Prometheus/Grafana)
-	router.GET("/metrics", gin.WrapH(h.metrics.Handler()))
+	if h.metrics != nil {
+		router.GET("/metrics", gin.WrapH(h.metrics.Handler()))
+	}
 
 	// Health check (no auth required)
 	// TEMPORARY: Using inline function to debug panic
