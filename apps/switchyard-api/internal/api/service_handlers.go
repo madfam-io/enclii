@@ -239,3 +239,53 @@ func (h *Handler) GetServiceSettings(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"settings": settings})
 }
+
+// ListServicesByGitRepo returns all services that use a specific git repository URL.
+// This is an internal endpoint used by Roundhouse for webhook-triggered preview environments.
+//
+// Request:
+//   - Method: GET /v1/internal/services
+//   - Query Parameters: git_repo (string) - Git repository URL to search for
+//   - Authorization: API key via X-API-Key or Authorization header
+//
+// Response:
+//   - 200 OK: {services: Service[]}
+//   - 400 Bad Request: Missing git_repo parameter
+//   - 500 Internal Server Error: Failed to query services
+func (h *Handler) ListServicesByGitRepo(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	gitRepo := c.Query("git_repo")
+	if gitRepo == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "git_repo query parameter is required"})
+		return
+	}
+
+	// Query services by git repo URL
+	services, err := h.repos.Services.ListByGitRepo(gitRepo)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list services by git repo",
+			logging.String("git_repo", gitRepo),
+			logging.Error("error", err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query services"})
+		return
+	}
+
+	// Convert to response format
+	type serviceResponse struct {
+		ID        string `json:"id"`
+		Name      string `json:"name"`
+		ProjectID string `json:"project_id"`
+	}
+
+	result := make([]serviceResponse, 0, len(services))
+	for _, svc := range services {
+		result = append(result, serviceResponse{
+			ID:        svc.ID.String(),
+			Name:      svc.Name,
+			ProjectID: svc.ProjectID.String(),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"services": result})
+}

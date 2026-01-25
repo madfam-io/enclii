@@ -33,6 +33,7 @@ func NewAddonService(repos *db.Repositories, k8sClient *k8s.Client, logger *logr
 	// Register provisioners
 	svc.provisioners[types.DatabaseAddonTypePostgres] = NewPostgresProvisioner(k8sClient, logger)
 	svc.provisioners[types.DatabaseAddonTypeRedis] = NewRedisProvisioner(k8sClient, logger)
+	svc.provisioners[types.DatabaseAddonTypeMySQL] = NewMySQLProvisioner(k8sClient, logger)
 
 	return svc
 }

@@ -1,3 +1,10 @@
+---
+title: SSO/OIDC Integration
+description: Enterprise authentication with Janua SSO using OAuth 2.0 and OpenID Connect
+sidebar_position: 2
+tags: [integrations, sso, oidc, oauth, authentication, janua]
+---
+
 # SSO/OIDC Integration
 
 Enclii integrates with Janua SSO for enterprise-grade authentication using OAuth 2.0 and OpenID Connect (OIDC).
@@ -426,9 +433,12 @@ curl https://auth.madfam.io/.well-known/jwks.json
 
 ---
 
-## See Also
+## Related Documentation
 
-- [Janua Documentation](https://docs.janua.dev)
-- [CLI Authentication](../cli/commands/login.md)
-- [API Tokens](../cli/commands/tokens.md)
-- [RBAC Guide](../guides/rbac.md)
+- **Getting Started**: [Quick Start Guide](/docs/getting-started/QUICKSTART)
+- **CLI**: [CLI Reference](/docs/cli/) | [Login Command](/docs/cli/commands/login)
+- **Guides**: [CLI Auth Setup](/docs/guides/cli-auth-setup) | [SSO Deployment](/docs/guides/sso-deployment)
+- **Troubleshooting**: [Auth Problems](/docs/troubleshooting/auth-problems)
+- **Security FAQ**: [Security Questions](/docs/faq/security)
+- **Other Integrations**: [GitHub Integration](/docs/integrations/github)
+- **External**: [Janua Documentation](https://docs.janua.dev)

@@ -44,6 +44,9 @@ type Config struct {
 	SwitchyardInternalURL string `mapstructure:"SWITCHYARD_INTERNAL_URL"`
 	SwitchyardAPIKey      string `mapstructure:"SWITCHYARD_API_KEY"`
 
+	// Preview Environments
+	PreviewsEnabled bool `mapstructure:"PREVIEWS_ENABLED"`
+
 	// Worker settings
 	MaxConcurrentBuilds int           `mapstructure:"MAX_CONCURRENT_BUILDS"`
 	PollInterval        time.Duration `mapstructure:"POLL_INTERVAL"`
@@ -60,6 +63,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("POLL_INTERVAL", 5*time.Second)
 	viper.SetDefault("REGISTRY", "ghcr.io")
 	viper.SetDefault("KANIKO_GIT_CREDENTIALS", "git-credentials")
+	viper.SetDefault("PREVIEWS_ENABLED", true)
 
 	// Bind environment variables explicitly for reliable reading
 	viper.BindEnv("REDIS_URL")
@@ -78,6 +82,7 @@ func Load() (*Config, error) {
 	viper.BindEnv("COSIGN_KEY")
 	viper.BindEnv("SWITCHYARD_INTERNAL_URL")
 	viper.BindEnv("SWITCHYARD_API_KEY")
+	viper.BindEnv("PREVIEWS_ENABLED")
 	viper.BindEnv("MAX_CONCURRENT_BUILDS")
 	viper.BindEnv("POLL_INTERVAL")
 

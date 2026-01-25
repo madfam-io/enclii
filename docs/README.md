@@ -1,3 +1,10 @@
+---
+title: Overview
+description: Welcome to Enclii - a Railway-style PaaS on cost-effective infrastructure
+sidebar_position: 1
+tags: [overview, documentation, getting-started]
+---
+
 # Enclii Documentation
 
 **Welcome to the Enclii documentation!** This directory contains all technical documentation, guides, audit reports, and implementation notes.
@@ -26,7 +33,15 @@
 
 **Want to understand the architecture?** Read:
 - [Architecture Overview](./architecture/ARCHITECTURE.md)
-- [API Documentation](./architecture/API.md)
+- [API Documentation](/api-reference/)
+
+**Need help?** Check:
+- [Troubleshooting](./troubleshooting/) - Solutions to common problems
+- [FAQ](./faq/) - Frequently asked questions
+
+**Building integrations?** Use:
+- [TypeScript SDK](./sdk/typescript/) - Programmatic access to Enclii
+- [CLI Reference](./cli/) - Command-line interface
 
 ## Documentation Structure
 
@@ -51,7 +66,25 @@ User guides for common tasks and migrations.
 - [Railway Migration Guide](./guides/RAILWAY_MIGRATION_GUIDE.md) - Migrating from Railway
 - [Vercel Migration Guide](./guides/VERCEL_MIGRATION_GUIDE.md) - Migrating from Vercel
 - [Testing Guide](./guides/TESTING_GUIDE.md) - Writing and running tests
-- [Audit Logging Test Guide](./guides/AUDIT_LOGGING_TEST_GUIDE.md) - Testing audit logging functionality
+- [Database Operations](./guides/database-operations.md) - Database management and migrations
+- [CLI Auth Setup](./guides/cli-auth-setup.md) - CLI authentication configuration
+- [SSO Deployment](./guides/sso-deployment.md) - SSO configuration and deployment
+
+### 🆘 Troubleshooting & FAQ
+Get help with common issues and answers to frequent questions.
+
+- [Troubleshooting Index](./troubleshooting/) - Common problems and solutions
+- [API Errors](./troubleshooting/api-errors.md) - API error codes and fixes
+- [Build Failures](./troubleshooting/build-failures.md) - Build pipeline troubleshooting
+- [Deployment Issues](./troubleshooting/deployment-issues.md) - Deployment troubleshooting
+- [Auth Problems](./troubleshooting/auth-problems.md) - Authentication issues
+- [FAQ](./faq/) - Frequently asked questions
+
+### 📦 SDKs
+Client libraries for programmatic access.
+
+- [TypeScript SDK](./sdk/typescript/) - Full TypeScript/JavaScript SDK
+- [Go SDK](../packages/sdk-go/README.md) - Go client library
 
 ### 🚀 Production
 Production deployment, readiness, and operational guides.
@@ -247,5 +280,17 @@ When adding new documentation:
 
 ---
 
-**Last Updated:** 2026-01-14
-**Documentation Version:** 2.3 (Infrastructure Documentation Complete)
+---
+
+## Related Documentation
+
+- **API Reference**: [OpenAPI Documentation](/api-reference/)
+- **CLI Reference**: [CLI Commands](./cli/)
+- **TypeScript SDK**: [SDK Documentation](./sdk/typescript/)
+- **Troubleshooting**: [Common Issues](./troubleshooting/)
+- **FAQ**: [Frequently Asked Questions](./faq/)
+
+---
+
+**Last Updated:** 2026-01-25
+**Documentation Version:** 3.0 (Ecosystem Update Complete)

@@ -36,10 +36,13 @@ const config: Config = {
           path: process.env.DOCKER_BUILD === 'true' ? '../docs' : '../../docs',
           routeBasePath: '/',
           editUrl: 'https://github.com/madfam-io/enclii/tree/main/docs/',
-          // Exclude archived content only (API.md fixed, infrastructure now included)
+          // Exclude archived and draft content
           exclude: [
             '**/archive/**',
+            '**/drafts/**',
           ],
+          // Show last updated time for docs
+          showLastUpdateTime: true,
         },
         pages: false,
         blog: false,
@@ -47,6 +50,31 @@ const config: Config = {
           customCss: './src/css/custom.css',
         },
       } satisfies Preset.Options,
+    ],
+  ],
+
+  // Add Redocusaurus plugin for OpenAPI documentation
+  plugins: [
+    [
+      'redocusaurus',
+      {
+        specs: [
+          {
+            id: 'enclii-api',
+            spec: process.env.DOCKER_BUILD === 'true' ? '../docs/api/openapi.yaml' : '../../docs/api/openapi.yaml',
+            route: '/api-reference/',
+          },
+        ],
+        theme: {
+          primaryColor: '#6366f1',
+          options: {
+            disableSearch: false,
+            hideDownloadButton: false,
+            hideHostname: false,
+            noAutoAuth: true,
+          },
+        },
+      },
     ],
   ],
 
@@ -64,6 +92,11 @@ const config: Config = {
           sidebarId: 'docsSidebar',
           position: 'left',
           label: 'Documentation',
+        },
+        {
+          to: '/api-reference/',
+          label: 'API Reference',
+          position: 'left',
         },
         {
           href: 'https://app.enclii.dev',
@@ -88,12 +121,33 @@ const config: Config = {
               to: '/getting-started/QUICKSTART',
             },
             {
-              label: 'Architecture',
-              to: '/architecture/ARCHITECTURE',
+              label: 'API Reference',
+              to: '/api-reference/',
+            },
+            {
+              label: 'CLI Commands',
+              to: '/cli/',
             },
             {
               label: 'Guides',
               to: '/guides/DOGFOODING_GUIDE',
+            },
+          ],
+        },
+        {
+          title: 'Help',
+          items: [
+            {
+              label: 'Troubleshooting',
+              to: '/troubleshooting/',
+            },
+            {
+              label: 'FAQ',
+              to: '/faq/',
+            },
+            {
+              label: 'GitHub Issues',
+              href: 'https://github.com/madfam-io/enclii/issues',
             },
           ],
         },
@@ -107,6 +161,10 @@ const config: Config = {
             {
               label: 'Discord',
               href: 'https://discord.gg/madfam',
+            },
+            {
+              label: 'Status',
+              href: 'https://status.enclii.dev',
             },
           ],
         },

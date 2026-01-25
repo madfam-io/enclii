@@ -1,3 +1,10 @@
+---
+title: CLI Reference
+description: Complete command reference for the Enclii CLI
+sidebar_position: 1
+tags: [cli, reference, commands, deployment]
+---
+
 # Enclii CLI Reference
 
 The `enclii` command-line interface provides developers with tools to deploy, manage, and monitor services on the Enclii platform.
@@ -162,8 +169,10 @@ enclii local logs
 enclii local down
 ```
 
-## See Also
+## Related Documentation
 
-- [Service Specification Reference](../reference/service-spec.md)
-- [Deployment Strategies Guide](../guides/deployment-strategies.md)
-- [GitHub Integration](../integrations/github.md)
+- **Getting Started**: [Quick Start Guide](/docs/getting-started/QUICKSTART)
+- **SDK Alternative**: [TypeScript SDK](/docs/sdk/typescript/) for programmatic access
+- **Troubleshooting**: [Auth Problems](/docs/troubleshooting/auth-problems) | [Deployment Issues](/docs/troubleshooting/deployment-issues)
+- **FAQ**: [General FAQ](/docs/faq/general)
+- **Reference**: [Service Specification](/docs/reference/service-spec) | [GitHub Integration](/docs/integrations/github)

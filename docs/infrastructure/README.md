@@ -1,3 +1,10 @@
+---
+title: Infrastructure Overview
+description: Production infrastructure components and architecture documentation
+sidebar_position: 1
+tags: [infrastructure, kubernetes, argocd, longhorn, cloudflare]
+---
+
 # Infrastructure Documentation
 
 **Last Updated:** January 2026
@@ -79,7 +86,8 @@ kubectl port-forward svc/longhorn-frontend -n longhorn-system 8081:80
 
 ## Related Documentation
 
-- [Deployment Guide](../../infra/DEPLOYMENT.md)
-- [Production Checklist](../production/PRODUCTION_CHECKLIST.md)
-- [Production Roadmap](../production/PRODUCTION_DEPLOYMENT_ROADMAP.md)
-- [Architecture Overview](../architecture/ARCHITECTURE.md)
+- **Getting Started**: [Quick Start Guide](/docs/getting-started/QUICKSTART)
+- **Architecture**: [Platform Architecture](/docs/architecture/ARCHITECTURE)
+- **Production**: [Production Checklist](/docs/production/PRODUCTION_CHECKLIST) | [Deployment Roadmap](/docs/production/PRODUCTION_DEPLOYMENT_ROADMAP)
+- **Troubleshooting**: [Networking Issues](/docs/troubleshooting/networking) | [Deployment Issues](/docs/troubleshooting/deployment-issues)
+- **Guides**: [Database Operations](/docs/guides/database-operations) | [DNS Setup](/docs/infrastructure/dns-setup-porkbun)

@@ -41,6 +41,9 @@ type ServerConfig struct {
 	GitLabWebhookSecret    string
 	BitbucketWebhookSecret string
 	InternalAPIKey         string
+	SwitchyardURL          string
+	SwitchyardAPIKey       string
+	PreviewsEnabled        bool
 }
 
 func (s *Server) setupRoutes(cfg *ServerConfig) {
@@ -51,7 +54,13 @@ func (s *Server) setupRoutes(cfg *ServerConfig) {
 	// Webhook endpoints (signature validation)
 	webhooks := s.router.Group("/webhooks")
 	{
-		githubHandler := webhook.NewGitHubHandler(cfg.GitHubWebhookSecret, s.logger)
+		// GitHub webhook with preview environment integration
+		githubHandler := webhook.NewGitHubHandlerWithConfig(&webhook.GitHubHandlerConfig{
+			Secret:           cfg.GitHubWebhookSecret,
+			SwitchyardURL:    cfg.SwitchyardURL,
+			SwitchyardAPIKey: cfg.SwitchyardAPIKey,
+			PreviewsEnabled:  cfg.PreviewsEnabled,
+		}, s.logger)
 		webhooks.POST("/github", githubHandler.Handle)
 
 		// GitLab and Bitbucket handlers would go here

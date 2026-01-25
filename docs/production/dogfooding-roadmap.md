@@ -1,4 +1,17 @@
+---
+title: Dogfooding Roadmap
+description: Complete self-hosting roadmap for Enclii managing the MADFAM ecosystem
+sidebar_position: 10
+tags: [production, dogfooding, roadmap, self-hosting]
+---
+
 # MADFAM Ecosystem Full Dogfooding Roadmap
+
+## Related Documentation
+
+- **Dogfooding Guide**: [Dogfooding Guide](/docs/guides/DOGFOODING_GUIDE)
+- **Production Readiness**: [Production Readiness Audit](/docs/production/PRODUCTION_READINESS_AUDIT)
+- **Build Pipeline**: [Build Pipeline Implementation](/docs/implementation/BUILD_PIPELINE_IMPLEMENTATION)
 
 **Goal**: Achieve complete self-hosting where Enclii manages ALL DevOps for the entire MADFAM ecosystem, including auto-deploying both `janua` and `enclii` repositories.
 

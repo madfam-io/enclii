@@ -1,5 +1,8 @@
 ---
-slug: ARCHITECTURE
+title: Platform Architecture
+description: Comprehensive architecture documentation for the Enclii PaaS platform
+sidebar_position: 1
+tags: [architecture, system-design, kubernetes, security]
 ---
 
 # Enclii Platform Architecture
@@ -506,8 +509,18 @@ sequenceDiagram
 - **CD**: ArgoCD (GitOps)
 - **Registry**: GitHub Container Registry
 
+## Related Documentation
+
+- **Getting Started**: [Quick Start Guide](/docs/getting-started/QUICKSTART) | [Development Guide](/docs/getting-started/DEVELOPMENT)
+- **Infrastructure**: [Infrastructure Overview](/docs/infrastructure/) | [GitOps](/docs/infrastructure/GITOPS) | [Storage](/docs/infrastructure/STORAGE)
+- **CLI**: [CLI Reference](/docs/cli/) | [Deploy Command](/docs/cli/commands/deploy)
+- **SDKs**: [TypeScript SDK](/docs/sdk/typescript/) | [Go SDK](/docs/sdk/go/)
+- **Troubleshooting**: [API Errors](/docs/troubleshooting/api-errors) | [Deployment Issues](/docs/troubleshooting/deployment-issues)
+- **Security**: [Security FAQ](/docs/faq/security) | [Security Audit](/docs/audits/security/EXECUTIVE_SUMMARY)
+- **API Reference**: [OpenAPI Documentation](/api-reference/)
+
 ---
 
-*Last Updated: 2024*  
-*Version: 1.0.0*  
+*Last Updated: January 2026*
+*Version: 1.0.0*
 *Status: Production Ready*

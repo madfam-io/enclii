@@ -1,4 +1,17 @@
+---
+title: DNS Setup (Porkbun)
+description: Configure DNS records in Porkbun for Cloudflare Tunnel integration
+sidebar_position: 20
+tags: [infrastructure, dns, porkbun, cloudflare]
+---
+
 # DNS Setup Guide for npm.madfam.io (Porkbun)
+
+## Related Documentation
+
+- **Cloudflare**: [Cloudflare Integration](/docs/infrastructure/CLOUDFLARE)
+- **npm Registry**: [npm Registry Implementation](/docs/infrastructure/npm-registry)
+- **Troubleshooting**: [Networking Issues](/docs/troubleshooting/networking)
 
 ## Overview
 

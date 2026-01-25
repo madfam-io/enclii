@@ -1,3 +1,10 @@
+---
+title: Quick Start Guide
+description: Get Enclii running locally in under 10 minutes
+sidebar_position: 1
+tags: [getting-started, quickstart, setup]
+---
+
 # Enclii MVP - Quick Start Guide
 
 This guide will help you get the Enclii MVP running locally in under 10 minutes.
@@ -90,3 +97,11 @@ Open http://localhost:3000 to see the dashboard.
 - `Makefile` - Common commands
 - `.env.example` - Environment variables
 - `docker-compose.dev.yml` - Local development stack
+
+## Related Documentation
+
+- **Next Steps**: [Development Guide](/docs/getting-started/DEVELOPMENT)
+- **CLI Reference**: [CLI Commands](/docs/cli/)
+- **Deployment**: [Deploying Services](/docs/guides/DOGFOODING_GUIDE)
+- **Troubleshooting**: [Common Issues](/docs/troubleshooting/)
+- **FAQ**: [Frequently Asked Questions](/docs/faq/)

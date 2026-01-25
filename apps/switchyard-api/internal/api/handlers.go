@@ -198,6 +198,11 @@ func SetupRoutes(router *gin.Engine, h *Handler) {
 	router.POST("/v1/callbacks/build-complete", h.BuildCompleteCallback)
 	router.POST("/v1/callbacks/function-build-complete", h.FunctionBuildCompleteCallback)
 
+	// Internal API endpoints (for Roundhouse webhook integration)
+	// GET /v1/services?git_repo=... - Find services by git repository URL
+	// Used by Roundhouse to look up services when processing PR webhooks for preview environments
+	router.GET("/v1/services", h.ListServicesByGitRepo)
+
 	// Rate limiters for auth endpoints
 	authRateLimiter := middleware.NewAuthRateLimiter()             // 10 req/min per IP
 	strictAuthRateLimiter := middleware.NewStrictAuthRateLimiter() // 5 req/min per IP

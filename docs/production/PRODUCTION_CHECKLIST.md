@@ -1,7 +1,14 @@
+---
+title: Production Checklist
+description: Complete checklist for deploying Enclii to production
+sidebar_position: 3
+tags: [production, deployment, checklist, operations]
+---
+
 # Enclii Production Deployment Checklist
 
-**Status:** ✅ 100% Production Ready  
-**Last Updated:** November 27, 2025
+**Status:** ✅ 100% Production Ready
+**Last Updated:** January 2026
 
 ---
 
@@ -283,5 +290,17 @@ kubectl exec -it postgres-0 -n enclii-production -- \
 
 ---
 
-**Document Version:** 1.0  
+**Document Version:** 1.1
 **Maintained By:** Platform Team
+
+---
+
+## Related Documentation
+
+- **Getting Started**: [Quick Start Guide](/docs/getting-started/QUICKSTART) | [Development Guide](/docs/getting-started/DEVELOPMENT)
+- **Infrastructure**: [Infrastructure Overview](/docs/infrastructure/) | [GitOps](/docs/infrastructure/GITOPS) | [Storage](/docs/infrastructure/STORAGE)
+- **Guides**: [Dogfooding Guide](/docs/guides/DOGFOODING_GUIDE) | [Database Operations](/docs/guides/database-operations)
+- **CLI**: [CLI Reference](/docs/cli/) | [Deploy Command](/docs/cli/commands/deploy)
+- **Troubleshooting**: [Deployment Issues](/docs/troubleshooting/deployment-issues) | [Networking](/docs/troubleshooting/networking)
+- **Runbooks**: [Database Recovery](/docs/runbooks/DATABASE_RECOVERY)
+- **Architecture**: [Platform Architecture](/docs/architecture/ARCHITECTURE)

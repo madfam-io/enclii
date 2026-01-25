@@ -1,3 +1,10 @@
+---
+title: Dogfooding Guide
+description: How Enclii deploys itself using its own platform with Janua authentication
+sidebar_position: 1
+tags: [guides, dogfooding, deployment, self-hosting, janua]
+---
+
 # Enclii + Janua Dogfooding Strategy
 
 > ✅ **ACTIVE** - Enclii is now self-hosting with automated deployment pipeline.
@@ -754,3 +761,15 @@ The service specs in `dogfooding/` are not toy examples—they're **production-r
 **Questions?** Open an issue or ask in #engineering on Slack.
 
 **Ready to dogfood?** Start with [Step 1: Bootstrap Infrastructure](#step-1-bootstrap-infrastructure-week-1).
+
+---
+
+## Related Documentation
+
+- **Getting Started**: [Quick Start Guide](/docs/getting-started/QUICKSTART) | [Development Guide](/docs/getting-started/DEVELOPMENT)
+- **Architecture**: [Platform Architecture](/docs/architecture/ARCHITECTURE)
+- **Infrastructure**: [Infrastructure Overview](/docs/infrastructure/) | [GitOps](/docs/infrastructure/GITOPS)
+- **Production**: [Production Checklist](/docs/production/PRODUCTION_CHECKLIST) | [Deployment Roadmap](/docs/production/PRODUCTION_DEPLOYMENT_ROADMAP)
+- **CLI**: [CLI Reference](/docs/cli/) | [Deploy Command](/docs/cli/commands/deploy)
+- **Integrations**: [SSO Integration](/docs/integrations/sso) | [GitHub Integration](/docs/integrations/github)
+- **Troubleshooting**: [Deployment Issues](/docs/troubleshooting/deployment-issues) | [Auth Problems](/docs/troubleshooting/auth-problems)

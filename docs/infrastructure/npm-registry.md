@@ -1,4 +1,17 @@
+---
+title: npm Registry Implementation
+description: Deploy Verdaccio as a private npm registry on Enclii infrastructure
+sidebar_position: 21
+tags: [infrastructure, npm, verdaccio, registry]
+---
+
 # npm.madfam.io Implementation Plan
+
+## Related Documentation
+
+- **DNS Setup**: [DNS Configuration (Porkbun)](/docs/infrastructure/dns-setup-porkbun)
+- **Cloudflare**: [Cloudflare Integration](/docs/infrastructure/CLOUDFLARE)
+- **Dogfooding**: [Dogfooding Roadmap](/docs/production/dogfooding-roadmap)
 
 ## Overview
 

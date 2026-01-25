@@ -1,4 +1,16 @@
+---
+title: ARC Runner Troubleshooting
+description: Troubleshooting guide for GitHub Actions Runner Controller (ARC) issues
+sidebar_label: ARC Runners (Draft)
+draft: true
+tags: [draft, troubleshooting, arc, github-actions, ci-cd]
+---
+
 # CI/CD Pipeline Troubleshooting - FULLY RESOLVED
+
+:::note Draft Document
+This document is a draft and may be moved to the main troubleshooting section after review.
+:::
 
 **Date**: 2026-01-14
 **Status**: ✅ RESOLVED - ARC runners and webhooks working

@@ -1,4 +1,17 @@
+---
+title: SSO Deployment Instructions
+description: Deploy and configure Janua SSO integration with Enclii
+sidebar_position: 16
+tags: [sso, janua, authentication, deployment]
+---
+
 # Enclii-Janua SSO Integration Deployment
+
+## Related Documentation
+
+- **SSO Integration**: [SSO Overview](/docs/integrations/sso)
+- **CLI Auth**: [CLI Authentication Setup](/docs/guides/cli-auth-setup)
+- **Troubleshooting**: [Authentication Problems](/docs/troubleshooting/auth-problems)
 
 ## Status: Configuration Ready, Pending Production Deployment
 

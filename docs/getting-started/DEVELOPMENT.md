@@ -1,3 +1,10 @@
+---
+title: Development Guide
+description: Complete development environment setup and workflow guide
+sidebar_position: 2
+tags: [getting-started, development, setup, workflow]
+---
+
 # Enclii Development Guide
 
 ## Table of Contents
@@ -552,3 +559,15 @@ go mod download
 - Slack: #enclii-dev
 - Issues: [GitHub Issues](https://github.com/madfam-org/enclii/issues)
 - Wiki: [Internal Wiki](https://wiki.enclii.dev)
+
+---
+
+## Related Documentation
+
+- **Getting Started**: [Quick Start Guide](/docs/getting-started/QUICKSTART)
+- **CLI**: [CLI Reference](/docs/cli/) | [Deploy Command](/docs/cli/commands/deploy)
+- **Guides**: [Testing Guide](/docs/guides/TESTING_GUIDE) | [Dogfooding Guide](/docs/guides/DOGFOODING_GUIDE)
+- **SDK**: [TypeScript SDK](/docs/sdk/typescript/)
+- **Troubleshooting**: [Build Failures](/docs/troubleshooting/build-failures) | [Deployment Issues](/docs/troubleshooting/deployment-issues)
+- **Production**: [Production Checklist](/docs/production/PRODUCTION_CHECKLIST)
+- **Architecture**: [Platform Architecture](/docs/architecture/ARCHITECTURE)

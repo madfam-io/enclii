@@ -1,3 +1,10 @@
+---
+title: GitHub Integration
+description: Connect GitHub repositories for automatic builds, deployments, and preview environments
+sidebar_position: 1
+tags: [integrations, github, webhooks, ci-cd, preview-environments]
+---
+
 # GitHub Integration
 
 Connect your GitHub repositories to Enclii for automatic builds, deployments, and preview environments.
@@ -406,8 +413,11 @@ Enclii automatically prevents committing secrets in `enclii.yaml`:
 
 ---
 
-## See Also
+## Related Documentation
 
-- [Quickstart Guide](../quickstart/deploy-first-app.md)
-- [CLI Reference](../cli/README.md)
-- [Webhook Events Reference](./webhook-events.md)
+- **Getting Started**: [Quick Start Guide](/docs/getting-started/QUICKSTART)
+- **CLI**: [CLI Reference](/docs/cli/) | [Deploy Command](/docs/cli/commands/deploy)
+- **SDK**: [TypeScript SDK - Deployments](/docs/sdk/typescript/deployments)
+- **Troubleshooting**: [Build Failures](/docs/troubleshooting/build-failures) | [Deployment Issues](/docs/troubleshooting/deployment-issues)
+- **FAQ**: [General FAQ](/docs/faq/general)
+- **Other Integrations**: [SSO Integration](/docs/integrations/sso)

@@ -1,3 +1,10 @@
+---
+title: Testing Guide
+description: Testing strategy for Enclii platform including unit, integration, and E2E tests
+sidebar_position: 4
+tags: [guides, testing, integration-tests, e2e, ci-cd]
+---
+
 # Enclii Testing Guide
 
 This document describes the testing strategy for Enclii platform features, including integration tests for critical blocker fixes (P0/P1).
@@ -437,3 +444,13 @@ kubectl get pods -n enclii-system
 - [ ] Chaos engineering tests (pod failures, network partitions)
 - [ ] Load tests for API endpoints
 - [ ] Security tests (penetration testing)
+
+---
+
+## Related Documentation
+
+- **Getting Started**: [Quick Start Guide](/docs/getting-started/QUICKSTART) | [Development Guide](/docs/getting-started/DEVELOPMENT)
+- **CLI**: [CLI Reference](/docs/cli/)
+- **Troubleshooting**: [Build Failures](/docs/troubleshooting/build-failures) | [Deployment Issues](/docs/troubleshooting/deployment-issues)
+- **Infrastructure**: [Infrastructure Overview](/docs/infrastructure/)
+- **Production**: [Production Checklist](/docs/production/PRODUCTION_CHECKLIST)
