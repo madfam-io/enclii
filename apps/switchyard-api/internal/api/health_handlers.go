@@ -52,25 +52,38 @@ func (h *Handler) Health(c *gin.Context) {
 		Components: make(map[string]ComponentHealth),
 	}
 
-	// Check database health
-	dbHealth := h.checkDatabaseHealth(ctx)
-	response.Components["database"] = dbHealth
-	if dbHealth.Status != "healthy" {
+	// Check database health - skip if repos not available
+	if h.repos != nil {
+		dbHealth := h.checkDatabaseHealth(ctx)
+		response.Components["database"] = dbHealth
+		if dbHealth.Status != "healthy" {
+			response.Status = "degraded"
+		}
+	} else {
+		response.Components["database"] = ComponentHealth{Status: "unhealthy", Error: "database not configured"}
 		response.Status = "degraded"
 	}
 
-	// Check cache health
-	cacheHealth := h.checkCacheHealth(ctx)
-	response.Components["cache"] = cacheHealth
-	if cacheHealth.Status != "healthy" && response.Status == "healthy" {
-		response.Status = "degraded"
+	// Check cache health - skip if cache not available
+	if h.cache != nil {
+		cacheHealth := h.checkCacheHealth(ctx)
+		response.Components["cache"] = cacheHealth
+		if cacheHealth.Status != "healthy" && response.Status == "healthy" {
+			response.Status = "degraded"
+		}
+	} else {
+		response.Components["cache"] = ComponentHealth{Status: "disabled"}
 	}
 
-	// Check Kubernetes connectivity
-	k8sHealth := h.checkK8sHealth(ctx)
-	response.Components["kubernetes"] = k8sHealth
-	if k8sHealth.Status != "healthy" && response.Status == "healthy" {
-		response.Status = "degraded"
+	// Check Kubernetes connectivity - skip if client not available
+	if h.k8sClient != nil {
+		k8sHealth := h.checkK8sHealth(ctx)
+		response.Components["kubernetes"] = k8sHealth
+		if k8sHealth.Status != "healthy" && response.Status == "healthy" {
+			response.Status = "degraded"
+		}
+	} else {
+		response.Components["kubernetes"] = ComponentHealth{Status: "disabled", Error: "kubernetes client not configured"}
 	}
 
 	statusCode := http.StatusOK
