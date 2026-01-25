@@ -26,72 +26,17 @@ type HealthResponse struct {
 
 // Health returns the health status of the API with component details
 func (h *Handler) Health(c *gin.Context) {
-	// Top-level panic recovery to catch any panics that escape from component checks
-	defer func() {
-		if r := recover(); r != nil {
-			c.JSON(http.StatusOK, HealthResponse{
-				Status:  "degraded",
-				Service: "switchyard-api",
-				Version: "0.1.0",
-				Components: map[string]ComponentHealth{
-					"internal": {
-						Status: "unhealthy",
-						Error:  fmt.Sprintf("health check panicked: %v", r),
-					},
-				},
-			})
-		}
-	}()
-
-	ctx := c.Request.Context()
-
-	response := HealthResponse{
-		Status:     "healthy",
-		Service:    "switchyard-api",
-		Version:    "0.1.0",
-		Components: make(map[string]ComponentHealth),
-	}
-
-	// Check database health - skip if repos not available
-	if h.repos != nil {
-		dbHealth := h.checkDatabaseHealth(ctx)
-		response.Components["database"] = dbHealth
-		if dbHealth.Status != "healthy" {
-			response.Status = "degraded"
-		}
-	} else {
-		response.Components["database"] = ComponentHealth{Status: "unhealthy", Error: "database not configured"}
-		response.Status = "degraded"
-	}
-
-	// Check cache health - skip if cache not available
-	if h.cache != nil {
-		cacheHealth := h.checkCacheHealth(ctx)
-		response.Components["cache"] = cacheHealth
-		if cacheHealth.Status != "healthy" && response.Status == "healthy" {
-			response.Status = "degraded"
-		}
-	} else {
-		response.Components["cache"] = ComponentHealth{Status: "disabled"}
-	}
-
-	// Check Kubernetes connectivity - skip if client not available
-	if h.k8sClient != nil {
-		k8sHealth := h.checkK8sHealth(ctx)
-		response.Components["kubernetes"] = k8sHealth
-		if k8sHealth.Status != "healthy" && response.Status == "healthy" {
-			response.Status = "degraded"
-		}
-	} else {
-		response.Components["kubernetes"] = ComponentHealth{Status: "disabled", Error: "kubernetes client not configured"}
-	}
-
-	statusCode := http.StatusOK
-	if response.Status == "degraded" {
-		statusCode = http.StatusOK // Still return 200, but indicate degraded in body
-	}
-
-	c.JSON(statusCode, response)
+	// TEMPORARY: Return static response to debug panic
+	// If this works, the panic is in the component checks
+	// If this fails, the panic is elsewhere
+	c.JSON(http.StatusOK, HealthResponse{
+		Status:  "healthy",
+		Service: "switchyard-api",
+		Version: "0.1.0-debug",
+		Components: map[string]ComponentHealth{
+			"test": {Status: "healthy"},
+		},
+	})
 }
 
 // checkDatabaseHealth checks database connectivity with timeout
