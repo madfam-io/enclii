@@ -19,18 +19,18 @@ import (
 
 // GitHubHandler handles GitHub webhook events
 type GitHubHandler struct {
-	secret          string
-	logger          *zap.Logger
+	secret           string
+	logger           *zap.Logger
 	switchyardClient *switchyard.Client
-	previewsEnabled bool
+	previewsEnabled  bool
 }
 
 // GitHubHandlerConfig contains configuration for the GitHub webhook handler
 type GitHubHandlerConfig struct {
-	Secret              string
-	SwitchyardURL       string
-	SwitchyardAPIKey    string
-	PreviewsEnabled     bool
+	Secret           string
+	SwitchyardURL    string
+	SwitchyardAPIKey string
+	PreviewsEnabled  bool
 }
 
 // NewGitHubHandler creates a new GitHub webhook handler
