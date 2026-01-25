@@ -13,6 +13,8 @@ export interface User {
   name?: string;
   roles?: string[];
   avatarUrl?: string;
+  /** Foundry tier from Janua JWT claims (after Dhanam purchase) */
+  foundry_tier?: 'community' | 'sovereign' | 'ecosystem' | null;
 }
 
 // =============================================================================

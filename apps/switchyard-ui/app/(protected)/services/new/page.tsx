@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiGet, apiPost } from "@/lib/api";
 import type { Project, ProjectsResponse, Service } from "@/lib/types";
+import { useTier } from "@/hooks/use-tier";
+import { PricingModal } from "@/components/modals/PricingModal";
 
 // Icons as SVG components
 const GithubIcon = () => (
@@ -57,10 +59,22 @@ function CreateServiceContent() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [serviceCount, setServiceCount] = useState(0);
 
-  // Load projects on mount
+  // Tier-based RBAC
+  const {
+    requireTier,
+    showUpgradeModal,
+    closeUpgradeModal,
+    blockedAction,
+    upgradeMessage,
+    checkoutUrl,
+    tier,
+  } = useTier();
+
+  // Load projects and service count on mount
   useEffect(() => {
-    const fetchProjects = async () => {
+    const fetchProjectsAndServices = async () => {
       try {
         const response = await apiGet<ProjectsResponse>('/v1/projects');
         const projectList = response.projects || [];
@@ -69,6 +83,18 @@ function CreateServiceContent() {
         if (projectList.length > 0 && !selectedProject) {
           setSelectedProject(projectList[0].slug);
         }
+
+        // Count total services across all projects for tier limit check
+        let totalServices = 0;
+        for (const project of projectList) {
+          try {
+            const servicesRes = await apiGet<{ services: Service[] }>(`/v1/projects/${project.slug}/services`);
+            totalServices += (servicesRes.services || []).length;
+          } catch {
+            // Ignore errors for individual projects
+          }
+        }
+        setServiceCount(totalServices);
         setLoading(false);
       } catch (err) {
         console.error("Failed to fetch projects:", err);
@@ -76,11 +102,16 @@ function CreateServiceContent() {
         setLoading(false);
       }
     };
-    fetchProjects();
+    fetchProjectsAndServices();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Tier check before creating service
+    if (!requireTier('deploy', { currentServiceCount: serviceCount })) {
+      return; // Modal will be shown automatically
+    }
 
     if (!serviceName.trim()) {
       setError("Service name is required");
@@ -348,6 +379,16 @@ function CreateServiceContent() {
           </ol>
         </CardContent>
       </Card>
+
+      {/* Pricing/Upgrade Modal */}
+      <PricingModal
+        isOpen={showUpgradeModal}
+        onClose={closeUpgradeModal}
+        blockedAction={blockedAction}
+        upgradeMessage={upgradeMessage}
+        checkoutUrl={checkoutUrl}
+        currentTier={tier}
+      />
     </div>
   );
 }

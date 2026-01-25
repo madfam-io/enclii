@@ -304,6 +304,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         email: (claims?.email as string) || "",
         name: claims?.name as string,
         roles: (claims?.roles as string[]) || [],
+        foundry_tier: (claims?.foundry_tier as User['foundry_tier']) || null,
       };
 
       setTokens(tokenInfo);
@@ -337,6 +338,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         email: (claims?.email as string) || "",
         name: claims?.name as string,
         roles: (claims?.roles as string[]) || [],
+        foundry_tier: (claims?.foundry_tier as User['foundry_tier']) || null,
       };
 
       setTokens(tokenInfo);

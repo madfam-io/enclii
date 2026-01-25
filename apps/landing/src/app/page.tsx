@@ -1,4 +1,4 @@
-import { ArrowRight, Zap, RefreshCw, BarChart3, GitBranch, Check, ExternalLink } from 'lucide-react'
+import { ArrowRight, Zap, RefreshCw, BarChart3, GitBranch, Check, ExternalLink, Container, Network, Database, Globe, Sparkles, Crown } from 'lucide-react'
 
 export default function Home() {
   return (
@@ -19,6 +19,12 @@ export default function Home() {
                 className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 Docs
+              </a>
+              <a
+                href="https://github.com/madfam-org/enclii"
+                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+              >
+                GitHub
               </a>
               <a
                 href="https://app.enclii.dev"
@@ -101,80 +107,122 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Pricing Comparison */}
+      {/* Pricing Section - 3 Tiers */}
       <section className="py-24 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
-              Real Savings, Real Infrastructure
+              Simple, Transparent Pricing
             </h2>
             <p className="text-lg text-gray-600 dark:text-gray-400">
-              Same capabilities. Fraction of the cost.
+              Start free, scale as you grow. No hidden fees, no surprises.
             </p>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-            <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-200 dark:divide-gray-700">
-              {/* Traditional Stack */}
-              <div className="p-8">
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">Traditional SaaS Stack</h3>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Railway Pro</span>
-                    <span className="font-medium text-gray-900 dark:text-white">$2,000/mo</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Auth0 B2B Essentials</span>
-                    <span className="font-medium text-gray-900 dark:text-white">$220/mo</span>
-                  </div>
-                  <div className="h-px bg-gray-200 dark:bg-gray-700 my-4"></div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-900 dark:text-white">Monthly Total</span>
-                    <span className="font-bold text-2xl text-red-600">$2,220</span>
-                  </div>
-                </div>
-              </div>
-              {/* Enclii Stack */}
-              <div className="p-8 bg-primary-50 dark:bg-primary-900/20">
-                <div className="flex items-center gap-2 mb-4">
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white">Enclii Stack</h3>
-                  <span className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 text-xs font-medium px-2 py-1 rounded-full">
-                    95% Less
-                  </span>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Hetzner + k3s</span>
-                    <span className="font-medium text-gray-900 dark:text-white">$45/mo</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Ubicloud PostgreSQL</span>
-                    <span className="font-medium text-gray-900 dark:text-white">$50/mo</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-400">Cloudflare (R2, Tunnel)</span>
-                    <span className="font-medium text-gray-900 dark:text-white">$5/mo</span>
-                  </div>
-                  <div className="h-px bg-gray-200 dark:bg-gray-700 my-4"></div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold text-gray-900 dark:text-white">Monthly Total</span>
-                    <span className="font-bold text-2xl text-green-600">~$100</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* Savings Banner */}
-            <div className="bg-primary-600 p-6 text-center">
-              <p className="text-white text-lg">
-                <span className="font-bold">5-year savings: $127,200</span>
-                <span className="text-white/80 ml-2">with zero vendor lock-in</span>
-              </p>
-            </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Community Tier */}
+            <PricingCard
+              icon={<Sparkles className="w-6 h-6" />}
+              name="Community"
+              price="Free"
+              description="Self-host with AGPL-3.0 source"
+              features={[
+                '1 project',
+                '3 services per project',
+                'Full source code access',
+                'Community support',
+                'Self-hosted infrastructure',
+              ]}
+              cta={{ label: 'View on GitHub', href: 'https://github.com/madfam-org/enclii', external: true }}
+            />
+
+            {/* Sovereign Tier */}
+            <PricingCard
+              icon={<Zap className="w-6 h-6" />}
+              name="Sovereign"
+              price="$20"
+              priceNote="/month"
+              description="Managed hosting with auto SSL"
+              features={[
+                '10 projects',
+                'Unlimited services',
+                'Custom domains included',
+                'Auto SSL certificates',
+                'Priority support',
+                'Zero-downtime deploys',
+              ]}
+              cta={{ label: 'Start Building', href: 'https://app.enclii.dev' }}
+              highlighted
+            />
+
+            {/* Ecosystem Tier */}
+            <PricingCard
+              icon={<Crown className="w-6 h-6" />}
+              name="Ecosystem"
+              price="Coming Soon"
+              description="Full bundle with team management"
+              features={[
+                'Unlimited projects',
+                'Unlimited services',
+                'Team management',
+                'SSO integration (Janua)',
+                'Billing integration (Dhanam)',
+                'SLA guarantee',
+              ]}
+              cta={{ label: 'Join Waitlist', href: '#', disabled: true }}
+            />
+          </div>
+
+          {/* Cost Comparison Note */}
+          <div className="mt-12 text-center">
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              Compare to traditional SaaS: <span className="line-through">Railway Pro $2,000/mo + Auth0 $220/mo</span>
+            </p>
+            <p className="text-lg font-semibold text-primary-600 dark:text-primary-400">
+              5-year savings: up to $127,200 with zero vendor lock-in
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Capabilities Section */}
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+              Built on Real Infrastructure
+            </h2>
+            <p className="text-lg text-gray-600 dark:text-gray-400">
+              Truth-based capabilities. No marketing fluff.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <CapabilityCard
+              icon={<Container className="w-8 h-8" />}
+              title="Docker Containers"
+              description="Deploy any Dockerfile or use Buildpacks for auto-detection. Full control over your runtime."
+            />
+            <CapabilityCard
+              icon={<Network className="w-8 h-8" />}
+              title="Port Mapping"
+              description="Expose any port (4200-8080) for your services. Internal and external routing supported."
+            />
+            <CapabilityCard
+              icon={<Database className="w-8 h-8" />}
+              title="Persistent Volumes"
+              description="Longhorn CSI block storage for databases. Data persists across deployments."
+            />
+            <CapabilityCard
+              icon={<Globe className="w-8 h-8" />}
+              title="Custom Domains"
+              description="Zero-trust ingress via Cloudflare Tunnel. Auto SSL certificates included."
+            />
           </div>
         </div>
       </section>
 
       {/* Why Enclii Section */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900">
+      <section className="py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-4">
@@ -193,21 +241,30 @@ export default function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8">
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-primary-600">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 dark:text-white mb-6">
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-6">
             Ready to Deploy Smarter?
           </h2>
-          <p className="text-lg text-gray-600 dark:text-gray-400 mb-10 max-w-2xl mx-auto">
+          <p className="text-lg text-white/80 mb-10 max-w-2xl mx-auto">
             Join teams who are shipping faster while keeping costs under control.
           </p>
-          <a
-            href="https://app.enclii.dev"
-            className="inline-flex items-center gap-2 bg-primary-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-primary-700 transition-colors shadow-lg"
-          >
-            Get Started Free
-            <ArrowRight className="w-5 h-5" />
-          </a>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <a
+              href="https://app.enclii.dev"
+              className="inline-flex items-center justify-center gap-2 bg-white text-primary-700 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-gray-100 transition-colors shadow-lg"
+            >
+              Start Building Free
+              <ArrowRight className="w-5 h-5" />
+            </a>
+            <a
+              href="https://github.com/madfam-org/enclii"
+              className="inline-flex items-center justify-center gap-2 bg-white/10 text-white border border-white/20 px-8 py-4 rounded-xl font-semibold text-lg hover:bg-white/20 transition-colors"
+            >
+              Star on GitHub
+              <ExternalLink className="w-5 h-5" />
+            </a>
+          </div>
         </div>
       </section>
 
@@ -237,7 +294,7 @@ export default function Home() {
             <div>
               <h4 className="font-semibold text-gray-900 dark:text-white mb-4">Resources</h4>
               <ul className="space-y-2 text-sm">
-                <FooterLink href="https://github.com/madfam-io/enclii">GitHub</FooterLink>
+                <FooterLink href="https://github.com/madfam-org/enclii">GitHub</FooterLink>
                 <FooterLink href="https://docs.enclii.dev/guides">Guides</FooterLink>
                 <FooterLink href="https://docs.enclii.dev/api">API Reference</FooterLink>
               </ul>
@@ -267,6 +324,112 @@ function FeatureCard({ icon, title, description }: { icon: React.ReactNode; titl
       </div>
       <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
       <p className="text-gray-600 dark:text-gray-400">{description}</p>
+    </div>
+  )
+}
+
+function CapabilityCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
+      <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded-lg flex items-center justify-center mb-4">
+        {icon}
+      </div>
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{title}</h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400">{description}</p>
+    </div>
+  )
+}
+
+interface PricingCardProps {
+  icon: React.ReactNode
+  name: string
+  price: string
+  priceNote?: string
+  description: string
+  features: string[]
+  cta: { label: string; href: string; external?: boolean; disabled?: boolean }
+  highlighted?: boolean
+}
+
+function PricingCard({ icon, name, price, priceNote, description, features, cta, highlighted }: PricingCardProps) {
+  return (
+    <div className={`relative rounded-2xl p-8 ${
+      highlighted
+        ? 'bg-primary-600 text-white ring-4 ring-primary-600/20 shadow-xl scale-105'
+        : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+    }`}>
+      {highlighted && (
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2">
+          <span className="bg-green-500 text-white text-sm font-medium px-3 py-1 rounded-full">
+            Most Popular
+          </span>
+        </div>
+      )}
+
+      <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
+        highlighted
+          ? 'bg-white/20 text-white'
+          : 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
+      }`}>
+        {icon}
+      </div>
+
+      <h3 className={`text-xl font-bold mb-1 ${highlighted ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+        {name}
+      </h3>
+
+      <div className="mb-2">
+        <span className={`text-4xl font-bold ${highlighted ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+          {price}
+        </span>
+        {priceNote && (
+          <span className={`text-sm ${highlighted ? 'text-white/80' : 'text-gray-500 dark:text-gray-400'}`}>
+            {priceNote}
+          </span>
+        )}
+      </div>
+
+      <p className={`text-sm mb-6 ${highlighted ? 'text-white/80' : 'text-gray-600 dark:text-gray-400'}`}>
+        {description}
+      </p>
+
+      <ul className="space-y-3 mb-8">
+        {features.map((feature, index) => (
+          <li key={index} className="flex items-center gap-2">
+            <Check className={`w-5 h-5 flex-shrink-0 ${highlighted ? 'text-green-300' : 'text-green-500'}`} />
+            <span className={`text-sm ${highlighted ? 'text-white/90' : 'text-gray-700 dark:text-gray-300'}`}>
+              {feature}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {cta.disabled ? (
+        <button
+          disabled
+          className={`w-full py-3 px-4 rounded-xl font-semibold text-center cursor-not-allowed ${
+            highlighted
+              ? 'bg-white/20 text-white/60'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+          }`}
+        >
+          {cta.label}
+        </button>
+      ) : (
+        <a
+          href={cta.href}
+          target={cta.external ? '_blank' : undefined}
+          rel={cta.external ? 'noopener noreferrer' : undefined}
+          className={`block w-full py-3 px-4 rounded-xl font-semibold text-center transition-colors ${
+            highlighted
+              ? 'bg-white text-primary-600 hover:bg-gray-100'
+              : 'bg-primary-600 text-white hover:bg-primary-700'
+          }`}
+        >
+          {cta.label}
+          {cta.external && <ExternalLink className="w-4 h-4 inline ml-2" />}
+        </a>
+      )}
     </div>
   )
 }

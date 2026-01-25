@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { apiGet, apiPost } from '@/lib/api';
+import { useTier } from '@/hooks/use-tier';
+import { PricingModal } from '@/components/modals/PricingModal';
 
 interface Project {
   id: string;
@@ -34,6 +36,25 @@ export default function ProjectsPage() {
     slug: '',
     description: ''
   });
+
+  // Tier-based RBAC
+  const {
+    requireTier,
+    showUpgradeModal,
+    closeUpgradeModal,
+    blockedAction,
+    upgradeMessage,
+    checkoutUrl,
+    tier,
+  } = useTier();
+
+  // Handler for Create Project button with tier check
+  const handleCreateProjectClick = () => {
+    if (!requireTier('project', { currentProjectCount: projects.length })) {
+      return; // Modal will be shown automatically
+    }
+    setShowCreateForm(true);
+  };
 
   const fetchProjects = async () => {
     try {
@@ -115,7 +136,8 @@ export default function ProjectsPage() {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
           <button
-            onClick={() => setShowCreateForm(true)}
+            onClick={handleCreateProjectClick}
+            data-tour="create-project"
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-enclii-blue hover:bg-enclii-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-enclii-blue"
           >
             Create Project
@@ -252,6 +274,16 @@ export default function ProjectsPage() {
           )}
         </div>
       </div>
+
+      {/* Pricing/Upgrade Modal */}
+      <PricingModal
+        isOpen={showUpgradeModal}
+        onClose={closeUpgradeModal}
+        blockedAction={blockedAction}
+        upgradeMessage={upgradeMessage}
+        checkoutUrl={checkoutUrl}
+        currentTier={tier}
+      />
     </div>
   );
 }

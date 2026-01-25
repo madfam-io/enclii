@@ -1,5 +1,7 @@
 // Hooks index - Custom React hooks for UI functionality
 export { useScrollShadow, useIsScrolled } from './use-scroll-shadow';
+export { useTier } from './use-tier';
+export type { UseTierReturn } from './use-tier';
 export {
   useUsageMetrics,
   useMetricByType,

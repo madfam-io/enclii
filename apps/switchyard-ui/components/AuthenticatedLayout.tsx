@@ -28,6 +28,7 @@ interface AuthenticatedLayoutProps {
 interface NavItem {
   name: string;
   href: string;
+  tourId?: string;
 }
 
 // Helper component for nav links
@@ -36,6 +37,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   return (
     <Link
       href={item.href}
+      data-tour={item.tourId}
       className={`px-3 py-2 text-sm font-medium transition-colors duration-150 whitespace-nowrap ${
         isActive
           ? 'text-enclii-blue border-b-2 border-enclii-blue'
@@ -58,11 +60,11 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
 
   // Primary navigation - always visible at lg+ breakpoint
   const primaryNav: NavItem[] = [
-    { name: 'Dashboard', href: '/' },
-    { name: 'Projects', href: '/projects' },
-    { name: 'Services', href: '/services' },
-    { name: 'Deployments', href: '/deployments' },
-    { name: 'Observability', href: '/observability' },
+    { name: 'Dashboard', href: '/', tourId: 'dashboard' },
+    { name: 'Projects', href: '/projects', tourId: 'projects' },
+    { name: 'Services', href: '/services', tourId: 'services' },
+    { name: 'Deployments', href: '/deployments', tourId: 'deployments' },
+    { name: 'Observability', href: '/observability', tourId: 'observability' },
   ];
 
   // Overflow navigation - in dropdown at lg, visible at xl+
@@ -70,7 +72,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
     { name: 'Templates', href: '/templates' },
     { name: 'Databases', href: '/databases' },
     { name: 'Functions', href: '/functions' },
-    { name: 'Domains', href: '/domains' },
+    { name: 'Domains', href: '/domains', tourId: 'domains' },
     { name: 'Activity', href: '/activity' },
   ];
 
