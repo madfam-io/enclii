@@ -3,7 +3,6 @@ package builder
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
@@ -14,9 +13,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 )
+
+// =============================================================================
+// Constants
+// =============================================================================
 
 const (
 	// KanikoBuildNamespace is the namespace where build jobs run
@@ -40,6 +42,10 @@ const (
 	JobTypeSBOM    = "sbom"
 	JobTypeSigning = "signing"
 )
+
+// =============================================================================
+// Executor Types and Construction
+// =============================================================================
 
 // KanikoExecutor handles builds using Kubernetes Jobs with Kaniko
 type KanikoExecutor struct {
@@ -93,6 +99,10 @@ func NewKanikoExecutor(cfg *KanikoExecutorConfig, logger *zap.Logger, logFunc fu
 		logFunc:        logFunc,
 	}
 }
+
+// =============================================================================
+// Build Execution
+// =============================================================================
 
 // Execute runs the build using a Kubernetes Job with Kaniko
 func (e *KanikoExecutor) Execute(ctx context.Context, job *queue.BuildJob) (*queue.BuildResult, error) {
@@ -171,6 +181,10 @@ func (e *KanikoExecutor) Execute(ctx context.Context, job *queue.BuildJob) (*que
 
 	return result, nil
 }
+
+// =============================================================================
+// Build Job Creation
+// =============================================================================
 
 // createBuildJob creates a Kubernetes Job for the Kaniko build
 func (e *KanikoExecutor) createBuildJob(ctx context.Context, job *queue.BuildJob, imageTag string) (*batchv1.Job, error) {
@@ -398,433 +412,9 @@ func (e *KanikoExecutor) buildEnvVars(job *queue.BuildJob) []corev1.EnvVar {
 	return envVars
 }
 
-// watchJobCompletion watches the Kubernetes Job until completion or timeout
-func (e *KanikoExecutor) watchJobCompletion(ctx context.Context, buildID uuid.UUID, jobName string) error {
-	watcher, err := e.k8sClient.BatchV1().Jobs(KanikoBuildNamespace).Watch(ctx, metav1.ListOptions{
-		FieldSelector: fmt.Sprintf("metadata.name=%s", jobName),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to watch job: %w", err)
-	}
-	defer watcher.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case event, ok := <-watcher.ResultChan():
-			if !ok {
-				return fmt.Errorf("watch channel closed")
-			}
-
-			if event.Type == watch.Error {
-				return fmt.Errorf("watch error")
-			}
-
-			k8sJob, ok := event.Object.(*batchv1.Job)
-			if !ok {
-				continue
-			}
-
-			// Check for completion
-			for _, condition := range k8sJob.Status.Conditions {
-				if condition.Type == batchv1.JobComplete && condition.Status == corev1.ConditionTrue {
-					return nil
-				}
-				if condition.Type == batchv1.JobFailed && condition.Status == corev1.ConditionTrue {
-					return fmt.Errorf("job failed: %s", condition.Message)
-				}
-			}
-		}
-	}
-}
-
-// streamJobLogs streams logs from the build pod
-func (e *KanikoExecutor) streamJobLogs(ctx context.Context, buildID uuid.UUID, jobName string) {
-	// Find the pod for this job
-	pods, err := e.k8sClient.CoreV1().Pods(KanikoBuildNamespace).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("job-name=%s", jobName),
-	})
-	if err != nil || len(pods.Items) == 0 {
-		e.logger.Warn("could not find pod for job", zap.String("job", jobName))
-		return
-	}
-
-	podName := pods.Items[0].Name
-
-	// Get logs
-	req := e.k8sClient.CoreV1().Pods(KanikoBuildNamespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container: "kaniko",
-	})
-
-	logs, err := req.Stream(ctx)
-	if err != nil {
-		e.logger.Warn("could not stream logs", zap.Error(err))
-		return
-	}
-	defer logs.Close()
-
-	// Read and emit logs
-	buf := make([]byte, 4096)
-	for {
-		n, err := logs.Read(buf)
-		if n > 0 {
-			lines := strings.Split(string(buf[:n]), "\n")
-			for _, line := range lines {
-				if line != "" {
-					e.log(buildID, "%s", line)
-				}
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			e.logger.Warn("error reading logs", zap.Error(err))
-			break
-		}
-	}
-}
-
-// getImageDigestFromRegistry queries the registry for the image digest
-func (e *KanikoExecutor) getImageDigestFromRegistry(ctx context.Context, imageTag string) (string, error) {
-	// For now, return empty - full implementation would use crane or skopeo
-	// to query the registry for the manifest digest
-	return "", nil
-}
-
-// runSBOMGeneration runs Syft to generate SBOM for the image
-func (e *KanikoExecutor) runSBOMGeneration(ctx context.Context, buildID uuid.UUID, imageTag string) (string, string, error) {
-	jobName := fmt.Sprintf("sbom-%s", buildID.String()[:8])
-	format := "spdx-json" // SPDX is widely supported and recommended
-
-	// Security context - run as non-root
-	runAsNonRoot := true
-	runAsUser := int64(1000)
-	runAsGroup := int64(1000)
-	fsGroup := int64(1000)
-
-	// Job configuration
-	backoffLimit := int32(0)
-	ttlSeconds := int32(1800)           // Clean up after 30 minutes
-	activeDeadlineSeconds := int64(300) // 5 minute timeout for SBOM
-
-	k8sJob := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: KanikoBuildNamespace,
-			Labels: map[string]string{
-				LabelBuildID: buildID.String(),
-				LabelAppName: "syft-sbom",
-			},
-		},
-		Spec: batchv1.JobSpec{
-			BackoffLimit:            &backoffLimit,
-			TTLSecondsAfterFinished: &ttlSeconds,
-			ActiveDeadlineSeconds:   &activeDeadlineSeconds,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						LabelBuildID: buildID.String(),
-						LabelAppName: "syft-sbom",
-					},
-				},
-				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsNonRoot: &runAsNonRoot,
-						RunAsUser:    &runAsUser,
-						RunAsGroup:   &runAsGroup,
-						FSGroup:      &fsGroup,
-						SeccompProfile: &corev1.SeccompProfile{
-							Type: corev1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					Containers: []corev1.Container{
-						{
-							Name:  "syft",
-							Image: SyftImage,
-							Args: []string{
-								"scan",
-								"--output", format,
-								"registry:" + imageTag,
-							},
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("100m"),
-									corev1.ResourceMemory: resource.MustParse("256Mi"),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("500m"),
-									corev1.ResourceMemory: resource.MustParse("1Gi"),
-								},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: boolPtr(false),
-								ReadOnlyRootFilesystem:   boolPtr(true),
-								Capabilities: &corev1.Capabilities{
-									Drop: []corev1.Capability{"ALL"},
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "docker-config",
-									MountPath: "/home/syft/.docker",
-									ReadOnly:  true,
-								},
-								{
-									Name:      "tmp",
-									MountPath: "/tmp",
-								},
-							},
-							Env: []corev1.EnvVar{
-								{
-									Name:  "DOCKER_CONFIG",
-									Value: "/home/syft/.docker",
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "docker-config",
-							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
-									SecretName: "regcred",
-									Items: []corev1.KeyToPath{
-										{
-											Key:  ".dockerconfigjson",
-											Path: "config.json",
-										},
-									},
-								},
-							},
-						},
-						{
-							Name: "tmp",
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// Create the job
-	_, err := e.k8sClient.BatchV1().Jobs(KanikoBuildNamespace).Create(ctx, k8sJob, metav1.CreateOptions{})
-	if err != nil {
-		return "", "", fmt.Errorf("failed to create SBOM job: %w", err)
-	}
-
-	e.log(buildID, "📋 Created SBOM generation job: %s", jobName)
-
-	// Wait for completion
-	if err := e.watchJobCompletion(ctx, buildID, jobName); err != nil {
-		return "", "", fmt.Errorf("SBOM generation failed: %w", err)
-	}
-
-	// Get SBOM output from job logs
-	sbom, err := e.getJobOutput(ctx, jobName)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get SBOM output: %w", err)
-	}
-
-	return sbom, format, nil
-}
-
-// runImageSigning runs Cosign to sign the image
-func (e *KanikoExecutor) runImageSigning(ctx context.Context, buildID uuid.UUID, imageTag string) (string, error) {
-	jobName := fmt.Sprintf("sign-%s", buildID.String()[:8])
-
-	// Security context - run as non-root
-	runAsNonRoot := true
-	runAsUser := int64(1000)
-	runAsGroup := int64(1000)
-	fsGroup := int64(1000)
-
-	// Job configuration
-	backoffLimit := int32(0)
-	ttlSeconds := int32(1800)           // Clean up after 30 minutes
-	activeDeadlineSeconds := int64(180) // 3 minute timeout for signing
-
-	// Cosign supports keyless signing via Fulcio/Rekor or key-based signing
-	// We support both modes based on configuration
-	var args []string
-	var envVars []corev1.EnvVar
-	var volumes []corev1.Volume
-	var volumeMounts []corev1.VolumeMount
-
-	// Registry credentials for pulling/pushing signatures
-	volumes = append(volumes, corev1.Volume{
-		Name: "docker-config",
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: "regcred",
-				Items: []corev1.KeyToPath{
-					{
-						Key:  ".dockerconfigjson",
-						Path: "config.json",
-					},
-				},
-			},
-		},
-	})
-	volumeMounts = append(volumeMounts, corev1.VolumeMount{
-		Name:      "docker-config",
-		MountPath: "/home/nonroot/.docker",
-		ReadOnly:  true,
-	})
-	envVars = append(envVars, corev1.EnvVar{
-		Name:  "DOCKER_CONFIG",
-		Value: "/home/nonroot/.docker",
-	})
-
-	if e.cosignKey != "" {
-		// Key-based signing - mount the signing key secret
-		args = []string{
-			"sign",
-			"--key", "/cosign/cosign.key",
-			"--yes", // Skip confirmation
-			imageTag,
-		}
-
-		volumes = append(volumes, corev1.Volume{
-			Name: "cosign-key",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: e.cosignKey,
-				},
-			},
-		})
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "cosign-key",
-			MountPath: "/cosign",
-			ReadOnly:  true,
-		})
-
-		// Cosign password for the key (if encrypted)
-		envVars = append(envVars, corev1.EnvVar{
-			Name: "COSIGN_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: e.cosignKey,
-					},
-					Key:      "password",
-					Optional: boolPtr(true),
-				},
-			},
-		})
-	} else {
-		// Keyless signing using Fulcio and Rekor (OIDC-based)
-		args = []string{
-			"sign",
-			"--yes", // Skip confirmation
-			imageTag,
-		}
-
-		// Enable experimental features for keyless signing
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  "COSIGN_EXPERIMENTAL",
-			Value: "1",
-		})
-	}
-
-	// Tmp directory for Cosign operations
-	volumes = append(volumes, corev1.Volume{
-		Name: "tmp",
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		},
-	})
-	volumeMounts = append(volumeMounts, corev1.VolumeMount{
-		Name:      "tmp",
-		MountPath: "/tmp",
-	})
-
-	k8sJob := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      jobName,
-			Namespace: KanikoBuildNamespace,
-			Labels: map[string]string{
-				LabelBuildID: buildID.String(),
-				LabelAppName: "cosign-sign",
-			},
-		},
-		Spec: batchv1.JobSpec{
-			BackoffLimit:            &backoffLimit,
-			TTLSecondsAfterFinished: &ttlSeconds,
-			ActiveDeadlineSeconds:   &activeDeadlineSeconds,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						LabelBuildID: buildID.String(),
-						LabelAppName: "cosign-sign",
-					},
-				},
-				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsNonRoot: &runAsNonRoot,
-						RunAsUser:    &runAsUser,
-						RunAsGroup:   &runAsGroup,
-						FSGroup:      &fsGroup,
-						SeccompProfile: &corev1.SeccompProfile{
-							Type: corev1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					Containers: []corev1.Container{
-						{
-							Name:  "cosign",
-							Image: CosignImage,
-							Args:  args,
-							Resources: corev1.ResourceRequirements{
-								Requests: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("50m"),
-									corev1.ResourceMemory: resource.MustParse("128Mi"),
-								},
-								Limits: corev1.ResourceList{
-									corev1.ResourceCPU:    resource.MustParse("200m"),
-									corev1.ResourceMemory: resource.MustParse("512Mi"),
-								},
-							},
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: boolPtr(false),
-								ReadOnlyRootFilesystem:   boolPtr(true),
-								Capabilities: &corev1.Capabilities{
-									Drop: []corev1.Capability{"ALL"},
-								},
-							},
-							Env:          envVars,
-							VolumeMounts: volumeMounts,
-						},
-					},
-					Volumes: volumes,
-				},
-			},
-		},
-	}
-
-	// Create the job
-	_, err := e.k8sClient.BatchV1().Jobs(KanikoBuildNamespace).Create(ctx, k8sJob, metav1.CreateOptions{})
-	if err != nil {
-		return "", fmt.Errorf("failed to create signing job: %w", err)
-	}
-
-	e.log(buildID, "🔐 Created image signing job: %s", jobName)
-
-	// Wait for completion
-	if err := e.watchJobCompletion(ctx, buildID, jobName); err != nil {
-		return "", fmt.Errorf("image signing failed: %w", err)
-	}
-
-	// For Cosign, the signature is stored in the registry alongside the image
-	// Return a reference to indicate signing was successful
-	signature := fmt.Sprintf("%s.sig", imageTag)
-	return signature, nil
-}
+// =============================================================================
+// Image Tag Generation
+// =============================================================================
 
 // generateImageTag generates the full image tag
 func (e *KanikoExecutor) generateImageTag(job *queue.BuildJob) string {
@@ -851,6 +441,10 @@ func (e *KanikoExecutor) generateLatestTag(job *queue.BuildJob) string {
 	)
 }
 
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
 func (e *KanikoExecutor) log(jobID uuid.UUID, format string, args ...interface{}) {
 	line := fmt.Sprintf(format, args...)
 	e.logger.Info(line, zap.String("job_id", jobID.String()))
@@ -865,54 +459,6 @@ func (e *KanikoExecutor) failResult(result *queue.BuildResult, startTime time.Ti
 	result.DurationSecs = time.Since(startTime).Seconds()
 	e.log(result.JobID, "❌ %s", result.ErrorMessage)
 	return result, fmt.Errorf("%s", result.ErrorMessage)
-}
-
-// getJobOutput retrieves the stdout from a completed job
-func (e *KanikoExecutor) getJobOutput(ctx context.Context, jobName string) (string, error) {
-	// Find the pod for this job
-	pods, err := e.k8sClient.CoreV1().Pods(KanikoBuildNamespace).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("job-name=%s", jobName),
-	})
-	if err != nil || len(pods.Items) == 0 {
-		return "", fmt.Errorf("could not find pod for job %s", jobName)
-	}
-
-	podName := pods.Items[0].Name
-
-	// Determine container name based on job type
-	containerName := "syft" // default
-	if strings.HasPrefix(jobName, "sign-") {
-		containerName = "cosign"
-	}
-
-	// Get logs (stdout)
-	req := e.k8sClient.CoreV1().Pods(KanikoBuildNamespace).GetLogs(podName, &corev1.PodLogOptions{
-		Container: containerName,
-	})
-
-	logs, err := req.Stream(ctx)
-	if err != nil {
-		return "", fmt.Errorf("could not stream logs: %w", err)
-	}
-	defer logs.Close()
-
-	// Read all output
-	var output strings.Builder
-	buf := make([]byte, 4096)
-	for {
-		n, err := logs.Read(buf)
-		if n > 0 {
-			output.Write(buf[:n])
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", fmt.Errorf("error reading logs: %w", err)
-		}
-	}
-
-	return output.String(), nil
 }
 
 // Helper functions
