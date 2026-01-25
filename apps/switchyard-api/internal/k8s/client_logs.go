@@ -34,6 +34,9 @@ func (c *Client) GetPodLogs(ctx context.Context, podName, namespace string) (str
 }
 
 func (c *Client) ListPods(ctx context.Context, namespace, labelSelector string) (*corev1.PodList, error) {
+	if c == nil || c.Clientset == nil {
+		return nil, fmt.Errorf("kubernetes client not initialized")
+	}
 	return c.Clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})

@@ -238,6 +238,9 @@ func (c *Client) GetServiceMetrics(ctx context.Context, namespace, serviceName s
 
 // MetricsServerAvailable checks if the metrics-server is available in the cluster
 func (c *Client) MetricsServerAvailable(ctx context.Context) bool {
+	if c == nil || c.Clientset == nil {
+		return false
+	}
 	path := "/apis/metrics.k8s.io/v1beta1"
 	_, err := c.Clientset.RESTClient().Get().AbsPath(path).DoRaw(ctx)
 	return err == nil

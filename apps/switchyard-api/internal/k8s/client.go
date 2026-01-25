@@ -55,6 +55,11 @@ func NewClient(kubeconfig string, kubecontext string) (*Client, error) {
 	}, nil
 }
 
+// IsValid checks if the client is properly initialized and safe to use.
+func (c *Client) IsValid() bool {
+	return c != nil && c.Clientset != nil && c.config != nil
+}
+
 // Config returns the Kubernetes REST config for creating additional clients
 func (c *Client) Config() *rest.Config {
 	return c.config

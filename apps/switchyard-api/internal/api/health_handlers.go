@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -131,7 +132,7 @@ func (h *Handler) checkK8sHealth(ctx context.Context) (result ComponentHealth) {
 		if r := recover(); r != nil {
 			result = ComponentHealth{
 				Status: "unhealthy",
-				Error:  "kubernetes health check panicked - client in bad state",
+				Error:  fmt.Sprintf("kubernetes health check panicked: %v", r),
 			}
 		}
 	}()
@@ -139,6 +140,14 @@ func (h *Handler) checkK8sHealth(ctx context.Context) (result ComponentHealth) {
 	if h.k8sClient == nil {
 		return ComponentHealth{
 			Status: "disabled",
+			Error:  "kubernetes client not configured",
+		}
+	}
+
+	if !h.k8sClient.IsValid() {
+		return ComponentHealth{
+			Status: "unhealthy",
+			Error:  "kubernetes client not properly initialized",
 		}
 	}
 
@@ -152,25 +161,27 @@ func (h *Handler) checkK8sHealth(ctx context.Context) (result ComponentHealth) {
 	latency := time.Since(start).Milliseconds()
 
 	// If metrics server is available, K8s API is definitely reachable
-	// If not, K8s API might still be reachable but metrics-server isn't installed
-	// We consider this healthy since the core K8s API is what matters
-	status := "healthy"
-	if !available {
-		// Try a simple namespace list to verify K8s connectivity
-		_, err := h.k8sClient.ListPods(ctx, "default", "")
-		if err != nil {
-			return ComponentHealth{
-				Status:    "unhealthy",
-				LatencyMs: latency,
-				Error:     "kubernetes API unreachable",
-			}
+	if available {
+		return ComponentHealth{
+			Status:    "healthy",
+			LatencyMs: latency,
 		}
-		// K8s API is reachable, just metrics-server is missing
-		status = "healthy"
 	}
 
+	// If not, K8s API might still be reachable but metrics-server isn't installed
+	// Try a simple pod list to verify K8s connectivity
+	_, err := h.k8sClient.ListPods(ctx, "default", "")
+	if err != nil {
+		return ComponentHealth{
+			Status:    "unhealthy",
+			LatencyMs: latency,
+			Error:     "kubernetes API unreachable: " + err.Error(),
+		}
+	}
+
+	// K8s API is reachable, just metrics-server is missing
 	return ComponentHealth{
-		Status:    status,
+		Status:    "healthy",
 		LatencyMs: latency,
 	}
 }
