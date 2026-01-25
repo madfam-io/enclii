@@ -72,6 +72,13 @@ type CacheService interface {
 	// Cache invalidation
 	InvalidatePattern(ctx context.Context, pattern string) error
 	InvalidateTags(ctx context.Context, tags ...string) error
+
+	// Session revocation (for SessionRevoker interface compatibility)
+	RevokeSession(ctx context.Context, sessionID string, ttl time.Duration) error
+	IsSessionRevoked(ctx context.Context, sessionID string) (bool, error)
+
+	// Lifecycle
+	Close() error
 }
 
 type RedisCache struct {

@@ -85,7 +85,12 @@ func main() {
 
 	// Initialize cache service (needed for session revocation)
 	// Supports both standalone Redis and Redis Sentinel (HA mode)
-	cacheService, err := cache.NewRedisCache(&cache.CacheConfig{
+	// NOTE: Declare as interface type to avoid Go's interface nil gotcha.
+	// When a nil *RedisCache is passed as CacheService interface, the interface
+	// is NOT nil (it has type info), causing h.cache != nil to be true.
+	// By declaring as interface and only assigning on success, nil remains a true nil interface.
+	var cacheService cache.CacheService
+	cs, err := cache.NewRedisCache(&cache.CacheConfig{
 		Host:               cfg.RedisHost,
 		Port:               cfg.RedisPort,
 		Password:           cfg.RedisPassword,
@@ -103,7 +108,9 @@ func main() {
 	if err != nil {
 		logrus.Warnf("Failed to initialize Redis cache: %v", err)
 		logrus.Warn("Session revocation will not be available")
-		cacheService = nil
+		// cacheService remains nil (true interface nil, not wrapped nil pointer)
+	} else {
+		cacheService = cs
 	}
 
 	// Initialize authentication manager

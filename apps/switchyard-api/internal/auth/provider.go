@@ -119,7 +119,7 @@ func NewAuthProvider(
 	ctx context.Context,
 	cfg *config.Config,
 	repos *db.Repositories,
-	cacheService *cache.RedisCache,
+	cacheService cache.CacheService,
 	authManager AuthManager,
 	logger *logrus.Logger,
 ) (AuthenticationProvider, error) {
