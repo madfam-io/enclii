@@ -77,6 +77,17 @@ spec:
             limits:
               memory: "1Gi"
               cpu: "1000m"
+          # Startup probe: Extended window for Redis connection retries
+          # Max startup time: 30 * 5s = 150s (covers 5 Redis retries with backoff)
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 4200
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+            successThreshold: 1
           readinessProbe:
             httpGet:
               path: /health/ready
