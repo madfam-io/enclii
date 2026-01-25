@@ -148,7 +148,7 @@ The production host runs **two parallel service layers**:
 | admin.enclii.dev | switchyard-ui.enclii.svc:80 | ✅ |
 | docs.enclii.dev | docs-site.enclii.svc:80 | ✅ |
 | enclii.dev | landing-page.enclii.svc:80 | ✅ |
-| api.janua.dev | janua-api.janua.svc:80 | ⚠️ 502 |
+| auth.madfam.io | janua-api.janua.svc:80 | ⚠️ 502 |
 | auth.madfam.io | janua-api.janua.svc:80 | ⚠️ 502 |
 | app.janua.dev | janua-dashboard.janua.svc:80 | ❓ |
 | admin.janua.dev | janua-admin.janua.svc:80 | ❓ |

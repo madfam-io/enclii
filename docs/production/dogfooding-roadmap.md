@@ -198,7 +198,7 @@ GITHUB_CLIENT_SECRET=...
 | switchyard-api | api.enclii.dev | ✅ Working |
 | switchyard-ui | app.enclii.dev | ✅ Working |
 | docs-site | docs.enclii.dev | ✅ Working |
-| janua-api | api.janua.dev / auth.madfam.io | ✅ Working |
+| janua-api | auth.madfam.io / auth.madfam.io | ✅ Working |
 | janua-admin | admin.janua.dev | ⏳ Pending |
 | janua-dashboard | app.janua.dev | ⏳ Pending |
 

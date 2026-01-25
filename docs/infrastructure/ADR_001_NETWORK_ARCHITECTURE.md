@@ -177,7 +177,7 @@ systemctl is-enabled cloudflared.service cloudflared-janua.service
   2. No `CrashLoopBackOff` pods > 10 minutes
   3. No `hostPort` usage
   4. No systemd tunnels active
-  5. Health endpoints responding (api.janua.dev, api.enclii.dev)
+  5. Health endpoints responding (auth.madfam.io, api.enclii.dev)
 
 **Future CI Integration** (P2):
 ```yaml

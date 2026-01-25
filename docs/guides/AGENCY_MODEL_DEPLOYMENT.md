@@ -51,7 +51,7 @@
 
 ```bash
 # Set your admin JWT token (get from Janua dashboard or API login)
-export JANUA_API="https://api.janua.dev"
+export JANUA_API="https://auth.madfam.io"
 export ADMIN_TOKEN="your-admin-jwt-token"
 
 # Verify connection
@@ -154,7 +154,7 @@ set -euo pipefail
 # Agency Model: MADFAM manages client infrastructure
 # =============================================================================
 
-JANUA_API="${JANUA_API:-https://api.janua.dev}"
+JANUA_API="${JANUA_API:-https://auth.madfam.io}"
 CLIENT_EMAIL="suluna.mx@gmail.com"
 CLIENT_ORG_NAME="SuLuna"
 CLIENT_ORG_SLUG="suluna"

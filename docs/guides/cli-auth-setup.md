@@ -57,13 +57,13 @@ The script will output the `client_id` - save it for CLI configuration.
 
 ```bash
 # First, login to get an access token
-TOKEN=$(curl -s -X POST https://api.janua.dev/api/v1/auth/login \
+TOKEN=$(curl -s -X POST https://auth.madfam.io/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email": "admin@madfam.io", "password": "YOUR_PASSWORD"}' \
   | jq -r '.access_token')
 
 # Create the OAuth client
-curl -X POST https://api.janua.dev/api/v1/oauth/clients \
+curl -X POST https://auth.madfam.io/api/v1/oauth/clients \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

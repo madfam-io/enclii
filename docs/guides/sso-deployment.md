@@ -93,7 +93,7 @@ curl https://api.enclii.dev/health
 
 ```bash
 # 1. Get a token from Janua
-curl -X POST https://api.janua.dev/api/v1/auth/login \
+curl -X POST https://auth.madfam.io/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"enclii-admin@madfam.io","password":"EncliiSSO2024!"}'
 
@@ -136,7 +136,7 @@ kubectl -n enclii rollout status deployment/switchyard-api
                             ┌─────────────────────┐
                             │   Janua API (4100)  │
                             │  auth.madfam.io     │
-                            │  api.janua.dev      │
+                            │  auth.madfam.io      │
                             └─────────────────────┘
 ```
 

@@ -103,7 +103,7 @@ The CLI uses `http://127.0.0.1:<port>/callback` with dynamic port.
 2. **Update OAuth client** if needed:
 ```bash
 # Via Janua API
-curl -X PATCH https://api.janua.dev/api/v1/oauth/clients/<client-id> \
+curl -X PATCH https://auth.madfam.io/api/v1/oauth/clients/<client-id> \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -d '{"redirect_uris": ["http://127.0.0.1/callback"]}'
 ```

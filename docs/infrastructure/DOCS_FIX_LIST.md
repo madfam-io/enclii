@@ -206,7 +206,7 @@ These references are **CORRECT** for local development and should NOT be changed
 
 ## OK: OIDC URL References (Current)
 
-These 21 files reference `auth.madfam.io` or `api.janua.dev` and are **CURRENT**:
+These 21 files reference `auth.madfam.io` or `auth.madfam.io` and are **CURRENT**:
 
 - `CLAUDE.md` - Correct OIDC configuration
 - `AI_CONTEXT.md` - Correct references
@@ -217,7 +217,7 @@ These 21 files reference `auth.madfam.io` or `api.janua.dev` and are **CURRENT**
 
 **OIDC Endpoints Verified** (2026-01-17):
 - `https://auth.madfam.io/.well-known/openid-configuration` → **200 OK**
-- `https://api.janua.dev/.well-known/openid-configuration` → **200 OK**
+- `https://auth.madfam.io/.well-known/openid-configuration` → **200 OK**
 
 ---
 
@@ -256,7 +256,7 @@ grep -r "4200\|8080" infra/k8s/ --include="*.yaml"
 
 # Check OIDC endpoints
 curl -s https://auth.madfam.io/.well-known/openid-configuration | jq '.issuer'
-curl -s https://api.janua.dev/.well-known/openid-configuration | jq '.issuer'
+curl -s https://auth.madfam.io/.well-known/openid-configuration | jq '.issuer'
 
 # Run production diagnostics
 ssh solarpunk@ssh.madfam.io
