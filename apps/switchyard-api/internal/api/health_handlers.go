@@ -34,10 +34,12 @@ func (h *Handler) Health(c *gin.Context) {
 	k8sHealth := h.checkK8sHealth(ctx)
 
 	// Determine overall status
+	// Note: Cache degraded/disabled does NOT affect overall status
+	// because graceful degradation is a feature, not a failure (API works without Redis)
 	overallStatus := "healthy"
 	if dbHealth.Status == "unhealthy" {
 		overallStatus = "unhealthy"
-	} else if k8sHealth.Status == "unhealthy" || cacheHealth.Status == "unhealthy" {
+	} else if k8sHealth.Status == "unhealthy" {
 		overallStatus = "degraded"
 	}
 
@@ -104,20 +106,24 @@ func (h *Handler) checkDatabaseHealth(ctx context.Context) (result ComponentHeal
 }
 
 // checkCacheHealth checks Redis cache connectivity with timeout
+// Returns "degraded" (not "unhealthy") when Redis unavailable because the API
+// still works without Redis - session revocation is disabled but core functionality continues.
 func (h *Handler) checkCacheHealth(ctx context.Context) (result ComponentHealth) {
 	// Recover from any panics
 	defer func() {
 		if r := recover(); r != nil {
 			result = ComponentHealth{
-				Status: "unhealthy",
+				Status: "degraded",
 				Error:  fmt.Sprintf("cache health check panicked: %v", r),
 			}
 		}
 	}()
 
+	// Intentionally not configured
 	if h.cache == nil {
 		return ComponentHealth{
 			Status: "disabled",
+			Error:  "cache not configured (session revocation unavailable)",
 		}
 	}
 
@@ -129,10 +135,11 @@ func (h *Handler) checkCacheHealth(ctx context.Context) (result ComponentHealth)
 	latency := time.Since(start).Milliseconds()
 
 	if err != nil {
+		// Return "degraded" not "unhealthy" - API still works without Redis
 		return ComponentHealth{
-			Status:    "unhealthy",
+			Status:    "degraded",
 			LatencyMs: latency,
-			Error:     err.Error(),
+			Error:     fmt.Sprintf("cache unavailable: %s (session revocation disabled)", err.Error()),
 		}
 	}
 

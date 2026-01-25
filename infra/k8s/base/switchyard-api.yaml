@@ -43,8 +43,10 @@ spec:
                 secretKeyRef:
                   name: postgres-credentials
                   key: database-url
-            - name: ENCLII_REDIS_URL
-              value: "redis://redis:6379"
+            - name: ENCLII_REDIS_HOST
+              value: "redis"
+            - name: ENCLII_REDIS_PORT
+              value: "6379"
             - name: ENCLII_PORT
               value: "4200"
             - name: ENCLII_LOG_LEVEL

@@ -6,11 +6,37 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
+)
+
+// Prometheus metrics for Redis observability
+var (
+	redisPingLatency = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "enclii_redis_ping_seconds",
+			Help:    "Redis ping latency in seconds",
+			Buckets: []float64{.001, .005, .01, .025, .05, .1, .25, .5, 1},
+		},
+		[]string{"status"},
+	)
+	redisConnectionState = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "enclii_redis_connected",
+		Help: "Redis connection state (1=connected, 0=disconnected)",
+	})
+	redisReconnectTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "enclii_redis_reconnect_total",
+			Help: "Total number of Redis reconnection attempts",
+		},
+		[]string{"status"},
+	)
 )
 
 type CacheService interface {
@@ -51,7 +77,11 @@ type CacheService interface {
 type RedisCache struct {
 	client     *redis.Client
 	config     *CacheConfig
-	errorCount atomic.Int64 // Track application-level cache errors
+	mu         sync.RWMutex  // Protects client during reconnection
+	errorCount atomic.Int64  // Track application-level cache errors
+	lastPing   time.Time     // Track last successful ping
+	pingMu     sync.Mutex    // Protects lastPing updates
+	defaultTTL time.Duration // Store for reference
 }
 
 type CacheConfig struct {
@@ -161,8 +191,10 @@ func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
 	}
 
 	return &RedisCache{
-		client: rdb,
-		config: config,
+		client:     rdb,
+		config:     config,
+		defaultTTL: config.DefaultTTL,
+		lastPing:   time.Now(),
 	}, nil
 }
 
@@ -284,11 +316,113 @@ func (r *RedisCache) Subscribe(ctx context.Context, channels ...string) <-chan *
 	return pubsub.Channel()
 }
 
+// Ping checks Redis connectivity with automatic reconnection on failure.
+// If the connection is stale, it attempts to reconnect before failing.
+// Records Prometheus metrics for observability.
 func (r *RedisCache) Ping(ctx context.Context) error {
-	if r == nil || r.client == nil {
+	if r == nil {
+		redisConnectionState.Set(0)
 		return fmt.Errorf("redis client not initialized")
 	}
-	return r.client.Ping(ctx).Err()
+
+	start := time.Now()
+
+	r.mu.RLock()
+	client := r.client
+	r.mu.RUnlock()
+
+	if client == nil {
+		// Try to reconnect
+		if err := r.reconnect(); err != nil {
+			redisConnectionState.Set(0)
+			redisPingLatency.WithLabelValues("error").Observe(time.Since(start).Seconds())
+			return fmt.Errorf("redis reconnection failed: %w", err)
+		}
+		r.mu.RLock()
+		client = r.client
+		r.mu.RUnlock()
+	}
+
+	err := client.Ping(ctx).Err()
+	if err != nil {
+		// Connection might be stale after Redis restart, try reconnection
+		logrus.WithError(err).Warn("Redis ping failed, attempting reconnection")
+		if reconnErr := r.reconnect(); reconnErr == nil {
+			r.mu.RLock()
+			client = r.client
+			r.mu.RUnlock()
+			err = client.Ping(ctx).Err()
+		}
+	}
+
+	// Record metrics
+	duration := time.Since(start).Seconds()
+	if err == nil {
+		r.pingMu.Lock()
+		r.lastPing = time.Now()
+		r.pingMu.Unlock()
+		redisConnectionState.Set(1)
+		redisPingLatency.WithLabelValues("success").Observe(duration)
+	} else {
+		redisConnectionState.Set(0)
+		redisPingLatency.WithLabelValues("error").Observe(duration)
+	}
+
+	return err
+}
+
+// reconnect attempts to re-establish the Redis connection.
+// This is used when the connection becomes stale (e.g., after Redis pod restart).
+func (r *RedisCache) reconnect() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Close existing client if any (ignore errors on close)
+	if r.client != nil {
+		_ = r.client.Close()
+	}
+
+	var rdb *redis.Client
+	if r.config.SentinelEnabled && len(r.config.SentinelAddrs) > 0 {
+		// Sentinel mode - automatic failover to master
+		rdb = redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:      r.config.SentinelMasterName,
+			SentinelAddrs:   r.config.SentinelAddrs,
+			Password:        r.config.Password,
+			DB:              r.config.DB,
+			MaxRetries:      r.config.MaxRetries,
+			PoolSize:        r.config.PoolSize,
+			ConnMaxIdleTime: r.config.IdleTimeout,
+			ReadTimeout:     r.config.ReadTimeout,
+			WriteTimeout:    r.config.WriteTimeout,
+		})
+	} else {
+		// Standalone mode
+		rdb = redis.NewClient(&redis.Options{
+			Addr:            fmt.Sprintf("%s:%d", r.config.Host, r.config.Port),
+			Password:        r.config.Password,
+			DB:              r.config.DB,
+			MaxRetries:      r.config.MaxRetries,
+			PoolSize:        r.config.PoolSize,
+			ConnMaxIdleTime: r.config.IdleTimeout,
+			ReadTimeout:     r.config.ReadTimeout,
+			WriteTimeout:    r.config.WriteTimeout,
+		})
+	}
+
+	// Test new connection with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		redisReconnectTotal.WithLabelValues("failure").Inc()
+		return fmt.Errorf("reconnection ping failed: %w", err)
+	}
+
+	r.client = rdb
+	redisReconnectTotal.WithLabelValues("success").Inc()
+	logrus.Info("Redis connection re-established")
+	return nil
 }
 
 // Cache invalidation
