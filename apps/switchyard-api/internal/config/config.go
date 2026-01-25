@@ -79,6 +79,11 @@ type Config struct {
 	RedisPort     int
 	RedisPassword string
 
+	// Redis Sentinel (for HA failover - activate when multi-node cluster is deployed)
+	RedisSentinelEnabled    bool     // Enable Sentinel failover mode
+	RedisSentinelAddrs      []string // Sentinel addresses (e.g., ["redis-0:26379", "redis-1:26379", "redis-2:26379"])
+	RedisSentinelMasterName string   // Sentinel master name (default: "enclii-master")
+
 	// Cloudflare Integration (for domain status sync)
 	CloudflareAPIToken  string
 	CloudflareAccountID string
@@ -165,6 +170,9 @@ func Load() (*Config, error) {
 	viper.SetDefault("redis-host", "localhost")
 	viper.SetDefault("redis-port", 6379)
 	viper.SetDefault("redis-password", "")
+	viper.SetDefault("redis-sentinel-enabled", false)
+	viper.SetDefault("redis-sentinel-addrs", "") // Comma-separated: "redis-0:26379,redis-1:26379,redis-2:26379"
+	viper.SetDefault("redis-sentinel-master-name", "enclii-master")
 	viper.SetDefault("cloudflare-api-token", "")
 	viper.SetDefault("cloudflare-account-id", "")
 	viper.SetDefault("cloudflare-zone-id", "")
@@ -237,6 +245,9 @@ func Load() (*Config, error) {
 		RedisHost:                  viper.GetString("redis-host"),
 		RedisPort:                  viper.GetInt("redis-port"),
 		RedisPassword:              viper.GetString("redis-password"),
+		RedisSentinelEnabled:       viper.GetBool("redis-sentinel-enabled"),
+		RedisSentinelAddrs:         parseCommaSeparatedList(viper.GetString("redis-sentinel-addrs")),
+		RedisSentinelMasterName:    viper.GetString("redis-sentinel-master-name"),
 		CloudflareAPIToken:         viper.GetString("cloudflare-api-token"),
 		CloudflareAccountID:        viper.GetString("cloudflare-account-id"),
 		CloudflareZoneID:           viper.GetString("cloudflare-zone-id"),

@@ -28,14 +28,55 @@ type RedisQueue struct {
 	logger *zap.Logger
 }
 
-// NewRedisQueue creates a new Redis-backed queue
-func NewRedisQueue(redisURL string, logger *zap.Logger) (*RedisQueue, error) {
-	opts, err := redis.ParseURL(redisURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid redis URL: %w", err)
-	}
+// RedisQueueConfig holds configuration for the Redis queue
+type RedisQueueConfig struct {
+	// Standalone mode (use URL)
+	RedisURL string
 
-	client := redis.NewClient(opts)
+	// Sentinel mode (for HA failover)
+	SentinelEnabled    bool
+	SentinelAddrs      []string // e.g., ["redis-0:26379", "redis-1:26379", "redis-2:26379"]
+	SentinelMasterName string   // e.g., "enclii-master"
+	Password           string   // Optional password
+}
+
+// NewRedisQueue creates a new Redis-backed queue (standalone mode)
+func NewRedisQueue(redisURL string, logger *zap.Logger) (*RedisQueue, error) {
+	return NewRedisQueueWithConfig(&RedisQueueConfig{
+		RedisURL:        redisURL,
+		SentinelEnabled: false,
+	}, logger)
+}
+
+// NewRedisQueueWithConfig creates a new Redis-backed queue with full configuration support.
+// Supports both standalone mode (via RedisURL) and Sentinel mode (via SentinelAddrs).
+func NewRedisQueueWithConfig(config *RedisQueueConfig, logger *zap.Logger) (*RedisQueue, error) {
+	var client *redis.Client
+
+	if config.SentinelEnabled && len(config.SentinelAddrs) > 0 {
+		// Sentinel mode - automatic failover to master
+		logger.Info("Connecting to Redis via Sentinel (HA mode)",
+			zap.Strings("sentinel_addrs", config.SentinelAddrs),
+			zap.String("master_name", config.SentinelMasterName),
+		)
+
+		client = redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:    config.SentinelMasterName,
+			SentinelAddrs: config.SentinelAddrs,
+			Password:      config.Password,
+		})
+	} else {
+		// Standalone mode - use URL
+		opts, err := redis.ParseURL(config.RedisURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid redis URL: %w", err)
+		}
+
+		client = redis.NewClient(opts)
+		logger.Info("Connecting to Redis (standalone mode)",
+			zap.String("url", config.RedisURL),
+		)
+	}
 
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -43,6 +84,12 @@ func NewRedisQueue(redisURL string, logger *zap.Logger) (*RedisQueue, error) {
 
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("redis connection failed: %w", err)
+	}
+
+	if config.SentinelEnabled {
+		logger.Info("Connected to Redis queue (Sentinel HA mode)")
+	} else {
+		logger.Info("Connected to Redis queue (standalone mode)")
 	}
 
 	return &RedisQueue{

@@ -84,17 +84,21 @@ func main() {
 	repos := db.NewRepositories(database)
 
 	// Initialize cache service (needed for session revocation)
+	// Supports both standalone Redis and Redis Sentinel (HA mode)
 	cacheService, err := cache.NewRedisCache(&cache.CacheConfig{
-		Host:         cfg.RedisHost,
-		Port:         cfg.RedisPort,
-		Password:     cfg.RedisPassword,
-		DB:           0,
-		MaxRetries:   3,
-		PoolSize:     10,
-		IdleTimeout:  5 * time.Minute,
-		ReadTimeout:  3 * time.Second,
-		WriteTimeout: 3 * time.Second,
-		DefaultTTL:   cache.MediumTTL,
+		Host:               cfg.RedisHost,
+		Port:               cfg.RedisPort,
+		Password:           cfg.RedisPassword,
+		DB:                 0,
+		MaxRetries:         3,
+		PoolSize:           10,
+		IdleTimeout:        5 * time.Minute,
+		ReadTimeout:        3 * time.Second,
+		WriteTimeout:       3 * time.Second,
+		DefaultTTL:         cache.MediumTTL,
+		SentinelEnabled:    cfg.RedisSentinelEnabled,
+		SentinelAddrs:      cfg.RedisSentinelAddrs,
+		SentinelMasterName: cfg.RedisSentinelMasterName,
 	})
 	if err != nil {
 		logrus.Warnf("Failed to initialize Redis cache: %v", err)
@@ -212,22 +216,20 @@ func main() {
 	topologyBuilder := topology.NewGraphBuilder(repos, k8sClient, logrus.StandardLogger())
 	logrus.Info("✓ Topology graph builder initialized")
 
-	// Initialize service layer (business logic)
-	// Note: AuthService currently only works with JWT local auth mode
-	// TODO: Refactor to support both JWT and OIDC modes
-	jwtManager, ok := authManager.(*auth.JWTManager)
-	if !ok {
-		logrus.Warn("⚠ AuthService not initialized - OIDC mode detected")
-		logrus.Warn("   AuthService currently only supports JWT local auth mode")
+	// Initialize authentication provider (supports both JWT and OIDC modes)
+	authProvider, err := auth.NewAuthProvider(ctx, cfg, repos, cacheService, authManager, logrus.StandardLogger())
+	if err != nil {
+		logrus.Fatal("Failed to initialize authentication provider:", err)
 	}
+	logrus.WithField("mode", authProvider.Mode()).Info("✓ Authentication provider initialized")
+
+	// Initialize service layer (business logic)
 	authService := services.NewAuthService(
 		repos,
-		jwtManager, // May be nil in OIDC mode
+		authProvider,
 		logrus.StandardLogger(),
 	)
-	if jwtManager != nil {
-		logrus.Info("✓ AuthService initialized")
-	}
+	logrus.Info("✓ AuthService initialized")
 
 	projectService := services.NewProjectService(
 		repos,
@@ -254,12 +256,26 @@ func main() {
 
 	// Initialize and start addon reconciler (syncs database addon status from K8s)
 	addonReconciler := reconciler.NewAddonReconciler(repos, k8sClient, logrus.StandardLogger())
-	go addonReconciler.Start(ctx)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logrus.Errorf("Addon reconciler panicked: %v", r)
+			}
+		}()
+		addonReconciler.Start(ctx)
+	}()
 	logrus.Info("✓ Addon reconciler started (syncing database addon status)")
 
 	// Initialize and start function reconciler (scale-to-zero serverless functions)
 	functionReconciler := reconciler.NewFunctionReconciler(repos, k8sClient, logrus.StandardLogger(), cfg.FunctionBaseDomain)
-	go functionReconciler.Start(ctx)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logrus.Errorf("Function reconciler panicked: %v", r)
+			}
+		}()
+		functionReconciler.Start(ctx)
+	}()
 	logrus.Info("✓ Function reconciler started (serverless functions with KEDA scale-to-zero)")
 
 	// Initialize Roundhouse client (for async builds)

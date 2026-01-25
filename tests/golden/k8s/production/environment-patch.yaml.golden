@@ -17,8 +17,11 @@ spec:
             cpu: "2000m"
         env:
         # Redis - K8s internal DNS (locked from external access)
-        - name: ENCLII_REDIS_URL
-          value: "redis://redis.data.svc.cluster.local:6379"
+        # Config reads ENCLII_REDIS_HOST/PORT, not URL (see config/config.go:165-167)
+        - name: ENCLII_REDIS_HOST
+          value: "redis.enclii.svc.cluster.local"
+        - name: ENCLII_REDIS_PORT
+          value: "6379"
         # Token Expiration - 8 hours for better UX (default: 15 min)
         # See: Investigation - app.enclii.dev Authentication Session Loss (Jan 2026)
         - name: ENCLII_ACCESS_TOKEN_EXPIRE_MINUTES

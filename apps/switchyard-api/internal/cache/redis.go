@@ -65,6 +65,13 @@ type CacheConfig struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	DefaultTTL   time.Duration
+
+	// Sentinel configuration (for HA failover)
+	// When SentinelEnabled is true, SentinelAddrs and SentinelMasterName are used
+	// instead of Host/Port for connecting via Redis Sentinel.
+	SentinelEnabled    bool
+	SentinelAddrs      []string // e.g., ["redis-0:26379", "redis-1:26379", "redis-2:26379"]
+	SentinelMasterName string   // e.g., "enclii-master"
 }
 
 type CacheItem struct {
@@ -100,16 +107,44 @@ const (
 )
 
 func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:            fmt.Sprintf("%s:%d", config.Host, config.Port),
-		Password:        config.Password,
-		DB:              config.DB,
-		MaxRetries:      config.MaxRetries,
-		PoolSize:        config.PoolSize,
-		ConnMaxIdleTime: config.IdleTimeout, // Renamed from IdleTimeout in redis v9
-		ReadTimeout:     config.ReadTimeout,
-		WriteTimeout:    config.WriteTimeout,
-	})
+	var rdb *redis.Client
+
+	if config.SentinelEnabled && len(config.SentinelAddrs) > 0 {
+		// Sentinel mode - automatic failover to master
+		logrus.WithFields(logrus.Fields{
+			"sentinel_addrs": config.SentinelAddrs,
+			"master_name":    config.SentinelMasterName,
+		}).Info("Connecting to Redis via Sentinel (HA mode)")
+
+		rdb = redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:      config.SentinelMasterName,
+			SentinelAddrs:   config.SentinelAddrs,
+			Password:        config.Password,
+			DB:              config.DB,
+			MaxRetries:      config.MaxRetries,
+			PoolSize:        config.PoolSize,
+			ConnMaxIdleTime: config.IdleTimeout,
+			ReadTimeout:     config.ReadTimeout,
+			WriteTimeout:    config.WriteTimeout,
+		})
+	} else {
+		// Standalone mode (default)
+		logrus.WithFields(logrus.Fields{
+			"host": config.Host,
+			"port": config.Port,
+		}).Info("Connecting to Redis (standalone mode)")
+
+		rdb = redis.NewClient(&redis.Options{
+			Addr:            fmt.Sprintf("%s:%d", config.Host, config.Port),
+			Password:        config.Password,
+			DB:              config.DB,
+			MaxRetries:      config.MaxRetries,
+			PoolSize:        config.PoolSize,
+			ConnMaxIdleTime: config.IdleTimeout,
+			ReadTimeout:     config.ReadTimeout,
+			WriteTimeout:    config.WriteTimeout,
+		})
+	}
 
 	// Test connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -119,7 +154,11 @@ func NewRedisCache(config *CacheConfig) (*RedisCache, error) {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
-	logrus.Info("Connected to Redis cache")
+	if config.SentinelEnabled {
+		logrus.Info("Connected to Redis cache (Sentinel HA mode)")
+	} else {
+		logrus.Info("Connected to Redis cache (standalone mode)")
+	}
 
 	return &RedisCache{
 		client: rdb,
