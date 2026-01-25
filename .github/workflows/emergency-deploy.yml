@@ -103,6 +103,9 @@ jobs:
             switchyard-api=${{ env.IMAGE_PREFIX }}/switchyard-api:${{ github.sha }} \
             -n enclii
 
+          # Force restart to ensure new image is pulled
+          kubectl rollout restart deployment/switchyard-api -n enclii
+
           # Wait for rollout
           kubectl rollout status deployment/switchyard-api -n enclii --timeout=300s
 
