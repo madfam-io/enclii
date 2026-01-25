@@ -861,26 +861,37 @@ func mustParseQuantity(s string) resource.Quantity {
 
 // parseContainerPort extracts and validates the container port from environment variables.
 // Returns the port number (defaulting to 4200 per Enclii port allocation) and any validation error.
+// Checks ENCLII_PORT first (Enclii convention), then falls back to PORT (industry standard).
 func parseContainerPort(envVars map[string]string) (int32, error) {
 	const defaultPort int32 = 4200
 	const minPort = 1
 	const maxPort = 65535
 
-	portStr, ok := envVars["ENCLII_PORT"]
-	if !ok || portStr == "" {
-		return defaultPort, nil
+	// Check ENCLII_PORT first (Enclii convention)
+	if portStr, ok := envVars["ENCLII_PORT"]; ok && portStr != "" {
+		port, err := strconv.ParseInt(portStr, 10, 32)
+		if err != nil {
+			return defaultPort, fmt.Errorf("invalid ENCLII_PORT value '%s': %w", portStr, err)
+		}
+		if port < minPort || port > maxPort {
+			return defaultPort, fmt.Errorf("ENCLII_PORT %d out of valid range (%d-%d)", port, minPort, maxPort)
+		}
+		return int32(port), nil
 	}
 
-	port, err := strconv.ParseInt(portStr, 10, 32)
-	if err != nil {
-		return defaultPort, fmt.Errorf("invalid ENCLII_PORT value '%s': %w", portStr, err)
+	// Fallback to PORT (industry standard, used by Heroku, Railway, etc.)
+	if portStr, ok := envVars["PORT"]; ok && portStr != "" {
+		port, err := strconv.ParseInt(portStr, 10, 32)
+		if err != nil {
+			return defaultPort, fmt.Errorf("invalid PORT value '%s': %w", portStr, err)
+		}
+		if port < minPort || port > maxPort {
+			return defaultPort, fmt.Errorf("PORT %d out of valid range (%d-%d)", port, minPort, maxPort)
+		}
+		return int32(port), nil
 	}
 
-	if port < minPort || port > maxPort {
-		return defaultPort, fmt.Errorf("ENCLII_PORT %d out of valid range (%d-%d)", port, minPort, maxPort)
-	}
-
-	return int32(port), nil
+	return defaultPort, nil
 }
 
 // buildResourceRequirements creates container resource requirements from config or defaults
