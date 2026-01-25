@@ -738,6 +738,13 @@ jobs:
             echo "  $deploy: $IMAGE"
           done
 
+      - name: Validate NetworkPolicy Port Consistency
+        if: steps.kubectl-setup.outputs.has_cluster_access == 'true'
+        run: |
+          echo "🔍 Validating NetworkPolicy port consistency..."
+          ./scripts/validate-network-ports.sh || echo "⚠️  Port mismatches detected (non-blocking)"
+        continue-on-error: true
+
       - name: Skip Notice
         if: steps.kubectl-setup.outputs.has_cluster_access != 'true'
         run: |

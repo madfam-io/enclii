@@ -859,10 +859,26 @@ func mustParseQuantity(s string) resource.Quantity {
 	return resource.MustParse(s)
 }
 
+// PortSource indicates where the container port value was derived from
+type PortSource string
+
+const (
+	PortSourceEncliiPort PortSource = "ENCLII_PORT"
+	PortSourcePort       PortSource = "PORT"
+	PortSourceDefault    PortSource = "default"
+)
+
 // parseContainerPort extracts and validates the container port from environment variables.
 // Returns the port number (defaulting to 4200 per Enclii port allocation) and any validation error.
 // Checks ENCLII_PORT first (Enclii convention), then falls back to PORT (industry standard).
 func parseContainerPort(envVars map[string]string) (int32, error) {
+	port, _, err := parseContainerPortWithSource(envVars)
+	return port, err
+}
+
+// parseContainerPortWithSource extracts the container port and returns its source for logging.
+// Returns: port number, source (ENCLII_PORT/PORT/default), and any validation error.
+func parseContainerPortWithSource(envVars map[string]string) (int32, PortSource, error) {
 	const defaultPort int32 = 4200
 	const minPort = 1
 	const maxPort = 65535
@@ -871,27 +887,27 @@ func parseContainerPort(envVars map[string]string) (int32, error) {
 	if portStr, ok := envVars["ENCLII_PORT"]; ok && portStr != "" {
 		port, err := strconv.ParseInt(portStr, 10, 32)
 		if err != nil {
-			return defaultPort, fmt.Errorf("invalid ENCLII_PORT value '%s': %w", portStr, err)
+			return defaultPort, PortSourceDefault, fmt.Errorf("invalid ENCLII_PORT value '%s': %w", portStr, err)
 		}
 		if port < minPort || port > maxPort {
-			return defaultPort, fmt.Errorf("ENCLII_PORT %d out of valid range (%d-%d)", port, minPort, maxPort)
+			return defaultPort, PortSourceDefault, fmt.Errorf("ENCLII_PORT %d out of valid range (%d-%d)", port, minPort, maxPort)
 		}
-		return int32(port), nil
+		return int32(port), PortSourceEncliiPort, nil
 	}
 
 	// Fallback to PORT (industry standard, used by Heroku, Railway, etc.)
 	if portStr, ok := envVars["PORT"]; ok && portStr != "" {
 		port, err := strconv.ParseInt(portStr, 10, 32)
 		if err != nil {
-			return defaultPort, fmt.Errorf("invalid PORT value '%s': %w", portStr, err)
+			return defaultPort, PortSourceDefault, fmt.Errorf("invalid PORT value '%s': %w", portStr, err)
 		}
 		if port < minPort || port > maxPort {
-			return defaultPort, fmt.Errorf("PORT %d out of valid range (%d-%d)", port, minPort, maxPort)
+			return defaultPort, PortSourceDefault, fmt.Errorf("PORT %d out of valid range (%d-%d)", port, minPort, maxPort)
 		}
-		return int32(port), nil
+		return int32(port), PortSourcePort, nil
 	}
 
-	return defaultPort, nil
+	return defaultPort, PortSourceDefault, nil
 }
 
 // buildResourceRequirements creates container resource requirements from config or defaults
@@ -1340,8 +1356,31 @@ func (r *ServiceReconciler) generateNetworkPolicies(req *ReconcileRequest, names
 		},
 	}
 
-	// Determine the container port
-	containerPort, _ := parseContainerPort(req.EnvVars)
+	// Determine the container port with source tracking for observability
+	containerPort, portSource, err := parseContainerPortWithSource(req.EnvVars)
+	if err != nil {
+		r.logger.WithFields(map[string]interface{}{
+			"service": req.Service.Name,
+			"error":   err.Error(),
+		}).Warn("Port parsing error, using default port")
+	}
+
+	// Log port configuration for debugging and audit trail
+	r.logger.WithFields(map[string]interface{}{
+		"service":    req.Service.Name,
+		"namespace":  namespace,
+		"port":       containerPort,
+		"portSource": string(portSource),
+	}).Debug("NetworkPolicy port configuration")
+
+	// Warn if using default port (may indicate missing port configuration)
+	if portSource == PortSourceDefault {
+		r.logger.WithFields(map[string]interface{}{
+			"service":   req.Service.Name,
+			"namespace": namespace,
+			"port":      containerPort,
+		}).Warn("Using default port for NetworkPolicy - consider setting ENCLII_PORT or PORT env var")
+	}
 
 	var policies []*networkingv1.NetworkPolicy
 
@@ -1527,6 +1566,18 @@ func (r *ServiceReconciler) applyNetworkPolicy(ctx context.Context, np *networki
 		return fmt.Errorf("failed to get network policy: %w", err)
 	}
 
+	// Detect port mismatch before update (for observability/debugging)
+	existingPort := extractNetworkPolicyPort(existing)
+	newPort := extractNetworkPolicyPort(np)
+	if existingPort != 0 && newPort != 0 && existingPort != newPort {
+		r.logger.WithFields(map[string]interface{}{
+			"networkpolicy": np.Name,
+			"namespace":     np.Namespace,
+			"existingPort":  existingPort,
+			"newPort":       newPort,
+		}).Warn("NetworkPolicy port mismatch detected - updating to correct port")
+	}
+
 	// Update existing NetworkPolicy
 	np.ResourceVersion = existing.ResourceVersion
 	_, err = npClient.Update(ctx, np, metav1.UpdateOptions{})
@@ -1536,6 +1587,22 @@ func (r *ServiceReconciler) applyNetworkPolicy(ctx context.Context, np *networki
 
 	r.logger.WithField("networkpolicy", np.Name).Info("Updated existing network policy")
 	return nil
+}
+
+// extractNetworkPolicyPort extracts the first ingress port from a NetworkPolicy.
+// Returns 0 if no port is found.
+func extractNetworkPolicyPort(np *networkingv1.NetworkPolicy) int32 {
+	if np == nil {
+		return 0
+	}
+	for _, rule := range np.Spec.Ingress {
+		for _, port := range rule.Ports {
+			if port.Port != nil {
+				return port.Port.IntVal
+			}
+		}
+	}
+	return 0
 }
 
 // protocolPtr returns a pointer to the given Protocol
