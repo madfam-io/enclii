@@ -65,7 +65,17 @@ func (h *Handler) Health(c *gin.Context) {
 }
 
 // checkDatabaseHealth checks database connectivity with timeout
-func (h *Handler) checkDatabaseHealth(ctx context.Context) ComponentHealth {
+func (h *Handler) checkDatabaseHealth(ctx context.Context) (result ComponentHealth) {
+	// Recover from any panics
+	defer func() {
+		if r := recover(); r != nil {
+			result = ComponentHealth{
+				Status: "unhealthy",
+				Error:  fmt.Sprintf("database health check panicked: %v", r),
+			}
+		}
+	}()
+
 	// Defensive nil check - prevent panic if repos not initialized
 	if h.repos == nil {
 		return ComponentHealth{
@@ -96,7 +106,17 @@ func (h *Handler) checkDatabaseHealth(ctx context.Context) ComponentHealth {
 }
 
 // checkCacheHealth checks Redis cache connectivity with timeout
-func (h *Handler) checkCacheHealth(ctx context.Context) ComponentHealth {
+func (h *Handler) checkCacheHealth(ctx context.Context) (result ComponentHealth) {
+	// Recover from any panics
+	defer func() {
+		if r := recover(); r != nil {
+			result = ComponentHealth{
+				Status: "unhealthy",
+				Error:  fmt.Sprintf("cache health check panicked: %v", r),
+			}
+		}
+	}()
+
 	if h.cache == nil {
 		return ComponentHealth{
 			Status: "disabled",
