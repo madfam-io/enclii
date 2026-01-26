@@ -23,9 +23,11 @@ metadata:
     argocd-image-updater.argoproj.io/switchyard-ui.update-strategy: digest
     argocd-image-updater.argoproj.io/roundhouse.update-strategy: digest
 
-    # ArgoCD write-back (updates Application CR directly, no Git credentials needed)
-    # To enable Git write-back: change to 'git' and configure git-creds secret
-    argocd-image-updater.argoproj.io/write-back-method: argocd
+    # Git write-back: Image Updater commits updated tags to kustomization.yaml
+    # This is compatible with App-of-Apps + selfHeal (no CR override conflicts)
+    argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/git-creds"
+    argocd-image-updater.argoproj.io/write-back-target: "kustomization:infra/k8s/production"
+    argocd-image-updater.argoproj.io/git-branch: main
 
     # Kustomize image path mappings
     argocd-image-updater.argoproj.io/switchyard-api.kustomize.image-name: ghcr.io/madfam-org/enclii/switchyard-api
@@ -40,10 +42,7 @@ spec:
     repoURL: https://github.com/madfam-org/enclii.git
     targetRevision: main
     path: infra/k8s/production
-    # Kustomize configuration
-    kustomize:
-      # Allow image tag overrides via ArgoCD Image Updater
-      images: []
+    # Kustomize configuration (image tags managed by Image Updater Git commits)
 
   destination:
     server: https://kubernetes.default.svc

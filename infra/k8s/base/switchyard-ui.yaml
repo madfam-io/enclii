@@ -10,6 +10,7 @@ metadata:
     app.kubernetes.io/part-of: enclii
 spec:
   replicas: 2
+  revisionHistoryLimit: 3
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -33,6 +34,12 @@ spec:
           image: switchyard-ui:latest
           imagePullPolicy: Always
           env:
+            - name: PORT
+              value: "4201"
+            - name: ENCLII_PORT
+              value: "4201"
+            - name: HOSTNAME
+              value: "0.0.0.0"
             - name: NODE_ENV
               value: "production"
             - name: NEXT_PUBLIC_API_URL
