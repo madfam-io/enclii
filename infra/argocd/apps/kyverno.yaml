@@ -50,6 +50,11 @@ spec:
               image:
                 tag: "1.31"
 
+        # Override post-upgrade hook kubectl image (bitnami/kubectl:1.28.5 removed from Docker Hub)
+        webhooksCleanup:
+          image:
+            tag: "1.31"
+
         # Background controller for policy reports
         backgroundController:
           enabled: true

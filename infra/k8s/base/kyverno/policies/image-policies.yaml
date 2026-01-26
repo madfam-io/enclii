@@ -76,8 +76,6 @@ spec:
                     # Sigstore keyless signing (Fulcio + Rekor)
                     rekor:
                       url: https://rekor.sigstore.dev
-                    ctlog:
-                      url: https://ctfe.sigstore.dev
 ---
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
