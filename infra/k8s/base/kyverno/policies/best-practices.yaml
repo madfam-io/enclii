@@ -108,11 +108,22 @@ spec:
                 - enclii-builds  # Build jobs don't need probes
       validate:
         message: "Readiness probes are recommended for all containers."
-        pattern:
-          spec:
-            containers:
-              - readinessProbe:
-                  httpGet: "?*" | tcpSocket: "?*" | exec: "?*"
+        anyPattern:
+          - spec:
+              containers:
+                - readinessProbe:
+                    httpGet:
+                      path: "?*"
+          - spec:
+              containers:
+                - readinessProbe:
+                    tcpSocket:
+                      port: "?*"
+          - spec:
+              containers:
+                - readinessProbe:
+                    exec:
+                      command: "?*"
 ---
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy

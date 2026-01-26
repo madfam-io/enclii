@@ -97,10 +97,15 @@ spec:
     syncOptions:
       - ServerSideApply=true
 
-  # Ignore status fields
+  # Ignore status fields and shared ConfigMap (managed by image-updater-config app)
   ignoreDifferences:
     - group: ""
       kind: Secret
+      jsonPointers:
+        - /data
+    - group: ""
+      kind: ConfigMap
+      name: argocd-image-updater-config
       jsonPointers:
         - /data
 ---

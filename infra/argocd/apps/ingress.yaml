@@ -24,7 +24,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: cloudflare
+    namespace: cloudflare-tunnel
 
   syncPolicy:
     automated:

@@ -41,6 +41,14 @@ spec:
           # ServiceMonitor disabled - requires Prometheus Operator
           serviceMonitor:
             enabled: false
+          # Override cleanup CronJob kubectl image (bitnami/kubectl:1.28.5 removed from Docker Hub)
+          cleanupJobs:
+            admissionReports:
+              image:
+                tag: "1.31"
+            clusterAdmissionReports:
+              image:
+                tag: "1.31"
 
         # Background controller for policy reports
         backgroundController:
