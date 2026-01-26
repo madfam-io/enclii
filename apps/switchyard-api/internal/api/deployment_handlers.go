@@ -260,9 +260,13 @@ func (h *Handler) GetServiceStatus(c *gin.Context) {
 		}
 	}
 
-	// Cache for 30 seconds
+	// Cache for 30 seconds (non-critical - log but don't fail on error)
 	if statusJSON, err := json.Marshal(status); err == nil {
-		_ = h.cache.Set(ctx, cacheKey, statusJSON, 30*time.Second)
+		if cacheErr := h.cache.Set(ctx, cacheKey, statusJSON, 30*time.Second); cacheErr != nil {
+			h.logger.Warn(ctx, "Failed to cache deployment status",
+				logging.String("cache_key", cacheKey),
+				logging.Error("error", cacheErr))
+		}
 	}
 
 	c.JSON(http.StatusOK, status)
@@ -452,9 +456,13 @@ func (h *Handler) RollbackDeployment(c *gin.Context) {
 		}
 	}
 
-	// Clear cache
+	// Clear cache (non-critical - log but don't fail on error)
 	cacheKey := fmt.Sprintf("service:status:%s", service.ID.String())
-	_ = h.cache.Del(ctx, cacheKey)
+	if cacheErr := h.cache.Del(ctx, cacheKey); cacheErr != nil {
+		h.logger.Warn(ctx, "Failed to clear deployment cache after rollback",
+			logging.String("cache_key", cacheKey),
+			logging.Error("error", cacheErr))
+	}
 
 	// Record rollback metrics
 	monitoring.RecordDeployment("production", "rollback", 0)

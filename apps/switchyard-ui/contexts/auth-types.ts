@@ -52,6 +52,10 @@ export interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   authMode: AuthMode;
+  /** Error message from auth operations (token refresh, logout, etc.) */
+  authError: string | null;
+  /** Clear the current auth error */
+  clearAuthError: () => void;
 
   // Local auth methods
   login: (email: string, password: string) => Promise<void>;

@@ -189,7 +189,7 @@ func (dm *DatabaseManager) logConnectionStats() {
 }
 
 // Transaction helper with proper context handling
-func (dm *DatabaseManager) WithTransaction(ctx context.Context, fn func(tx *sql.Tx) error) error {
+func (dm *DatabaseManager) WithTransaction(ctx context.Context, fn func(tx *sql.Tx) error) (txErr error) {
 	tx, err := dm.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -197,20 +197,37 @@ func (dm *DatabaseManager) WithTransaction(ctx context.Context, fn func(tx *sql.
 
 	defer func() {
 		if p := recover(); p != nil {
-			tx.Rollback()
-			panic(p)
-		} else if err != nil {
-			tx.Rollback()
+			// Rollback on panic but don't re-panic - convert to error instead
+			rollbackErr := tx.Rollback()
+			if rollbackErr != nil {
+				logrus.WithFields(logrus.Fields{
+					"panic":        p,
+					"rollback_err": rollbackErr,
+				}).Error("Transaction panic with rollback failure")
+			} else {
+				logrus.WithField("panic", p).Error("Transaction panic recovered, rolled back successfully")
+			}
+			// Convert panic to error instead of re-panicking
+			txErr = fmt.Errorf("transaction panic recovered: %v", p)
+		} else if txErr != nil {
+			// Rollback on error
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				logrus.WithFields(logrus.Fields{
+					"error":        txErr,
+					"rollback_err": rollbackErr,
+				}).Error("Transaction rollback failed")
+			}
 		} else {
-			err = tx.Commit()
-			if err != nil {
-				logrus.Errorf("Failed to commit transaction: %v", err)
+			// Commit on success
+			if commitErr := tx.Commit(); commitErr != nil {
+				logrus.WithError(commitErr).Error("Failed to commit transaction")
+				txErr = fmt.Errorf("failed to commit transaction: %w", commitErr)
 			}
 		}
 	}()
 
-	err = fn(tx)
-	return err
+	txErr = fn(tx)
+	return txErr
 }
 
 // Prepared statement manager for frequently used queries

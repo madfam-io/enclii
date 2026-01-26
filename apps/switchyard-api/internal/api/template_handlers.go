@@ -273,7 +273,11 @@ func (h *Handler) DeployTemplate(c *gin.Context) {
 
 	// Update deployment status to in_progress
 	if deployment.ID != uuid.Nil {
-		_ = h.repos.Templates.UpdateDeploymentStatus(ctx, deployment.ID, types.TemplateDeploymentStatusInProgress, "")
+		if statusErr := h.repos.Templates.UpdateDeploymentStatus(ctx, deployment.ID, types.TemplateDeploymentStatusInProgress, ""); statusErr != nil {
+			h.logger.Warn(ctx, "Failed to update template deployment status to in_progress",
+				logging.String("deployment_id", deployment.ID.String()),
+				logging.Error("error", statusErr))
+		}
 	}
 
 	// Merge template env vars with request env vars (request takes precedence)
@@ -429,13 +433,22 @@ func (h *Handler) processTemplateDeployment(
 
 	// Update deployment status
 	if deploymentError != "" {
-		_ = h.repos.Templates.UpdateDeploymentStatus(ctx, deploymentID, types.TemplateDeploymentStatusFailed, deploymentError)
+		if statusErr := h.repos.Templates.UpdateDeploymentStatus(ctx, deploymentID, types.TemplateDeploymentStatusFailed, deploymentError); statusErr != nil {
+			h.logger.Error(ctx, "Failed to update template deployment status to failed",
+				logging.String("deployment_id", deploymentID.String()),
+				logging.Error("error", statusErr))
+		}
 	} else {
-		_ = h.repos.Templates.UpdateDeploymentStatus(ctx, deploymentID, types.TemplateDeploymentStatusCompleted, "")
-		h.logger.Info(ctx, "Template deployment completed successfully",
-			logging.String("deployment_id", deploymentID.String()),
-			logging.String("project_id", project.ID.String()),
-			logging.Int("services_created", len(createdServices)))
+		if statusErr := h.repos.Templates.UpdateDeploymentStatus(ctx, deploymentID, types.TemplateDeploymentStatusCompleted, ""); statusErr != nil {
+			h.logger.Error(ctx, "Failed to update template deployment status to completed",
+				logging.String("deployment_id", deploymentID.String()),
+				logging.Error("error", statusErr))
+		} else {
+			h.logger.Info(ctx, "Template deployment completed successfully",
+				logging.String("deployment_id", deploymentID.String()),
+				logging.String("project_id", project.ID.String()),
+				logging.Int("services_created", len(createdServices)))
+		}
 	}
 }
 

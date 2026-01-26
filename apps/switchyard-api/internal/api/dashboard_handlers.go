@@ -189,7 +189,11 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 			return nil
 		})
 	}
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		h.logger.Warn(ctx, "Some concurrent dashboard operations failed",
+			logging.Error("error", err))
+		// Continue with partial data
+	}
 
 	// Now batch query deployments for all services
 	todayStart := time.Now().Truncate(24 * time.Hour)
@@ -274,7 +278,11 @@ func (h *Handler) getDashboardStatsOptimized(ctx context.Context) (DashboardStat
 			return nil
 		})
 	}
-	_ = g2.Wait()
+	if err := g2.Wait(); err != nil {
+		h.logger.Warn(ctx, "Some concurrent K8s status checks failed",
+			logging.Error("error", err))
+		// Continue with partial data
+	}
 
 	stats.HealthyServices = healthyCount
 	stats.DeploymentsToday = deploymentsToday
@@ -334,7 +342,11 @@ func (h *Handler) getRecentActivitiesOptimized(ctx context.Context) ([]RecentAct
 		})
 	}
 
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		h.logger.Warn(ctx, "Some concurrent activity fetches failed",
+			logging.Error("error", err))
+		// Continue with partial data
+	}
 
 	// Use efficient sort.Slice instead of bubble sort - O(n log n) vs O(n²)
 	sort.Slice(allActivities, func(i, j int) bool {
@@ -441,7 +453,11 @@ func (h *Handler) getServicesOverviewOptimized(ctx context.Context) ([]ServiceOv
 		})
 	}
 
-	_ = g.Wait()
+	if err := g.Wait(); err != nil {
+		h.logger.Warn(ctx, "Some concurrent service overview fetches failed",
+			logging.Error("error", err))
+		// Continue with partial data
+	}
 
 	return overview, nil
 }

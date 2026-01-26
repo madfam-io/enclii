@@ -146,7 +146,11 @@ func (h *Handler) CreateTeam(c *gin.Context) {
 	if err := h.repos.TeamMembers.Add(ctx, member); err != nil {
 		h.logger.Error(ctx, "Failed to add owner to team", logging.Error("error", err))
 		// Clean up the team if member creation fails
-		_ = h.repos.Teams.Delete(ctx, team.ID)
+		if deleteErr := h.repos.Teams.Delete(ctx, team.ID); deleteErr != nil {
+			h.logger.Error(ctx, "Failed to cleanup team after member creation failure",
+				logging.String("team_id", team.ID.String()),
+				logging.Error("error", deleteErr))
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create team"})
 		return
 	}

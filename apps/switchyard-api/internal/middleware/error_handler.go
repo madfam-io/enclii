@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/errors"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
@@ -229,10 +230,13 @@ func RecoveryMiddleware(logger logging.Logger) gin.HandlerFunc {
 						logging.String("panic", fmt.Sprintf("%v", err)),
 						logging.String("stack", string(stack)))
 				} else {
-					// Fallback to fmt if no logger available
-					fmt.Printf("[PANIC RECOVERED] %s %s\n", c.Request.Method, c.Request.URL.Path)
-					fmt.Printf("Error: %v\n", err)
-					fmt.Printf("Stack:\n%s\n", stack)
+					// Fallback to structured logging via logrus if no context logger available
+					logrus.WithFields(logrus.Fields{
+						"method": c.Request.Method,
+						"path":   c.Request.URL.Path,
+						"panic":  fmt.Sprintf("%v", err),
+						"stack":  string(stack),
+					}).Error("Panic recovered in request handler")
 				}
 
 				// Return a proper JSON error response

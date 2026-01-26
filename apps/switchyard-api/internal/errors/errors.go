@@ -1,9 +1,14 @@
 package errors
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/lib/pq"
 )
 
 // AppError represents a structured application error
@@ -224,10 +229,52 @@ var (
 		Message:    "Database operation failed",
 		HTTPStatus: http.StatusInternalServerError,
 	}
+	ErrDatabaseTimeout = &AppError{
+		Code:       "DATABASE_TIMEOUT",
+		Message:    "Database operation timed out",
+		HTTPStatus: http.StatusGatewayTimeout,
+	}
+	ErrDatabaseConnectionFailed = &AppError{
+		Code:       "DATABASE_CONNECTION_FAILED",
+		Message:    "Failed to connect to database",
+		HTTPStatus: http.StatusServiceUnavailable,
+	}
 	ErrUnexpected = &AppError{
 		Code:       "UNEXPECTED_ERROR",
 		Message:    "An unexpected error occurred",
 		HTTPStatus: http.StatusInternalServerError,
+	}
+
+	// Team/Organization errors
+	ErrTeamNotFound = &AppError{
+		Code:       "TEAM_NOT_FOUND",
+		Message:    "Team not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+	ErrTeamMemberNotFound = &AppError{
+		Code:       "TEAM_MEMBER_NOT_FOUND",
+		Message:    "Team member not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+	ErrEnvironmentNotFound = &AppError{
+		Code:       "ENVIRONMENT_NOT_FOUND",
+		Message:    "Environment not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+	ErrPreviewNotFound = &AppError{
+		Code:       "PREVIEW_NOT_FOUND",
+		Message:    "Preview environment not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+	ErrTemplateNotFound = &AppError{
+		Code:       "TEMPLATE_NOT_FOUND",
+		Message:    "Template not found",
+		HTTPStatus: http.StatusNotFound,
+	}
+	ErrDomainNotFound = &AppError{
+		Code:       "DOMAIN_NOT_FOUND",
+		Message:    "Domain not found",
+		HTTPStatus: http.StatusNotFound,
 	}
 )
 
@@ -289,4 +336,104 @@ func GetErrorResponse(err error) map[string]any {
 			"message": "An unexpected error occurred",
 		},
 	}
+}
+
+// =============================================================================
+// DATABASE ERROR HELPERS
+// =============================================================================
+
+// WrapDBError wraps a database error with appropriate semantic error type
+func WrapDBError(err error, notFoundErr *AppError) *AppError {
+	if err == nil {
+		return nil
+	}
+
+	// Check for sql.ErrNoRows
+	if errors.Is(err, sql.ErrNoRows) {
+		if notFoundErr != nil {
+			return notFoundErr.WithError(err)
+		}
+		return ErrNotFound.WithError(err)
+	}
+
+	// Check for context deadline exceeded
+	if errors.Is(err, context.DeadlineExceeded) {
+		return ErrDatabaseTimeout.WithError(err)
+	}
+
+	// Check for context cancelled
+	if errors.Is(err, context.Canceled) {
+		return ErrDatabaseError.WithError(err)
+	}
+
+	// Check for PostgreSQL-specific errors
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return wrapPQError(pqErr)
+	}
+
+	// Default to generic database error
+	return ErrDatabaseError.WithError(err)
+}
+
+// wrapPQError converts PostgreSQL errors to AppErrors
+func wrapPQError(pqErr *pq.Error) *AppError {
+	switch pqErr.Code {
+	// Unique constraint violation
+	case "23505":
+		// Extract constraint name to provide more context
+		if strings.Contains(pqErr.Constraint, "email") {
+			return ErrEmailAlreadyExists.WithError(pqErr)
+		}
+		if strings.Contains(pqErr.Constraint, "slug") {
+			return ErrSlugAlreadyExists.WithError(pqErr)
+		}
+		return ErrAlreadyExists.WithError(pqErr)
+
+	// Foreign key violation
+	case "23503":
+		return ErrConflict.WithError(pqErr).WithDetails(map[string]string{
+			"constraint": pqErr.Constraint,
+		})
+
+	// Not null violation
+	case "23502":
+		return ErrValidation.WithError(pqErr).WithDetails(map[string]string{
+			"column": pqErr.Column,
+		})
+
+	// Connection errors
+	case "08000", "08003", "08006", "08001", "08004":
+		return ErrDatabaseConnectionFailed.WithError(pqErr)
+
+	// Deadlock
+	case "40P01":
+		return ErrDatabaseError.WithError(pqErr).WithDetails(map[string]string{
+			"reason": "deadlock_detected",
+		})
+
+	default:
+		return ErrDatabaseError.WithError(pqErr)
+	}
+}
+
+// IsNotFound checks if an error represents a "not found" condition
+func IsNotFound(err error) bool {
+	if errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+	var appErr *AppError
+	if errors.As(err, &appErr) {
+		return appErr.HTTPStatus == http.StatusNotFound
+	}
+	return false
+}
+
+// IsUniqueViolation checks if an error is a unique constraint violation
+func IsUniqueViolation(err error) bool {
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) {
+		return pqErr.Code == "23505"
+	}
+	return false
 }

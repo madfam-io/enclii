@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -670,7 +671,13 @@ func (h *Handler) RecordPreviewAccess(c *gin.Context) {
 
 	// Log in background (don't block response)
 	go func() {
-		_ = h.repos.PreviewAccessLogs.Log(ctx, accessLog)
+		// Use background context for async logging since the request context may be cancelled
+		bgCtx := context.Background()
+		if err := h.repos.PreviewAccessLogs.Log(bgCtx, accessLog); err != nil {
+			h.logger.Warn(bgCtx, "Failed to log preview access (non-critical)",
+				logging.String("preview_id", accessLog.PreviewID.String()),
+				logging.Error("error", err))
+		}
 	}()
 
 	c.JSON(http.StatusOK, gin.H{
