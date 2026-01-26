@@ -8,6 +8,7 @@ metadata:
     app.kubernetes.io/name: waybill
     app.kubernetes.io/component: billing
     app.kubernetes.io/part-of: enclii
+    enclii.dev/managed-by: switchyard
 spec:
   replicas: 1
   selector:
@@ -20,6 +21,7 @@ spec:
         app.kubernetes.io/name: waybill
         app.kubernetes.io/component: billing
         app.kubernetes.io/part-of: enclii
+        enclii.dev/managed-by: switchyard
     spec:
       containers:
         - name: waybill-aggregator

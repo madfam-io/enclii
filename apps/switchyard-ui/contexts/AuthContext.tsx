@@ -137,6 +137,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [refreshTimer]);
 
+  // Listen for auth-expired events from lib/api.ts (OIDC mode)
+  useEffect(() => {
+    if (AUTH_MODE !== "oidc") return;
+
+    const handleAuthExpired = async () => {
+      const refreshed = await refreshTokensRef.current?.();
+      if (!refreshed) {
+        logout();
+      }
+    };
+
+    window.addEventListener("enclii:auth-expired", handleAuthExpired);
+    return () => window.removeEventListener("enclii:auth-expired", handleAuthExpired);
+  }, []);
+
   // ==========================================================================
   // API HELPERS
   // ==========================================================================

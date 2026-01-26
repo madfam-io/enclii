@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
 )
 
@@ -14,12 +15,11 @@ import (
 func (h *Handler) ListTeamMembers(c *gin.Context) {
 	slug := c.Param("slug")
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -80,12 +80,11 @@ func (h *Handler) UpdateMemberRole(c *gin.Context) {
 		return
 	}
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -151,12 +150,11 @@ func (h *Handler) RemoveTeamMember(c *gin.Context) {
 		return
 	}
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 

@@ -8,6 +8,7 @@
  */
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4200";
+const AUTH_MODE = process.env.NEXT_PUBLIC_AUTH_MODE || "local";
 
 // CSRF token cache
 let csrfToken: string | null = null;
@@ -22,6 +23,12 @@ let refreshPromise: Promise<boolean> | null = null;
  */
 async function attemptTokenRefresh(): Promise<boolean> {
   if (typeof window === "undefined") {
+    return false;
+  }
+
+  // In OIDC mode, delegate refresh to AuthContext via custom event
+  if (AUTH_MODE === "oidc") {
+    window.dispatchEvent(new CustomEvent("enclii:auth-expired"));
     return false;
   }
 
@@ -212,10 +219,18 @@ export async function apiRequest<T = any>(
         }
       }
 
-      // Token refresh failed or retry still returned 401 - clear tokens
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("enclii_tokens");
-        localStorage.removeItem("enclii_user");
+      // Token refresh failed or retry still returned 401
+      if (AUTH_MODE !== "oidc") {
+        // Local auth: clear tokens so user is prompted to log in
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("enclii_tokens");
+          localStorage.removeItem("enclii_user");
+        }
+      } else {
+        // OIDC: notify AuthContext to attempt silent refresh
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("enclii:auth-expired"));
+        }
       }
       throw new Error("Authentication required. Please log in again.");
     }

@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
 )
@@ -106,12 +107,11 @@ func (h *Handler) CreateTeam(c *gin.Context) {
 	}
 
 	// Get current user
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -170,12 +170,11 @@ func (h *Handler) CreateTeam(c *gin.Context) {
 
 // ListTeams returns all teams the current user is a member of
 func (h *Handler) ListTeams(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -213,12 +212,11 @@ func (h *Handler) ListTeams(c *gin.Context) {
 func (h *Handler) GetTeam(c *gin.Context) {
 	slug := c.Param("slug")
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -266,12 +264,11 @@ func (h *Handler) UpdateTeam(c *gin.Context) {
 		return
 	}
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -333,12 +330,11 @@ func (h *Handler) UpdateTeam(c *gin.Context) {
 func (h *Handler) DeleteTeam(c *gin.Context) {
 	slug := c.Param("slug")
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 

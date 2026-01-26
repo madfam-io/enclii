@@ -89,6 +89,7 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
       // API endpoints: localhost for dev, api.enclii.dev for production
       // Janua SSO configured via NEXT_PUBLIC_JANUA_URL (default: api.janua.dev)
       `connect-src 'self' http://localhost:4200 https://api.enclii.dev ${process.env.NEXT_PUBLIC_JANUA_URL || 'https://api.janua.dev'}`,
+      `frame-src 'self' ${process.env.NEXT_PUBLIC_JANUA_URL || 'https://auth.madfam.io'}`,
       "frame-ancestors 'none'",
     ].join("; "),
 

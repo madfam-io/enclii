@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/madfam-org/enclii/apps/switchyard-api/internal/auth"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/db"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/logging"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/notifications"
@@ -28,12 +29,11 @@ func (h *Handler) InviteTeamMember(c *gin.Context) {
 	// Normalize email
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -140,12 +140,11 @@ func (h *Handler) InviteTeamMember(c *gin.Context) {
 func (h *Handler) ListTeamInvitations(c *gin.Context) {
 	slug := c.Param("slug")
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -201,12 +200,11 @@ func (h *Handler) CancelTeamInvitation(c *gin.Context) {
 		return
 	}
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -293,12 +291,11 @@ func (h *Handler) GetInvitationByToken(c *gin.Context) {
 func (h *Handler) AcceptInvitation(c *gin.Context) {
 	token := c.Param("token")
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -364,12 +361,11 @@ func (h *Handler) AcceptInvitation(c *gin.Context) {
 func (h *Handler) DeclineInvitation(c *gin.Context) {
 	token := c.Param("token")
 
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 
@@ -413,12 +409,11 @@ func (h *Handler) DeclineInvitation(c *gin.Context) {
 
 // ListMyInvitations returns all pending invitations for the current user
 func (h *Handler) ListMyInvitations(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
+	currentUserID, err := auth.GetUserIDFromContext(c)
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
-	currentUserID := userID.(uuid.UUID)
 
 	ctx := c.Request.Context()
 

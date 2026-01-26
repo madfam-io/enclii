@@ -64,6 +64,7 @@ metadata:
     app.kubernetes.io/name: roundhouse
     app.kubernetes.io/component: build-pipeline
     app.kubernetes.io/part-of: enclii
+    enclii.dev/managed-by: switchyard
 spec:
   replicas: 1
   selector:
@@ -76,6 +77,7 @@ spec:
         app.kubernetes.io/name: roundhouse
         app.kubernetes.io/component: build-pipeline
         app.kubernetes.io/part-of: enclii
+        enclii.dev/managed-by: switchyard
     spec:
       serviceAccountName: roundhouse
       imagePullSecrets:
@@ -179,6 +181,7 @@ metadata:
     app.kubernetes.io/name: roundhouse-api
     app.kubernetes.io/component: build-api
     app.kubernetes.io/part-of: enclii
+    enclii.dev/managed-by: switchyard
 spec:
   replicas: 1
   selector:
@@ -191,6 +194,7 @@ spec:
         app.kubernetes.io/name: roundhouse-api
         app.kubernetes.io/component: build-api
         app.kubernetes.io/part-of: enclii
+        enclii.dev/managed-by: switchyard
     spec:
       imagePullSecrets:
         - name: enclii-registry-credentials
