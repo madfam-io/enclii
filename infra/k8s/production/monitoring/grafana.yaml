@@ -370,8 +370,6 @@ spec:
                 secretKeyRef:
                   name: grafana-credentials
                   key: admin-password
-            - name: GF_INSTALL_PLUGINS
-              value: grafana-piechart-panel
           resources:
             requests:
               memory: "256Mi"
@@ -380,6 +378,8 @@ spec:
               memory: "512Mi"
               cpu: "250m"
           volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
             - name: config
               mountPath: /etc/grafana/grafana.ini
               subPath: grafana.ini
@@ -391,8 +391,6 @@ spec:
               mountPath: /var/lib/grafana/dashboards
             - name: dashboard-roundhouse
               mountPath: /var/lib/grafana/dashboards/roundhouse
-            - name: data
-              mountPath: /var/lib/grafana
           readinessProbe:
             httpGet:
               path: /api/health

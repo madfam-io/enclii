@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
       - name: dispatch
-        image: ghcr.io/madfam-org/dispatch:latest
+        image: ghcr.io/madfam-org/enclii/dispatch:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 4203
