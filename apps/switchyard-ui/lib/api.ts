@@ -12,6 +12,75 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4200";
 // CSRF token cache
 let csrfToken: string | null = null;
 
+// Token refresh state management
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+
+/**
+ * Attempt to refresh the access token using the refresh token
+ * Prevents concurrent refresh attempts by returning shared promise
+ */
+async function attemptTokenRefresh(): Promise<boolean> {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  // Return existing refresh promise if already refreshing
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+
+  const storedTokens = localStorage.getItem("enclii_tokens");
+  if (!storedTokens) {
+    return false;
+  }
+
+  try {
+    const tokens = JSON.parse(storedTokens);
+    if (!tokens.refreshToken) {
+      return false;
+    }
+
+    isRefreshing = true;
+    refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/v1/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ refresh_token: tokens.refreshToken }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const newTokens = {
+            ...tokens,
+            accessToken: data.access_token,
+            expiresAt: data.expires_at
+              ? new Date(data.expires_at).getTime()
+              : tokens.expiresAt,
+          };
+          localStorage.setItem("enclii_tokens", JSON.stringify(newTokens));
+          return true;
+        }
+        return false;
+      } catch (e) {
+        console.error("Token refresh failed:", e);
+        return false;
+      } finally {
+        isRefreshing = false;
+        refreshPromise = null;
+      }
+    })();
+
+    return refreshPromise;
+  } catch {
+    isRefreshing = false;
+    refreshPromise = null;
+    return false;
+  }
+}
+
 /**
  * Get authentication headers for API requests
  *
@@ -112,9 +181,38 @@ export async function apiRequest<T = any>(
       credentials: "include", // Include cookies for CSRF
     });
 
-    // Handle authentication errors
+    // Handle authentication errors with retry
     if (response.status === 401) {
-      // Clear invalid tokens - matches AuthContext storage key
+      // Attempt to refresh the token before giving up
+      const refreshed = await attemptTokenRefresh();
+      if (refreshed) {
+        // Retry the request with the new token
+        const retryHeaders: HeadersInit = {
+          ...getAuthHeaders(isWriteOperation),
+          ...options.headers,
+        };
+        const retryResponse = await fetch(url, {
+          ...options,
+          headers: retryHeaders,
+          credentials: "include",
+        });
+
+        if (retryResponse.ok) {
+          return await retryResponse.json();
+        }
+
+        // If retry also fails with 401, fall through to clear tokens
+        if (retryResponse.status !== 401) {
+          // Handle other errors from retry
+          const error = await retryResponse.json().catch(() => ({}));
+          throw new Error(
+            error.message ||
+              `API request failed: ${retryResponse.status} ${retryResponse.statusText}`,
+          );
+        }
+      }
+
+      // Token refresh failed or retry still returned 401 - clear tokens
       if (typeof window !== "undefined") {
         localStorage.removeItem("enclii_tokens");
         localStorage.removeItem("enclii_user");
