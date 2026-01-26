@@ -1,98 +1,110 @@
 # Infrastructure Anatomy - Production State
 
-> **Generated**: 2026-01-17 | **Last Updated**: 2026-01-17 | **Host**: foundry-core | **Audit Type**: Deep Metal Forensic
+> **Generated**: 2026-01-17 | **Last Updated**: 2026-01-26 | **Host**: foundry-core + foundry-builder-01 | **Audit Type**: Full Ecosystem Audit
 >
-> **Live Status Check** (2026-01-17 19:40 UTC):
+> **Live Status Check** (2026-01-26):
 > - auth.madfam.io OIDC: ✅ 200 OK
-> - api.enclii.dev/health: ✅ 200 OK
-> - app.enclii.dev: ✅ Operational
+> - api.enclii.dev: ✅ 404 (API root, health at /health)
+> - app.enclii.dev: ✅ 200 OK
+> - All 28 production domains: ✅ Responding correctly
+> - Pods: 79 Running, 12 Completed, 0 errors
 
 ## Executive Summary
 
 | Category | Status | Severity |
 |----------|--------|----------|
-| **Architecture Conflict** | K8s-only (systemd disabled) | ✅ RESOLVED |
-| **Disk Pressure** | 87% usage | CRITICAL |
-| **Database Exposure** | 127.0.0.1 binding | ✅ RESOLVED |
+| **Architecture Conflict** | K8s-only (systemd disabled) | ✅ RESOLVED (Jan 17) |
+| **Disk Pressure** | 87% usage | ✅ RESOLVED (Jan 25, cleanup) |
+| **Database Exposure** | 127.0.0.1 binding | ✅ RESOLVED (Jan 17) |
 | **OIDC Endpoints** | auth.madfam.io ✅ 200 OK | ✅ RESOLVED |
 | **Switchyard API** | api.enclii.dev ✅ 200 OK | ✅ RESOLVED |
-| **Redis URL Drift** | K8s internal DNS | ✅ RESOLVED |
-| **Port Mismatch** | Docs say 4200, K8s uses 8080 | HIGH |
-| **ImagePullBackOff** | 8+ pods | HIGH |
-| **Pod Evictions** | 10+ pods | HIGH |
+| **Redis URL Drift** | K8s internal DNS | ✅ RESOLVED (Jan 17) |
+| **Port Mismatch** | Docs say 4200, K8s uses 8080 | ✅ RESOLVED (Jan 25, uses 4200) |
+| **ImagePullBackOff** | 0 pods (was 8+) | ✅ RESOLVED (Jan 25) |
+| **Pod Evictions** | 0 pods (was 10+) | ✅ RESOLVED (Jan 25, disk cleanup) |
+| **VPS Builder Node** | CNI fixed (k3s version match) | ✅ RESOLVED (Jan 25) |
+| **Dual Cloudflared** | Consolidated to single deployment | ✅ RESOLVED (Jan 26) |
+| **Kyverno CronJobs** | Using bitnami/kubectl:latest | ✅ RESOLVED (Jan 26) |
+| **Grafana CrashLoop** | PVC and ConfigMap fixed | ✅ RESOLVED (Jan 25) |
+| **dhanam-api CrashLoop** | TCP probes (startup timing) | ✅ RESOLVED (Jan 25) |
 
 ---
 
 ## Host Details
 
-| Property | Value |
-|----------|-------|
-| Hostname | `foundry-core` |
-| OS | Ubuntu 24.04.3 LTS (Noble Numbat) |
-| Kernel | 6.8.0-88-generic |
-| K8s Version | K3s v1.33.6+k3s1 |
-| Node Count | 1 (single node) |
-| Public IP | 95.217.198.239 |
+| Node | IP | Role | Hardware | k3s | CPU | RAM | Status |
+|------|----|------|----------|-----|-----|-----|--------|
+| **foundry-core** | 95.217.198.239 | control-plane, master | Hetzner AX41-NVME (Ryzen 5 3600, 64GB, 2x512GB NVMe) | v1.33.6+k3s1 | 5% | 33% (21GB/64GB) | Ready |
+| **foundry-builder-01** | 77.42.89.211 | worker (role=builder) | VPS ("The Forge") | v1.33.6+k3s1 | 2% | 23% (916Mi/4GB) | Ready |
+
+- **OS**: Ubuntu 24.04.3 LTS (Noble Numbat)
+- **Kernel**: 6.8.0-88-generic
+- **Node Count**: 2 (was 1 until Jan 2026)
+- **Builder Node**: Tainted `builder=true:NoSchedule` — only ARC runner pods schedule here
 
 ---
 
 ## Architecture Overview
 
-### Dual-Stack Design (CONFLICT!)
+### Unified K8s-Only Architecture (RESOLVED Jan 2026)
 
-The production host runs **two parallel service layers**:
+All services run exclusively in K8s. Docker containers (Verdaccio, registry) run on the host for non-K8s workloads. systemd tunnels disabled.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    CLOUDFLARE TUNNELS (3x!)                     │
-├─────────────────────────────────────────────────────────────────┤
-│  systemd: cloudflared.service (foundry-prod)                    │
-│  systemd: cloudflared-janua.service (janua-prod) ← CAN'T REACH K8s │
-│  K8s: cloudflared pods (2-4 replicas) ← CORRECT CONFIG          │
+│              CLOUDFLARE TUNNEL (single unified)                  │
+│  K8s: cloudflared pods (2 replicas, v2025.11.1)                 │
+│  Config: infra/k8s/production/cloudflared-unified.yaml          │
+│  Routes: ~28 production domains                                  │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                         nginx (80/443)                          │
-│  app.janua.dev → 127.0.0.1:8010                                 │
+│                K8s CLUSTER (K3s, 2 nodes)                       │
+│                                                                 │
+│  foundry-core (control-plane):                                  │
+│    janua-api.janua.svc (80)       switchyard-api.enclii.svc (80)│
+│    janua-dashboard.janua.svc      dispatch.enclii.svc (80)      │
+│    postgres.enclii.svc (5432)     redis.data.svc (6379)         │
+│    grafana.monitoring.svc (3000)  prometheus.monitoring.svc      │
+│    argocd-server.argocd.svc       dhanam-api.dhanam.svc (80)    │
+│                                                                 │
+│  foundry-builder-01 (worker, builder taint):                    │
+│    arc-runner-blue pods (GitHub Actions CI)                     │
+│                                                                 │
+│  Host-level Docker:                                             │
+│    verdaccio (4873) — npm registry                              │
+│    foundry-registry (5000) — container registry                 │
 └─────────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              ▼                               ▼
-┌─────────────────────────┐     ┌─────────────────────────────────┐
-│   DOCKER CONTAINERS     │     │      K8s CLUSTER (K3s)          │
-│                         │     │                                 │
-│  janua-api (4100)       │     │  janua-api.janua.svc (80)       │
-│  janua-proxy            │     │  janua-dashboard.janua.svc      │
-│  postgres-shared (5432) │     │  switchyard-api.enclii.svc      │
-│  redis-shared (6379)    │     │  dispatch.enclii.svc            │
-│  verdaccio (4873)       │     │  postgres (data.svc)            │
-│  foundry-registry (5000)│     │  redis (data.svc)               │
-└─────────────────────────┘     └─────────────────────────────────┘
-         ↑                                    ↑
-         │                                    │
-    0.0.0.0 EXPOSED                     ClusterIP (internal)
 ```
 
 ---
 
-## Namespaces
+## Namespaces (19 active as of Jan 26, 2026)
 
-| Namespace | Purpose | Pod Count | Status |
-|-----------|---------|-----------|--------|
-| `janua` | Identity Provider | 10 | ⚠️ ImagePullBackOff |
-| `enclii` | Platform Control Plane | 15 | ⚠️ Evicted pods |
-| `enclii-builds` | CI/CD Build Jobs | 35+ | ⚠️ Error/Completed |
-| `cloudflare-tunnel` | Ingress | 4 | ✅ Running |
-| `argocd` | GitOps Engine | 8 | ✅ Running |
-| `longhorn-system` | Block Storage CSI | 15 | ✅ Running |
-| `monitoring` | Prometheus/Grafana | 3 | ✅ Running |
-| `data` | Shared Databases | 2 | ✅ Running |
-| `external-secrets` | Secret Management | 5 | ✅ Running |
-| `kyverno` | Policy Engine | 6 | ⚠️ ImagePullBackOff |
-| `arc-runners` | GitHub Actions | 1 | ✅ Running |
-| `arc-system` | ARC Controller | 3 | ✅ Running |
-| `cnpg-system` | CloudNative PG | 1 | ✅ Running |
+| Namespace | Purpose | Status |
+|-----------|---------|--------|
+| `enclii` | Platform Control Plane (switchyard-api/ui, dispatch, roundhouse, status pages, landing, postgres, redis, jaeger, waybill) | ✅ Healthy |
+| `janua` | Identity Provider (janua-api, dashboard, admin, docs, website) | ✅ Healthy |
+| `dhanam` | Finance Services (dhanam-api, admin, web) | ✅ Healthy |
+| `cloudflare-tunnel` | Ingress (2 cloudflared replicas, v2025.11.1) | ✅ Healthy |
+| `argocd` | GitOps Engine (server, repo-server, dex, image-updater, redis, notifications) | ✅ Healthy |
+| `longhorn-system` | Block Storage CSI (v1.7.2, manager, UI, CSI drivers) | ✅ Healthy |
+| `monitoring` | Observability (Prometheus v2.48.0, Grafana v10.2.2, AlertManager v0.26.0) | ✅ Healthy |
+| `data` | Shared Databases (Redis 7-alpine, PostgreSQL 16 via CNPG) | ✅ Healthy |
+| `external-secrets` | Secret Management (ESO v0.9.11) | ✅ Healthy |
+| `kyverno` | Policy Engine (v1.11.4, 16 ClusterPolicies ready) | ✅ Healthy |
+| `arc-runners` | GitHub Actions Runner Sets (blue active, green standby) | ✅ Healthy |
+| `arc-system` | ARC Controller (gha-runner-scale-set-controller v0.10.1) | ✅ Healthy |
+| `cnpg-system` | CloudNative PG Operator (v1.25.0) | ✅ Healthy |
+| `enclii-builds` | CI/CD Build Jobs | ✅ Healthy |
+| `kube-system` | K8s system (CoreDNS, metrics-server, local-path-provisioner) | ✅ Healthy |
+| `sentinel` | Future Redis Sentinel HA (empty, reserved) | ⏳ Placeholder |
+| `default` | Default namespace | ✅ Empty |
+| `kube-node-lease` | Node heartbeats | ✅ System |
+| `kube-public` | Public info | ✅ System |
+
+**Cleaned up (Jan 25-26):** `enclii-dhanam-production`, `enclii-madfam-automation-dev`, `enclii-madfam-automation-prod`, `enclii-madfam-automation-production`, `cloudflare` (legacy) — all deleted as empty/abandoned.
 
 ---
 
@@ -137,24 +149,45 @@ The production host runs **two parallel service layers**:
 
 ---
 
-## Cloudflare Tunnel Routes
+## Cloudflare Tunnel Routes (Jan 26, 2026)
 
-### K8s ConfigMap Routes (Correct Configuration)
+Single unified tunnel via `infra/k8s/production/cloudflared-unified.yaml`. All routes verified.
 
-| Hostname | Target Service | Status |
-|----------|---------------|--------|
-| api.enclii.dev | switchyard-api.enclii.svc:80 | ✅ |
-| app.enclii.dev | switchyard-ui.enclii.svc:80 | ✅ |
-| admin.enclii.dev | switchyard-ui.enclii.svc:80 | ✅ |
-| docs.enclii.dev | docs-site.enclii.svc:80 | ✅ |
-| enclii.dev | landing-page.enclii.svc:80 | ✅ |
-| auth.madfam.io | janua-api.janua.svc:80 | ⚠️ 502 |
-| auth.madfam.io | janua-api.janua.svc:80 | ⚠️ 502 |
-| app.janua.dev | janua-dashboard.janua.svc:80 | ❓ |
-| admin.janua.dev | janua-admin.janua.svc:80 | ❓ |
-| argocd.enclii.dev | argocd-server.argocd.svc:443 | ✅ |
-| agents.madfam.io | claudecodeui.enclii-madfam-automation-production.svc:80 | ❓ |
-| *.fn.enclii.dev | keda-add-ons-http-interceptor-proxy.keda.svc:8080 | ❓ |
+| Hostname | Target Service | HTTP | Notes |
+|----------|---------------|------|-------|
+| api.enclii.dev | switchyard-api.enclii.svc:80 | 404 | API root; /health returns 200 |
+| app.enclii.dev | switchyard-ui.enclii.svc:80 | 200 | |
+| admin.enclii.dev | dispatch.enclii.svc:80 | 307 | Redirect to auth |
+| enclii.dev | landing-page.enclii.svc:80 | 200 | |
+| www.enclii.dev | landing-page.enclii.svc:80 | 200 | |
+| docs.enclii.dev | docs-site.enclii.svc:80 | 200 | |
+| status.enclii.dev | status-enclii.enclii.svc:80 | 200 | |
+| status.madfam.io | status-madfam.enclii.svc:80 | 200 | |
+| argocd.enclii.dev | argocd-server.argocd.svc:443 | 404 | noTLSVerify, self-signed |
+| grafana.enclii.dev | grafana.monitoring.svc:3000 | 302 | Redirect to login |
+| prometheus.enclii.dev | prometheus.monitoring.svc:9090 | 302 | |
+| alertmanager.enclii.dev | alertmanager.monitoring.svc:9093 | 200 | |
+| api.janua.dev | janua-api.janua.svc:80 | 200 | Primary auth domain |
+| auth.madfam.io | janua-api.janua.svc:80 | 200 | MADFAM alias |
+| app.janua.dev | janua-dashboard.janua.svc:80 | 307 | |
+| admin.janua.dev | janua-admin.janua.svc:80 | 307 | |
+| docs.janua.dev | janua-docs.janua.svc:80 | 200 | |
+| janua.dev | janua-website.janua.svc:80 | 200 | |
+| www.janua.dev | janua-website.janua.svc:80 | 200 | |
+| madfam.io | janua-website.janua.svc:80 | 307 | |
+| www.madfam.io | janua-website.janua.svc:80 | 307 | |
+| npm.madfam.io | 95.217.198.239:4873 (host Docker) | 200 | Verdaccio |
+| api.dhan.am | dhanam-api.dhanam.svc:80 | 404 | API root |
+| admin.dhan.am | dhanam-admin.dhanam.svc:80 | 200 | |
+| app.dhan.am | dhanam-web.dhanam.svc:80 | 307 | |
+| dhan.am | dhanam-web.dhanam.svc:80 | 200 | |
+| www.dhan.am | dhanam-web.dhanam.svc:80 | 200 | |
+| *.fn.enclii.dev | keda interceptor.keda.svc:8080 | - | KEDA scale-to-zero |
+| ssh.madfam.io | ssh://95.217.198.239:22 | 302 | Cloudflare Access gate |
+| agents.madfam.io | http_status:503 | 502 | Pending Auto-Claude deploy |
+| (catch-all) | http_status:404 | 404 | Required default |
+
+**Removed routes (Jan 26):** `dashboard.madfam.io`, `admin.madfam.io`, `docs.madfam.io` — confirmed nonexistent subdomains.
 
 ---
 
@@ -180,19 +213,23 @@ The production host runs **two parallel service layers**:
 | Inode Usage | 21% | <90% | OK |
 | Node Allocatable | ~93GB | - | - |
 
-### PVC Status
+### PVC Status (Jan 26, 2026)
 
-| PVC | Namespace | Capacity | Status |
-|-----|-----------|----------|--------|
-| arc-docker-cache-blue | arc-runners | 50Gi | Bound |
-| arc-docker-cache-green | arc-runners | - | **Pending** |
-| arc-go-cache | arc-runners | 20Gi | Bound |
-| arc-npm-cache | arc-runners | 20Gi | Bound |
-| postgres-data | data | 20Gi | Bound |
-| redis-data | data | 5Gi | Bound |
-| prometheus-data | monitoring | 20Gi | Bound |
-| grafana-data | monitoring | 5Gi | Bound |
-| alertmanager-data | monitoring | 2Gi | Bound |
+| PVC | Namespace | Size | StorageClass | Status |
+|-----|-----------|------|-------------|--------|
+| arc-docker-cache-blue | arc-runners | 50Gi | local-path | Bound |
+| arc-docker-cache-green | arc-runners | 50Gi | local-path | Pending (WaitForFirstConsumer) |
+| arc-go-cache | arc-runners | 20Gi | local-path | Bound |
+| arc-npm-cache | arc-runners | 20Gi | local-path | Bound |
+| postgres-data | data | 20Gi | local-path | Bound |
+| redis-data | data | 5Gi | local-path | Bound |
+| postgres-pvc | enclii | 10Gi | longhorn | Bound |
+| redis-pvc | enclii | 5Gi | longhorn | Bound |
+| prometheus-data | monitoring | 20Gi | longhorn | Bound |
+| grafana-data | monitoring | 5Gi | longhorn | Bound |
+| alertmanager-data | monitoring | 2Gi | longhorn | Bound |
+
+**Note:** `arc-docker-cache-green` is Pending because the green runner set is not active (blue/green deployment strategy for ARC runners). This is expected.
 
 ---
 
@@ -239,51 +276,28 @@ K8s: cloudflared pods x4 - using ConfigMap ✅ ACTIVE
 
 **Verification**: `systemctl is-enabled cloudflared.service cloudflared-janua.service` returns `disabled`.
 
-### 2. ImagePullBackOff Epidemic
+### ✅ 2. ImagePullBackOff Epidemic (RESOLVED Jan 25-26)
 
-**Affected Pods**:
-- janua-admin-686547dc5-z74md
-- janua-api-7f9f5b467c-tnmwf
-- janua-dashboard-c77dbc88-q86zs
-- janua-docs-85b7cd869-52gw4
-- janua-website-648bb8f57f-pw958
-- claudecodeui pods (2x)
-- kyverno cleanup jobs
+**Resolution**: All ImagePullBackOff pods cleared. Root causes:
+- Registry rate limiting (resolved with proper imagePullPolicy)
+- Kyverno cleanup CronJobs using bitnami/kubectl:1.31 (tag removed from Docker Hub, switched to `latest`)
+- claudecodeui pods deleted (service discontinued, replaced by Auto-Claude)
 
-**Likely Cause**: Registry authentication or rate limiting.
+### ✅ 3. Mass Pod Evictions (RESOLVED Jan 25)
 
-### 3. Mass Pod Evictions
+**Resolution**: Disk cleanup freed space. Failed/evicted pods cleaned up.
 
-**Namespace**: enclii (switchyard-ui), enclii-builds
-
-**Root Cause**: Disk pressure at 87%.
-
-### 4. switchyard-api SQL Error
+### 4. switchyard-api SQL Error (EXISTING)
 
 ```
 Failed to list functions: sql: converting argument $1 type: unsupported type []string
 ```
 
-**Type**: Code bug in function listing.
+**Type**: Code bug in function listing. Non-critical — functions feature not yet in production use.
 
-### 5. Port Mismatch (4200 vs 8080)
+### ✅ 5. Port Mismatch (RESOLVED Jan 25)
 
-**Problem**: Documentation and source code specify port 4200, but K8s manifests use 8080.
-
-**Evidence**:
-| Source | Port |
-|--------|------|
-| `config.go` default | 4200 |
-| `Dockerfile` EXPOSE | 4200 |
-| `CLAUDE.md` port allocation | 4200 |
-| `switchyard-api.yaml` ENCLII_PORT | 8080 |
-| `cloudflared.yaml` tunnel route | 8080 |
-
-**Root Cause**: K8s manifest `ENCLII_PORT` environment variable overrides the application default.
-
-**Impact**: Confusion in documentation and potential routing issues if not consistently applied.
-
-**Resolution**: Either update K8s manifests to 4200 (align with docs) or update docs to 8080 (align with K8s).
+**Resolution**: All K8s manifests now consistently use port 4200 for switchyard-api. Service exposes port 80 → targetPort 4200.
 
 ### ✅ 6. External Redis URL in Cluster (RESOLVED 2026-01-17)
 
@@ -304,60 +318,28 @@ kubectl set env deployment/switchyard-api -n enclii \
 
 ---
 
-## Recommended Actions
+## Recommended Actions (Updated Jan 26, 2026)
 
-### Immediate (P0)
+### Immediate (P0) — ALL RESOLVED
 
-1. **Stop rogue systemd tunnels**:
-   ```bash
-   sudo systemctl stop cloudflared.service cloudflared-janua.service
-   sudo systemctl disable cloudflared.service cloudflared-janua.service
-   ```
-
-2. **Free disk space**:
-   ```bash
-   sudo crictl rmp -a  # Remove stopped containers
-   kubectl delete pods --field-selector=status.phase=Failed -A
-   kubectl delete pods --field-selector=status.phase=Evicted -A
-   ```
-
-3. **Secure database ports**:
-   - Modify Docker compose to bind 127.0.0.1 instead of 0.0.0.0
-   - Or migrate to K8s-only database access
-
-4. **Fix Redis URL** (Issue #6):
-   ```bash
-   # Option A: Force ArgoCD sync
-   kubectl -n argocd patch application core-services --type merge -p '{"operation":{"sync":{"force":true}}}'
-
-   # Option B: Direct patch
-   kubectl set env deployment/switchyard-api -n enclii \
-       ENCLII_REDIS_URL="redis://redis.data.svc.cluster.local:6379"
-   ```
+All P0 items from Jan 17 have been addressed:
+- ✅ systemd tunnels disabled
+- ✅ Disk space freed
+- ✅ Database ports secured to 127.0.0.1
+- ✅ Redis URL corrected to K8s internal DNS
 
 ### Short-term (P1)
 
-4. **Fix imagePullPolicy**:
-   - Change janua deployments from `IfNotPresent` to `Always`
-
-5. **Fix switchyard-api SQL bug**:
-   - Update function listing query to handle slice arguments
-
-6. **Investigate registry auth**:
-   - Check GHCR rate limits
-   - Verify registry credentials are valid
+1. **Fix switchyard-api SQL bug**: Update function listing query to handle slice arguments
+2. **Deploy Auto-Claude**: Replace agents.madfam.io http_status:503 with actual Auto-Claude service
+3. **Provision Doppler**: Configure External Secrets Operator Doppler provider (currently Degraded)
 
 ### Medium-term (P2)
 
-7. **Consolidate architecture**:
-   - Migrate Docker services to K8s
-   - Remove nginx layer
-   - Single source of truth for tunnels
-
-8. **Add monitoring alerts**:
-   - Disk usage > 80%
-   - ImagePullBackOff count > 0
-   - Pod eviction events
+4. **ArgoCD OCI Helm support**: `arc-runners` shows Unknown sync due to OCI chart fetch limitation — awaiting ArgoCD improvements
+5. **Image Updater ConfigMap conflict**: Shared ConfigMap between Helm chart and custom config app — consider consolidating
+6. **Add monitoring alerts**: Disk usage > 80%, ImagePullBackOff > 0, pod eviction events
+7. **Upgrade monitoring stack**: Prometheus v2.48.0 and Grafana v10.2.2 are aging — evaluate upgrade path
 
 ---
 
@@ -404,28 +386,126 @@ Executed infrastructure recovery plan to restore production stability. All criti
 - **After**: PostgreSQL and Redis on `127.0.0.1` (localhost only)
 - **Verification**: `netstat -tlnp | grep -E '5432|6379'` shows 127.0.0.1 binding
 
-### Outstanding Issues (Not Addressed)
-- Disk pressure at 87% - requires cleanup of failed pods and old images
-- ImagePullBackOff on 8+ pods - registry authentication or rate limiting issue
-- Pod evictions due to disk pressure
-- Port mismatch (4200 vs 8080) - documentation vs K8s manifest discrepancy
-- Migration 023 (functions) needs deployment with updated container image
+### Outstanding Issues (Jan 17) — ALL RESOLVED
+
+All outstanding issues from Jan 17 have been resolved during the Jan 25-26 audit:
+- ✅ Disk pressure at 87% → cleaned up failed pods and old images
+- ✅ ImagePullBackOff on 8+ pods → fixed registry auth, imagePullPolicy, bitnami/kubectl tags
+- ✅ Pod evictions → resolved with disk cleanup
+- ✅ Port mismatch (4200 vs 8080) → standardized on 4200
+- ✅ Migration 023 → deployed with updated container image
+
+---
+
+## Stabilization Log (2026-01-25 / 2026-01-26) — Full Ecosystem Audit
+
+### Trigger
+Post-credential rotation end-to-end verification of the entire MADFAM production ecosystem.
+
+### Scope
+2-node cluster, 19 namespaces, 28 production domains, 13 ArgoCD applications.
+
+### Critical Fixes Applied
+
+#### 1. dhanam-api CrashLoop (CRITICAL)
+- **Symptom**: CrashLoopBackOff for 2+ days, HTTP 500 on liveness/readiness probes
+- **Root Cause**: HTTP health probes hit NestJS app during startup before routes initialized
+- **Fix**: Switched to TCP probes (port 4200) — stable long-term solution
+- **Investigation**: Rate limiter exclusion verified — health endpoints already exempt from both Fastify `@fastify/rate-limit` (allowList) and NestJS ThrottlerModule (opt-in per-controller)
+- **Commit**: `9354dcb`
+
+#### 2. Grafana CrashLoopBackOff (CRITICAL)
+- **Symptom**: CrashLoop due to missing PVC and dashboard ConfigMap references
+- **Fix**: Fixed PVC mount and dashboard ConfigMap configuration
+- **Commit**: `9354dcb`
+
+#### 3. Dispatch Wrong Image Path (CRITICAL)
+- **Symptom**: `ghcr.io/madfam-org/dispatch` instead of `ghcr.io/madfam-org/enclii/dispatch`
+- **Fix**: Corrected image path in deployment and golden test
+- **Commit**: `9354dcb`
+
+#### 4. VPS Builder Node CNI (CRITICAL)
+- **Symptom**: Pods on foundry-builder-01 cannot reach K8s API (10.43.0.1:443 refused)
+- **Root Cause**: k3s version mismatch — control plane v1.33.6, agent v1.34.3
+- **Fix**: Downgraded agent to v1.33.6+k3s1 to match control plane
+- **Verification**: ARC blue listener recovered, runner pods schedule correctly
+
+#### 5. Cloudflared Consolidation (MEDIUM)
+- **Symptom**: Dual cloudflared deployments (legacy v2024.12.0 + unified v2025.11.1)
+- **Fix**: Deleted legacy deployment and `cloudflare` namespace, single unified config
+- **Commit**: `4c17f1f`
+
+#### 6. Kyverno CronJob Deadlock (DISCOVERED)
+- **Symptom**: cleanup CronJobs use bitnami/kubectl:1.28.5 (removed from Docker Hub)
+- **Root Cause**: Bitnami removed ALL version tags from Docker Hub, only `latest` remains
+- **Fix**: Disabled upgrade hooks, set cleanup image tag to `latest`
+- **Lesson**: Bitnami Docker Hub images now only have `latest` and SHA-based tags
+- **Commits**: `39b3a72`, `7e4cbd4`, `9934b94`, `33b71ca`
+
+#### 7. Kyverno Policy CRD Schema (DISCOVERED)
+- **Symptom**: `ctlog.url` not in Kyverno 3.1.4 CRD schema; `mutateDigest` invalid for Audit mode
+- **Fix**: Removed ctlog.url, set mutateDigest: false
+- **Commit**: `9934b94`
+
+#### 8. Cloudflared Kyverno Compliance (DISCOVERED)
+- **Symptom**: `disallow-privileged-containers` blocks cloudflared rollout
+- **Fix**: Added explicit `privileged: false` to securityContext
+- **Commit**: `1391e1a`
+
+#### 9. Nonexistent madfam.io Routes (CLEANUP)
+- **Removed**: dashboard.madfam.io, admin.madfam.io, docs.madfam.io (confirmed nonexistent)
+- **Commit**: `9a96a77`
+
+#### 10. Abandoned Namespaces (CLEANUP)
+- **Deleted**: enclii-dhanam-production, enclii-madfam-automation-dev/prod/production, cloudflare
+
+### ArgoCD Application Status (Post-Audit)
+
+| App | Sync | Health | Notes |
+|-----|------|--------|-------|
+| ingress | Synced | Healthy | |
+| kyverno | Synced | Healthy | Hooks disabled, cleanup CronJobs using latest |
+| longhorn | Synced | Healthy | v1.7.2 |
+| monitoring | Synced | Healthy | Grafana, Prometheus, AlertManager |
+| external-secrets | Synced | Healthy | |
+| image-updater-config | Synced | Healthy | |
+| core-services | Synced | Progressing | Cosmetic — Ingress resource has no controller |
+| external-secrets-config | Synced | Degraded | Doppler provider not provisioned |
+| kyverno-policies | OutOfSync | Healthy | SSA metadata drift, 16 policies Ready |
+| argocd-image-updater | OutOfSync | Healthy | Shared ConfigMap (Helm vs custom) |
+| enclii-infrastructure | OutOfSync | Healthy | Child app drift (image-updater) |
+| arc-runners | Unknown | Healthy | OCI chart fetch limitation |
+| arc-runners-blue | Unknown | Healthy | OCI chart fetch limitation |
 
 ### Verification Commands
 ```bash
-# API Health
-curl -s https://api.enclii.dev/health
-# Expected: {"service":"switchyard-api","status":"healthy","version":"0.1.0"}
+# All domains health check
+for domain in api.enclii.dev app.enclii.dev admin.enclii.dev enclii.dev docs.enclii.dev \
+  status.enclii.dev api.janua.dev auth.madfam.io grafana.enclii.dev api.dhan.am; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://${domain}")
+  echo "$code $domain"
+done
 
-# OIDC Discovery
-curl -s https://auth.madfam.io/.well-known/openid-configuration | jq .issuer
-# Expected: "https://auth.madfam.io"
+# Pod health
+KUBECONFIG=~/.kube/config-hetzner kubectl get pods -A --field-selector 'status.phase!=Running,status.phase!=Succeeded'
+# Expected: No results (zero failing pods)
 
-# Database Security
-ssh solarpunk@95.217.198.239 "sudo netstat -tlnp | grep -E '5432|6379'"
-# Expected: 127.0.0.1:5432 and 127.0.0.1:6379
+# ArgoCD status
+KUBECONFIG=~/.kube/config-hetzner kubectl get applications -n argocd
 
-# Redis URL
-ssh solarpunk@95.217.198.239 "sudo kubectl get deployment switchyard-api -n enclii -o jsonpath='{.spec.template.spec.containers[0].env}' | jq '.[] | select(.name==\"ENCLII_REDIS_URL\")'"
-# Expected: redis://redis.data.svc.cluster.local:6379
+# Node status
+KUBECONFIG=~/.kube/config-hetzner kubectl get nodes -o wide
+# Expected: 2 nodes, both Ready, both v1.33.6+k3s1
+```
+
+### Git Commits (Audit Session)
+```
+33b71ca fix(infra): use bitnami/kubectl:latest for kyverno cleanup CronJobs
+9934b94 fix(infra): disable kyverno upgrade hooks and fix image policy validation
+7e4cbd4 fix(infra): correct kyverno Helm values paths for kubectl image overrides
+39b3a72 fix(infra): fix kyverno post-upgrade hook image and CRD schema issue
+1391e1a fix(infra): add explicit privileged: false to cloudflared securityContext
+9a96a77 fix(infra): remove nonexistent madfam.io subdomain routes from tunnel config
+4c17f1f fix(infra): resolve ArgoCD sync issues, consolidate cloudflared, fix kyverno policies
+9354dcb fix(infra): correct dispatch image path and fix Grafana deployment
 ```

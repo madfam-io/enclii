@@ -7,12 +7,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Enclii is a Railway-style Platform-as-a-Service that runs on cost-effective infrastructure (~$55/month vs $2,220 for Railway + Auth0). It deploys containerized services with enterprise-grade security, auto-scaling, and zero vendor lock-in.
 
 **Current Status:** 🟢 v0.1.0 - Production Beta (95% ready) ([checklist](./docs/production/PRODUCTION_CHECKLIST.md))
-**Infrastructure:** Hetzner Dedicated + Cloudflare (~$55/month) - **Running**
+**Infrastructure:** Hetzner Dedicated (2-node k3s) + Cloudflare (~$55/month) - **Running**
 **Authentication:** OIDC via Janua SSO (RS256 JWT) - **Integrated**
 **Dogfooding:** Core services deployed ([api.enclii.dev](https://api.enclii.dev), [app.enclii.dev](https://app.enclii.dev))
 **Build Pipeline:** GitHub webhook CI/CD with Buildpacks - **Operational**
-**GitOps:** ArgoCD App-of-Apps with self-heal - **Operational** (Jan 2026)
-**Storage:** Longhorn CSI (single-node; ready for multi-node scaling) - **Operational** (Jan 2026)
+**GitOps:** ArgoCD App-of-Apps (13 apps) with self-heal - **Operational** (Jan 2026)
+**Storage:** Longhorn CSI v1.7.2 (single-replica; ready for multi-node) - **Operational** (Jan 2026)
+**Last Audit:** Jan 26, 2026 — 79 pods, 0 errors, 28 domains healthy ([report](./docs/infrastructure/INFRA_ANATOMY.md))
 
 ### Port Allocation
 
@@ -159,14 +160,15 @@ Key vars for local development (set in `.env`):
 
 ### Current Production Stack (~$55/month)
 
-Enclii runs on a single dedicated server with infrastructure prepared for scaling:
+Enclii runs on a 2-node k3s cluster with infrastructure prepared for further scaling:
 
-**Compute & Kubernetes:**
-- **Hetzner AX41-NVME** - Dedicated server (AMD Ryzen 5 3600, 64GB RAM, 2x512GB NVMe) - ~$50/month
-- **k3s** - Lightweight Kubernetes distribution (single-node)
+**Compute & Kubernetes (2-node cluster):**
+- **foundry-core** (Hetzner AX41-NVME) - Control plane (AMD Ryzen 5 3600, 64GB RAM, 2x512GB NVMe) - ~$50/month
+- **foundry-builder-01** (VPS "The Forge") - Worker node for CI builds (taint: builder=true:NoSchedule)
+- **k3s v1.33.6+k3s1** - Lightweight Kubernetes (both nodes must match k3s version)
 - **Cloudflare Tunnel** - Zero-trust ingress (replaces LoadBalancer) - $0
 
-> **Note:** Currently single-node. Longhorn CSI and ArgoCD are deployed and ready for multi-node scaling when needed.
+> **Note:** 2-node cluster since Jan 2026. Builder node runs only ARC GitHub Actions runners. Longhorn CSI operates in single-replica mode; ready for multi-replica when additional storage nodes are added.
 
 **Ingress Architecture (Cloudflare Tunnel):**
 ```

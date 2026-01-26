@@ -1,7 +1,7 @@
 # Cloudflare Integration
 
-**Last Updated:** January 2026
-**Status:** Operational
+**Last Updated:** January 26, 2026
+**Status:** Operational (single unified tunnel, 28 domains, 2 replicas)
 
 ---
 
@@ -153,12 +153,17 @@ ingress:
 
 ## Tunnel Configuration
 
-### Production Tunnels
+### Production Tunnel (Consolidated Jan 2026)
 
-| Tunnel | ID | Purpose |
-|--------|-----|---------|
-| enclii-prod | c9fac286-497b-4aac-9288-f784a1ea561c | Enclii services |
-| janua-prod | 803de96d-30f4-4d2b-8283-22fe939d4ee7 | Auth services |
+A single unified tunnel handles all traffic. Legacy systemd tunnels and dual K8s deployments were consolidated during the Jan 25-26 ecosystem audit.
+
+| Tunnel | ID | Purpose | Status |
+|--------|-----|---------|--------|
+| enclii-production | (token-based auth) | All services (28 domains) | ✅ Active |
+
+**History**: Previously had 3 tunnel instances (2 systemd + 1 K8s). systemd tunnels disabled Jan 17. Legacy K8s deployment (v2024.12.0) deleted Jan 25. Single unified deployment (v2025.11.1, 2 replicas) now handles everything.
+
+**Important**: The cloudflared deployment requires `privileged: false` in its securityContext to pass Kyverno's `disallow-privileged-containers` policy.
 
 ### Port Mapping
 

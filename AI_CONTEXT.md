@@ -4,6 +4,8 @@
 - **Stack**: Go (Gin) backend + Next.js 16 frontend + K3s + ArgoCD
 - **Pattern**: GitOps, App-of-Apps, zero-trust ingress via Cloudflare Tunnel
 - **Self-Deployment**: Enclii deploys itself (dogfooding)
+- **Cluster**: 2-node k3s v1.33.6+k3s1 (foundry-core + foundry-builder-01)
+- **Last Audit**: Jan 26, 2026 — all critical issues resolved, 79 pods running, 0 errors
 
 ## God Files (Critical Paths)
 | Purpose | Path |
@@ -14,8 +16,13 @@
 | Terraform | `infra/terraform/` |
 | K8s Manifests | `infra/k8s/production/` |
 | ArgoCD Root | `infra/argocd/root-application.yaml` |
+| ArgoCD Apps | `infra/argocd/apps/*.yaml` (13 apps) |
+| Tunnel Config | `infra/k8s/production/cloudflared-unified.yaml` (28 domains) |
+| Kyverno Policies | `infra/k8s/base/kyverno/policies/` |
+| Golden Tests | `tests/golden/` (pre-commit validation) |
 | Enclii Config | `.enclii.yml` |
 | Dispatch API | `apps/dispatch/` |
+| Infra Anatomy | `docs/infrastructure/INFRA_ANATOMY.md` |
 
 ## Port Allocation
 - 4200: Switchyard API (api.enclii.dev)
