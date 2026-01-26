@@ -166,7 +166,11 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	case <-ctx.Done():
 		h.logger.Error(ctx, "Build timed out waiting for semaphore",
 			logging.String("release_id", release.ID.String()))
-		_ = h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
+		if statusErr := h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed); statusErr != nil {
+			h.logger.Error(ctx, "Failed to update release status after timeout",
+				logging.String("release_id", release.ID.String()),
+				logging.Error("error", statusErr))
+		}
 		return
 	}
 
@@ -199,7 +203,11 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 	// Persist the actual image URI to the database (builder generates versioned tags)
 	if err := h.repos.Releases.UpdateImageURI(release.ID, buildResult.ImageURI); err != nil {
 		h.logger.Error(ctx, "Failed to update release image URI", logging.Error("db_error", err))
-		_ = h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
+		if statusErr := h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed); statusErr != nil {
+			h.logger.Error(ctx, "Failed to update release status after image URI error",
+				logging.String("release_id", release.ID.String()),
+				logging.Error("error", statusErr))
+		}
 		return
 	}
 	h.logger.Info(ctx, "✓ Release image URI updated", logging.String("image_uri", buildResult.ImageURI))
@@ -235,7 +243,11 @@ func (h *Handler) triggerBuild(service *types.Service, release *types.Release, g
 
 	if err := h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusReady); err != nil {
 		h.logger.Error(ctx, "Failed to update release status", logging.Error("db_error", err))
-		_ = h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed)
+		if statusErr := h.repos.Releases.UpdateStatus(release.ID, types.ReleaseStatusFailed); statusErr != nil {
+			h.logger.Error(ctx, "Failed to update release status to failed after ready error",
+				logging.String("release_id", release.ID.String()),
+				logging.Error("error", statusErr))
+		}
 		return
 	}
 

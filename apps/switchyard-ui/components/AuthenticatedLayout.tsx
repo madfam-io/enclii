@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { AuthErrorBanner } from '@/components/AuthErrorBanner';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { CommandPalette } from '@/components/command/command-palette';
 import { SystemHealthBadge } from '@/components/dashboard/system-health';
@@ -120,6 +121,8 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Auth Error Banner - shows session expiry, auth failures, etc. */}
+      <AuthErrorBanner />
       <nav className={`bg-background border-b border-border sticky top-0 z-50 transition-shadow duration-200 overflow-x-hidden ${isScrolled ? shadowClass : ''}`}>
         <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 min-w-0">

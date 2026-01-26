@@ -301,7 +301,12 @@ func (c *Controller) processWork(ctx context.Context, work *ReconcileWork, logge
 		dbEnvVars, err := c.repositories.EnvVars.GetDecryptedWithMeta(ctx, service.ID, deployment.EnvironmentID)
 		if err != nil {
 			logger.WithError(err).Warn("Failed to get environment variables with metadata, falling back to legacy")
-			envVars, _ = c.repositories.EnvVars.GetDecrypted(ctx, service.ID, deployment.EnvironmentID)
+			var legacyErr error
+			envVars, legacyErr = c.repositories.EnvVars.GetDecrypted(ctx, service.ID, deployment.EnvironmentID)
+			if legacyErr != nil {
+				logger.WithError(legacyErr).Warn("Failed to get environment variables via legacy method, continuing without env vars")
+				envVars = make(map[string]string)
+			}
 		} else {
 			// Convert db.EnvVarWithMeta to reconciler.EnvVarWithMeta
 			envVarsWithMeta = make([]EnvVarWithMeta, len(dbEnvVars))

@@ -64,8 +64,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [tokens, setTokens] = useState<TokenInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [refreshTimer, setRefreshTimer] = useState<NodeJS.Timeout | null>(null);
   const isRefreshingRef = useRef(false); // Prevent concurrent refresh attempts
+
+  const clearAuthError = useCallback(() => {
+    setAuthError(null);
+  }, []);
 
   // ==========================================================================
   // TOKEN REFRESH SCHEDULING
@@ -108,7 +113,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         scheduleTokenRefresh(storedTokens.expiresAt);
       } else if (storedTokens.refreshToken) {
         // Token expired but we have refresh token - try to refresh
-        refreshTokens().catch(() => {
+        refreshTokens().catch((err) => {
+          console.error('Token refresh failed during initialization:', err);
+          setAuthError('Session expired. Please log in again.');
           storage.clear();
         });
       } else {
@@ -630,6 +637,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isAuthenticated: !!user && !!tokens,
     isLoading,
     authMode: AUTH_MODE,
+    authError,
+    clearAuthError,
     login,
     register,
     loginWithOIDC,

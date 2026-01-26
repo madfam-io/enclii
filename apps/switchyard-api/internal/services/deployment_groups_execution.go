@@ -130,7 +130,15 @@ func (s *DeploymentGroupService) ExecuteGroupDeployment(ctx context.Context, req
 	})
 
 	// Refresh group to get updated timestamps
-	group, _ = s.repos.DeploymentGroups.GetByID(ctx, groupID)
+	refreshedGroup, refreshErr := s.repos.DeploymentGroups.GetByID(ctx, groupID)
+	if refreshErr != nil {
+		s.logger.Warn("Failed to refresh deployment group after execution, using cached state",
+			"group_id", groupID.String(),
+			"error", refreshErr)
+		// Use the original group if refresh fails
+	} else {
+		group = refreshedGroup
+	}
 
 	return &ExecuteGroupDeploymentResponse{
 		Group:       group,
@@ -407,7 +415,15 @@ func (s *DeploymentGroupService) RollbackGroup(ctx context.Context, req *Rollbac
 	})
 
 	// Refresh group
-	group, _ = s.repos.DeploymentGroups.GetByID(ctx, groupID)
+	refreshedGroup, refreshErr := s.repos.DeploymentGroups.GetByID(ctx, groupID)
+	if refreshErr != nil {
+		s.logger.Warn("Failed to refresh deployment group after rollback, using cached state",
+			"group_id", groupID.String(),
+			"error", refreshErr)
+		// Use the original group if refresh fails
+	} else {
+		group = refreshedGroup
+	}
 
 	return &RollbackGroupResponse{
 		Group:        group,
