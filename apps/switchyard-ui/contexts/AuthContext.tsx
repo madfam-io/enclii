@@ -67,6 +67,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [authError, setAuthError] = useState<string | null>(null);
   const [refreshTimer, setRefreshTimer] = useState<NodeJS.Timeout | null>(null);
   const isRefreshingRef = useRef(false); // Prevent concurrent refresh attempts
+  const refreshTokensRef = useRef<() => Promise<boolean>>(null!); // Stable ref for token refresh
 
   const clearAuthError = useCallback(() => {
     setAuthError(null);
@@ -89,7 +90,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (refreshIn > 0) {
         const timer = setTimeout(() => {
-          refreshTokens();
+          // Use ref to avoid stale closure - always calls latest refreshTokens
+          refreshTokensRef.current?.();
         }, refreshIn);
         setRefreshTimer(timer);
       }
@@ -458,6 +460,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       isRefreshingRef.current = false;
     }
   };
+
+  // Keep the ref updated with the latest refreshTokens function
+  // This prevents stale closures in scheduled timeouts
+  useEffect(() => {
+    refreshTokensRef.current = refreshTokens;
+  });
 
   /**
    * OIDC silent token refresh via hidden iframe
