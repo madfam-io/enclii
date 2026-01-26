@@ -56,37 +56,30 @@ data:
       - Image: {{ .Image }}
       - Old Tag: {{ .OldTag }}
       - New Tag: {{ .NewTag }}
----
-# Secret for GitHub Container Registry authentication
-# Replace with actual credentials or create manually:
-# kubectl create secret generic ghcr-credentials -n argocd \
-#   --from-literal=username=<github-username> \
-#   --from-literal=password=<github-pat>
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ghcr-credentials
-  namespace: argocd
-type: Opaque
-stringData:
-  # GitHub username
-  username: "${GITHUB_USERNAME}"
-  # GitHub Personal Access Token with read:packages scope
-  password: "${GITHUB_TOKEN}"
----
-# Secret for Git write-back authentication
-# Replace with actual credentials or create manually:
-# kubectl create secret generic git-creds -n argocd \
-#   --from-literal=username=<github-username> \
-#   --from-literal=password=<github-pat>
-apiVersion: v1
-kind: Secret
-metadata:
-  name: git-creds
-  namespace: argocd
-type: Opaque
-stringData:
-  # GitHub username
-  username: "${GITHUB_USERNAME}"
-  # GitHub Personal Access Token with repo scope
-  password: "${GITHUB_TOKEN}"
+# --- SECRETS (managed out-of-band, NOT via GitOps) ---
+#
+# The following secrets must be created manually or via ExternalSecrets.
+# Template variables (${...}) in YAML are NOT interpolated by ArgoCD or kubectl —
+# they deploy as literal strings, breaking authentication.
+#
+# 1. ghcr-credentials (registry pull auth — type: docker-registry):
+#    kubectl create secret docker-registry ghcr-credentials -n argocd \
+#      --docker-server=ghcr.io \
+#      --docker-username=<github-user> \
+#      --docker-password=<github-pat-with-read:packages>
+#
+# 2. git-creds (Image Updater git write-back auth — type: generic):
+#    kubectl create secret generic git-creds -n argocd \
+#      --from-literal=username=<github-user-with-push-access> \
+#      --from-literal=password=<github-pat-with-repo-scope>
+#
+# GitHub identity notes:
+# - Org: madfam-org (repository owner)
+# - Bot: madfam-bot (dedicated automation account with Write access)
+# - Owner user: madfam-io (org admin, fallback if no bot)
+# - PAT must have write access to madfam-org/enclii
+#
+# To use the setup script instead:
+#   export GITHUB_USERNAME=madfam-bot
+#   export GITHUB_TOKEN=ghp_your_pat_here
+#   ./infra/argocd/setup-credentials.sh

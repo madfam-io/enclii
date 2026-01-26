@@ -38,9 +38,14 @@ check_prereqs() {
     if [ -z "${GITHUB_TOKEN:-}" ]; then
         log_error "GITHUB_TOKEN environment variable not set."
         echo ""
-        echo "Generate a GitHub PAT at: https://github.com/settings/tokens/new?scopes=read:packages"
+        echo "Generate a GitHub PAT at: https://github.com/settings/tokens/new?scopes=read:packages,repo"
         echo "Then run: export GITHUB_TOKEN=ghp_your_token_here"
         exit 1
+    fi
+
+    if [ -z "${GITHUB_USERNAME:-}" ]; then
+        log_warn "GITHUB_USERNAME not set. Defaulting to 'madfam-bot'."
+        log_warn "Set it explicitly: export GITHUB_USERNAME=madfam-bot"
     fi
 }
 
@@ -97,6 +102,28 @@ create_git_creds() {
     log_info "Git credentials created successfully"
 }
 
+# Create Image Updater git write-back credentials
+# This is the secret that argocd-image-updater reads for pushing
+# image digest updates back to the git repository.
+create_image_updater_git_creds() {
+    log_info "Creating Image Updater git write-back credentials..."
+
+    # Note on GitHub identity:
+    # - username: Use a bot account (madfam-bot) or org owner (madfam-io)
+    #   that has write access to madfam-org/enclii
+    # - password: A GitHub PAT (classic: ghp_ with repo scope, or
+    #   fine-grained: github_pat_ with Contents read+write on madfam-org/enclii)
+
+    kubectl create secret generic git-creds \
+        --namespace="${NAMESPACE}" \
+        --from-literal=username="${GITHUB_USERNAME:-madfam-bot}" \
+        --from-literal=password="${GITHUB_TOKEN}" \
+        --dry-run=client -o yaml | \
+    kubectl apply -f -
+
+    log_info "Image Updater git-creds created successfully"
+}
+
 # Verify credentials
 verify_creds() {
     log_info "Verifying credentials..."
@@ -128,6 +155,7 @@ main() {
     create_oci_creds
     create_creds_template
     create_git_creds
+    create_image_updater_git_creds
 
     echo ""
     verify_creds
