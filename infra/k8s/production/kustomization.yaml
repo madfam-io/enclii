@@ -1,48 +1,49 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-
 namespace: enclii
-
 resources:
-  - ../base
-  # NOTE: cloudflared.yaml removed - using existing cloudflared in cloudflare-tunnel namespace
-  # The cloudflare-tunnel namespace has working cloudflared pods with proper credentials
-  # - cloudflared.yaml
-  # Redis Sentinel (redis-sentinel.yaml) is NOT enabled on single-node cluster.
-  # Reason: podAntiAffinity requires 3 different nodes; only 1 pod would schedule.
-  # The base redis.yaml (single instance) is used instead.
-  # Re-enable when multi-node cluster is deployed:
-  # - redis-sentinel.yaml
-  # oidc-secrets.yaml not needed - using local mode with external JWKS
-  # build-secrets.yaml not in git - apply manually via kubectl
-  # - build-secrets.yaml
-  # cloudflare-secrets.yaml for domain status sync (optional - create secret directly via kubectl)
-  # - cloudflare-secrets.yaml
+- ../base
+# NOTE: cloudflared.yaml removed - using existing cloudflared in cloudflare-tunnel namespace
+# The cloudflare-tunnel namespace has working cloudflared pods with proper credentials
+# - cloudflared.yaml
+# Redis Sentinel (redis-sentinel.yaml) is NOT enabled on single-node cluster.
+# Reason: podAntiAffinity requires 3 different nodes; only 1 pod would schedule.
+# The base redis.yaml (single instance) is used instead.
+# Re-enable when multi-node cluster is deployed:
+# - redis-sentinel.yaml
+# oidc-secrets.yaml not needed - using local mode with external JWKS
+# build-secrets.yaml not in git - apply manually via kubectl
+# - build-secrets.yaml
+# cloudflare-secrets.yaml for domain status sync (optional - create secret directly via kubectl)
+# - cloudflare-secrets.yaml
 
 patchesStrategicMerge:
-  - replicas-patch.yaml
-  - environment-patch.yaml
-  - security-patch.yaml
-
+- replicas-patch.yaml
+- environment-patch.yaml
+- security-patch.yaml
 configMapGenerator:
-  - name: env-config
-    literals:
-      - ENCLII_ENV=production
-      - ENCLII_LOG_LEVEL=warn
-      - ENCLII_METRICS_ENABLED=true
-      - ENCLII_RATE_LIMIT_REQUESTS_PER_MINUTE=10000
-      - ENCLII_ENABLE_PROFILING=false
-
+- name: env-config
+  literals:
+  - ENCLII_ENV=production
+  - ENCLII_LOG_LEVEL=warn
+  - ENCLII_METRICS_ENABLED=true
+  - ENCLII_RATE_LIMIT_REQUESTS_PER_MINUTE=10000
+  - ENCLII_ENABLE_PROFILING=false
 images:
-  - name: switchyard-api
-    newName: ghcr.io/madfam-org/enclii/switchyard-api
-    newTag: "latest"
-  - name: switchyard-ui
-    newName: ghcr.io/madfam-org/enclii/switchyard-ui
-    newTag: "latest"
-  - name: ghcr.io/madfam-org/enclii/landing-page
-    newTag: "76fc3dae6d902b3230934b6f1f8ca17302fc8b66"
-
+- name: switchyard-api
+  newName: ghcr.io/madfam-org/enclii/switchyard-api
+  newTag: "latest"
+- name: switchyard-ui
+  newName: ghcr.io/madfam-org/enclii/switchyard-ui
+  newTag: "latest"
+- name: ghcr.io/madfam-org/enclii/landing-page
+  newTag: "76fc3dae6d902b3230934b6f1f8ca17302fc8b66"
+- name: ghcr.io/madfam-org/enclii/switchyard-api
+  newName: ghcr.io/madfam-org/enclii/switchyard-api
+  digest: sha256:1cdeb24d6af8866fcf257924a5260df9e69c1d66f447f9116a151e6dd890d75c
+- name: ghcr.io/madfam-org/enclii/switchyard-ui
+  newName: ghcr.io/madfam-org/enclii/switchyard-ui
+  digest: sha256:de4766b453123288ccbe22261c3bfb52860acc61c57acaf0dfc979bfb3b69c20
 # Note: commonLabels removed - it adds to selectors which are immutable.
 # Labels are already defined in base manifests.
 
