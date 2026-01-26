@@ -69,6 +69,7 @@ spec:
       verifyImages:
         - imageReferences:
             - "ghcr.io/madfam-org/*"
+          mutateDigest: false  # Required for Audit failure action
           attestors:
             - count: 1
               entries:

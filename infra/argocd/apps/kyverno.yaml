@@ -51,12 +51,12 @@ spec:
           clusterAdmissionReports:
             image:
               tag: "1.31"
+        # Disable upgrade hooks to prevent deadlock (hooks use kubectl image
+        # which must be updated via the same sync that creates the hooks)
         webhooksCleanup:
-          image:
-            tag: "1.31"
+          enabled: false
         policyReportsCleanup:
-          image:
-            tag: "1.31"
+          enabled: false
 
         # Background controller for policy reports
         backgroundController:
@@ -133,6 +133,8 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+      - RespectIgnoreDifferences=true
 
   # Ignore status fields that change frequently
   ignoreDifferences:
