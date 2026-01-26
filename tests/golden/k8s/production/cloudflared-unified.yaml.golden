@@ -370,6 +370,7 @@ spec:
               subPath: config.yaml
               readOnly: true
           securityContext:
+            privileged: false
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
