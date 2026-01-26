@@ -41,17 +41,20 @@ spec:
           # ServiceMonitor disabled - requires Prometheus Operator
           serviceMonitor:
             enabled: false
-          # Override cleanup CronJob kubectl image (bitnami/kubectl:1.28.5 removed from Docker Hub)
-          cleanupJobs:
-            admissionReports:
-              image:
-                tag: "1.31"
-            clusterAdmissionReports:
-              image:
-                tag: "1.31"
 
-        # Override post-upgrade hook kubectl image (bitnami/kubectl:1.28.5 removed from Docker Hub)
+        # Override all kubectl images (bitnami/kubectl:1.28.5 removed from Docker Hub)
+        # These are top-level chart values, NOT nested under admissionController
+        cleanupJobs:
+          admissionReports:
+            image:
+              tag: "1.31"
+          clusterAdmissionReports:
+            image:
+              tag: "1.31"
         webhooksCleanup:
+          image:
+            tag: "1.31"
+        policyReportsCleanup:
           image:
             tag: "1.31"
 
