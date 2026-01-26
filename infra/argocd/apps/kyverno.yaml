@@ -42,15 +42,15 @@ spec:
           serviceMonitor:
             enabled: false
 
-        # Override all kubectl images (bitnami/kubectl:1.28.5 removed from Docker Hub)
-        # These are top-level chart values, NOT nested under admissionController
+        # Override cleanup CronJob kubectl image (bitnami removed version tags from Docker Hub)
+        # Only 'latest' and SHA-based tags are available
         cleanupJobs:
           admissionReports:
             image:
-              tag: "1.31"
+              tag: latest
           clusterAdmissionReports:
             image:
-              tag: "1.31"
+              tag: latest
         # Disable upgrade hooks to prevent deadlock (hooks use kubectl image
         # which must be updated via the same sync that creates the hooks)
         webhooksCleanup:
