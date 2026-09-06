@@ -109,6 +109,13 @@ For each repo:
 - Matrix resolves to `[]` on workflow_dispatch with no changes: the
   `services` input in the caller must include `paths` for each service,
   OR you pass an explicit list via dispatch input.
+- A `paths` entry is a directory (prefix match: anything under it) or a
+  file (exact match): `"src package.json .npmrc"` rebuilds on a change
+  under `src/` and on a change to either file. Before 2026-09-06 only the
+  prefix form matched, so a dependency-only merge (lockfile + manifest)
+  produced a green run with **no image and no pin** — read the run: if
+  `Build <service>` is `skipped` and no `ci: pin image digests` commit
+  follows on main, nothing shipped. Pin `@v1.0.0-alpha.8` or later.
 - 429 on base-image pull: flip the Dockerfile's `FROM` to
   `public.ecr.aws/docker/library/…`.
 - Cosign fails to sign: verify the OIDC token is being issued

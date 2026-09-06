@@ -119,7 +119,11 @@ on:
                           multiple images (one service entry per stage).
             - paths:      (optional) space-separated paths for change
                           detection on push triggers. Service is rebuilt
-                          when the diff touches any of its paths.
+                          when the diff touches any of its paths. Each
+                          entry is a directory (prefix match) OR a file
+                          (exact match): "src package.json .npmrc" rebuilds
+                          on any change under src/ and on any change to
+                          those two files.
             - build_args: (optional) newline-separated KEY=VALUE pairs
                           forwarded to `docker build --build-arg`. Use
                           for compile-time-baked values (Flutter
@@ -282,11 +286,20 @@ jobs:
             echo "Service '$(echo "$row" | jq -r '.name')' effective filter: $effective_paths (dockerfile=$dockerfile implicit_dockerfile_dir=$implicit_df_dir)"
 
             matched=0
-            # Prefix match: any change under one of the declared/implicit dirs.
+            # Each declared/implicit entry matches EITHER as a directory
+            # prefix (any change under it) OR as an exact file. Until
+            # 2026-09-06 only the prefix form existed, so a `paths` entry
+            # naming a file ("package.json", "package-lock.json", ".npmrc",
+            # "pnpm-lock.yaml", "pyproject.toml", "astro.config.mjs") NEVER
+            # matched: `grep "^package.json/"` cannot hit the file
+            # `package.json`. crea-map #343 (a dependency bump, zero source
+            # changes) was the canary: "Detect changed services" picked
+            # nothing, build/pin/guard were all skipped, and production kept
+            # serving the previous image with a green deploy run.
             for p in $effective_paths; do
               # Strip trailing slash to normalize before re-adding it.
               p="${p%/}"
-              if echo "$changed" | grep -q "^$p/"; then
+              if echo "$changed" | grep -q "^$p/" || echo "$changed" | grep -qFx "$p"; then
                 picked=$(echo "$picked" | jq -c --argjson svc "$row" '. + [$svc]')
                 matched=1
                 break
