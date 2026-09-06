@@ -62,7 +62,7 @@ jobs:
               local matched=0
               for p in $effective_paths; do
                 p="${p%/}"
-                if echo "$changed" | grep -q "^$p/"; then
+                if echo "$changed" | grep -q "^$p/" || echo "$changed" | grep -qFx "$p"; then
                   picked=$(echo "$picked" | jq -c --argjson svc "$row" '. + [$svc]')
                   matched=1
                   break
@@ -122,6 +122,32 @@ jobs:
             "$BLOOM_SVC" \
             $'.github/workflows/ci.yml' \
             "api,web"
+
+          # === crea-map PR #343 canary (2026-09-06): a `paths` entry that names a FILE ===
+          # A dependency-only merge (manifest + lockfile, zero source changes)
+          # picked nothing on <= v1.0.0-alpha.7 because every entry was matched
+          # as a directory prefix ("^package.json/" never hits "package.json").
+          # The run stayed green, build/pin/guard were skipped, prod kept the
+          # previous image. A file entry now matches exactly.
+          CREA_SVC='[
+            {"name":"crea-map-web","dockerfile":"Dockerfile","paths":"src prisma public package.json package-lock.json .npmrc"}
+          ]'
+          assert "crea-map: dependency bump (package.json + lockfile) builds" \
+            "$CREA_SVC" \
+            $'package.json\npackage-lock.json' \
+            "crea-map-web"
+          assert "crea-map: dotfile entry (.npmrc) builds" \
+            "$CREA_SVC" \
+            $'.npmrc' \
+            "crea-map-web"
+          assert "crea-map: a file that merely shares the name as a prefix does not build" \
+            "$CREA_SVC" \
+            $'package.json.example\nsrc-legacy/index.ts' \
+            ""
+          assert "crea-map: docs-only diff still builds nothing" \
+            "$CREA_SVC" \
+            $'docs/ESTADO.md\nREADME.md' \
+            ""
 
           # === Backward compat: forj-style "no paths" services build always ===
           FORJ_SVC='[
