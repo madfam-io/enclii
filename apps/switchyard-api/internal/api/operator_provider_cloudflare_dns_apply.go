@@ -16,6 +16,22 @@ type cloudflareDNSApplyIntent struct {
 	RecordType string
 	Content    string
 	Proxied    bool
+	// Priority is the MX/SRV preference, nil when the caller specified none.
+	// A pointer because 0 is a legal preference and "unset" must stay
+	// distinguishable from it.
+	Priority *int
+	// Replace turns an add into an overwrite of an existing record with
+	// different content at the same name+type. Off by default: overwriting a
+	// record the operator did not name is exactly the bug this guards
+	// (enclii#530).
+	Replace bool
+	// PriorityFromContent records that the priority was parsed off the front
+	// of --content (the pre-#530 "10 mail.example.com" form) rather than
+	// given explicitly, so the response can say so.
+	PriorityFromContent bool
+	// ParseError is a malformed argument, surfaced as a 400 rather than
+	// silently defaulted.
+	ParseError string
 }
 
 func (h *Handler) handleProviderCloudflareDNSApplyDryRun(ctx context.Context, operation string, req operatorOperationRequest) operatorOperationResponse {
@@ -32,7 +48,9 @@ func (h *Handler) handleProviderCloudflareDNSApplyDryRun(ctx context.Context, op
 		"can_apply":          false,
 		"zone_owned":         false,
 		"allow_pending_zone": allowPending,
+		"replace":            intent.Replace,
 	}
+	cloudflareDNSApplyDecorateIntent(data, intent)
 	steps := []operatorOperationStep{
 		{Name: "authorize", Status: "planned", Detail: "check caller RBAC and require reason on apply"},
 		{Name: "load-state", Status: "planned", Detail: "load Cloudflare zone and DNS record through Enclii"},
@@ -50,6 +68,9 @@ func (h *Handler) handleProviderCloudflareDNSApplyDryRun(ctx context.Context, op
 			Steps:       steps,
 			Warnings:    []string{"missing args.target or scope.target"},
 		}
+	}
+	if intent.ParseError != "" {
+		return cloudflareDNSApplyInvalidRequest(operationID, operation, true, intent.ParseError, data, steps)
 	}
 
 	cfClient := h.cloudflareDNSApplyClient()
@@ -92,7 +113,7 @@ func (h *Handler) handleProviderCloudflareDNSApplyDryRun(ctx context.Context, op
 	data["zone_status"] = zone.Status
 	data["zone_owned"] = true
 	pendingWarnings := cloudflareDNSApplyPendingWarnings(zone)
-	record, err := cfClient.GetDNSRecordByTypeInZone(ctx, zone.ID, intent.Target, intent.RecordType)
+	live, err := cfClient.ListDNSRecordsByTypeInZone(ctx, zone.ID, intent.Target, intent.RecordType)
 	if err != nil {
 		return operatorOperationResponse{
 			OperationID: operationID,
@@ -106,26 +127,22 @@ func (h *Handler) handleProviderCloudflareDNSApplyDryRun(ctx context.Context, op
 		}
 	}
 
-	mutation := "create"
-	if record != nil {
-		data["existingRecord"] = record
-		if record.Content == intent.Content && record.Proxied == intent.Proxied {
-			mutation = "noop"
-		} else {
-			mutation = "update"
-		}
-	}
-	data["mutation"] = mutation
+	// The dry-run and the apply derive the plan from the same function. They
+	// did not before, and that is precisely how a plan that said `create`
+	// executed as an `update` that destroyed a record (enclii#530).
+	plan := planCloudflareDNSApply(intent, live)
+	cloudflareDNSApplyDecoratePlan(data, plan)
 	data["can_apply"] = true
 	return operatorOperationResponse{
 		OperationID: operationID,
 		Operation:   operation,
 		Status:      "ready_to_apply",
 		DryRun:      true,
-		Summary:     fmt.Sprintf("cloudflare.dns-apply dry-run completed for %s", intent.Target),
-		Data:        data,
-		Steps:       steps,
-		Warnings:    pendingWarnings,
+		Summary: fmt.Sprintf("cloudflare.dns-apply dry-run completed for %s: %s",
+			intent.Target, plan.Mutation),
+		Data:     data,
+		Steps:    steps,
+		Warnings: append(append([]string{}, pendingWarnings...), plan.Warnings...),
 		Next: []string{
 			"rerun with --apply and a reason to execute the DNS mutation through Enclii",
 			"poll providers.cloudflare.dns and the public DNS resolver until the record converges",
@@ -145,7 +162,9 @@ func (h *Handler) handleProviderCloudflareDNSApply(ctx context.Context, operatio
 		"project":            strings.TrimSpace(req.Scope["project"]),
 		"service":            strings.TrimSpace(req.Scope["service"]),
 		"allow_pending_zone": allowPending,
+		"replace":            intent.Replace,
 	}
+	cloudflareDNSApplyDecorateIntent(data, intent)
 	steps := []operatorOperationStep{
 		{Name: "authorize", Status: "completed", Detail: "reason supplied and caller passed endpoint authorization"},
 		{Name: "load-state", Status: "planned", Detail: "load Cloudflare zone and DNS record through Enclii"},
@@ -163,6 +182,9 @@ func (h *Handler) handleProviderCloudflareDNSApply(ctx context.Context, operatio
 			Steps:       steps,
 			Warnings:    []string{"missing args.target or scope.target"},
 		}, http.StatusBadRequest
+	}
+	if intent.ParseError != "" {
+		return cloudflareDNSApplyInvalidRequest(operationID, operation, false, intent.ParseError, data, steps), http.StatusBadRequest
 	}
 
 	cfClient := h.cloudflareDNSApplyClient()
@@ -204,7 +226,7 @@ func (h *Handler) handleProviderCloudflareDNSApply(ctx context.Context, operatio
 	data["zone_status"] = zone.Status
 	steps[1].Status = "completed"
 	pendingWarnings := cloudflareDNSApplyPendingWarnings(zone)
-	record, err := cfClient.GetDNSRecordByTypeInZone(ctx, zone.ID, intent.Target, intent.RecordType)
+	live, err := cfClient.ListDNSRecordsByTypeInZone(ctx, zone.ID, intent.Target, intent.RecordType)
 	if err != nil {
 		return operatorOperationResponse{
 			OperationID: operationID,
@@ -215,12 +237,15 @@ func (h *Handler) handleProviderCloudflareDNSApply(ctx context.Context, operatio
 			Data:        data,
 			Steps:       steps,
 			Warnings:    []string{err.Error()},
-		}, http.StatusBadGateway
+		}, cloudflareDNSApplyStatusForError(err)
 	}
 
-	if record != nil && record.Content == intent.Content && record.Proxied == intent.Proxied {
-		data["mutation"] = "noop"
-		data["record"] = record
+	plan := planCloudflareDNSApply(intent, live)
+	cloudflareDNSApplyDecoratePlan(data, plan)
+	planWarnings := append(append([]string{}, pendingWarnings...), plan.Warnings...)
+
+	if plan.Mutation == "noop" {
+		data["record"] = plan.Match
 		steps[2].Status = "completed"
 		steps[2].Detail = "live Cloudflare DNS already matches desired state"
 		steps[3].Status = "completed"
@@ -232,33 +257,36 @@ func (h *Handler) handleProviderCloudflareDNSApply(ctx context.Context, operatio
 			Summary:     fmt.Sprintf("Cloudflare DNS for %s already matches desired Enclii state", intent.Target),
 			Data:        data,
 			Steps:       steps,
-			Warnings:    pendingWarnings,
+			Warnings:    planWarnings,
 			Next:        []string{"poll public DNS and the service health check until status converges"},
 		}, http.StatusOK
 	}
 
 	var changed any
-	mutation := "create"
-	if record != nil {
-		mutation = "update"
-		changed, err = cfClient.UpdateDNSRecordInZone(ctx, zone.ID, *record, intent.Content, intent.Proxied)
+	mutation := plan.Mutation
+	if mutation == "update" {
+		changed, err = cfClient.UpdateDNSRecordInZoneWithPriority(ctx, zone.ID, *plan.Match, intent.Content, intent.Proxied, intent.Priority)
 	} else {
-		changed, err = cfClient.CreateDNSRecordInZone(ctx, zone.ID, intent.Target, intent.RecordType, intent.Content, intent.Proxied)
+		changed, err = cfClient.CreateDNSRecordInZoneWithPriority(ctx, zone.ID, intent.Target, intent.RecordType, intent.Content, intent.Proxied, cloudflareDNSApplyPriorityArg(intent))
 	}
 	if err != nil {
+		// A rejected record is the caller's problem, not the platform's: an
+		// MX with an impossible priority or a malformed TXT is a 4xx with
+		// Cloudflare's own message, never an opaque 5xx the operator has to
+		// guess at (enclii#530).
 		return operatorOperationResponse{
 			OperationID: operationID,
 			Operation:   operation,
 			Status:      "provider_apply_failed",
 			DryRun:      false,
-			Summary:     fmt.Sprintf("failed to %s Cloudflare DNS record for %s", mutation, intent.Target),
+			Summary:     fmt.Sprintf("failed to %s Cloudflare DNS record for %s: %s", mutation, intent.Target, err.Error()),
 			Data:        data,
 			Steps:       steps,
-			Warnings:    []string{err.Error()},
-		}, http.StatusBadGateway
+			Warnings:    append(planWarnings, err.Error()),
+			Next:        cloudflareDNSApplyNextForError(err),
+		}, cloudflareDNSApplyStatusForError(err)
 	}
 
-	data["mutation"] = mutation
 	data["record"] = changed
 	steps[2].Status = "completed"
 	steps[2].Detail = fmt.Sprintf("%s %s record through Cloudflare", mutation, intent.RecordType)
@@ -267,21 +295,29 @@ func (h *Handler) handleProviderCloudflareDNSApply(ctx context.Context, operatio
 		"poll providers.cloudflare.dns until the record is visible",
 		"poll the public service endpoint until status.madfam.io converges",
 	}
+	// Only a non-active ZONE makes the write inert. Plan warnings (a create
+	// joining existing records, or a replace overwriting one) are about the
+	// record set, not about delegation, and must not be mistaken for it.
 	if len(pendingWarnings) > 0 {
 		next = []string{
 			"the record is staged only — it serves nothing until the registrar delegates to this zone's nameservers",
 			"at cutover time: apply the registrar nameserver change, then poll public DNS until the staged records serve",
 		}
 	}
+	summary := fmt.Sprintf("%sd Cloudflare DNS record for %s through Enclii", mutation, intent.Target)
+	if mutation == "create" && len(plan.Siblings) > 0 {
+		summary = fmt.Sprintf("added a %s record at %s through Enclii alongside %d existing record(s)",
+			intent.RecordType, intent.Target, len(plan.Siblings))
+	}
 	return operatorOperationResponse{
 		OperationID: operationID,
 		Operation:   operation,
 		Status:      "succeeded",
 		DryRun:      false,
-		Summary:     fmt.Sprintf("%sd Cloudflare DNS record for %s through Enclii", mutation, intent.Target),
+		Summary:     summary,
 		Data:        data,
 		Steps:       steps,
-		Warnings:    pendingWarnings,
+		Warnings:    planWarnings,
 		Next:        next,
 	}, http.StatusAccepted
 }
@@ -346,12 +382,45 @@ func cloudflareDNSApplyIntentFromRequest(req operatorOperationRequest, defaultCo
 	if content == "" {
 		content = defaultContent
 	}
-	return cloudflareDNSApplyIntent{
+	intent := cloudflareDNSApplyIntent{
 		Target:     operationTarget(req),
 		RecordType: recordType,
 		Content:    content,
 		Proxied:    cloudflareDNSApplyProxied(req, recordType),
+		Replace:    cloudflareDNSApplyReplace(req),
 	}
+
+	priority, err := cloudflareDNSParsePriority(req.Args["priority"])
+	if err != nil {
+		intent.ParseError = err.Error()
+		return intent
+	}
+	intent.Priority = priority
+
+	// Back-compat: before --priority existed the only way to express an MX
+	// preference was "10 mail.example.com" in --content, and the runbooks
+	// still say so. Parse it off the front unless an explicit priority was
+	// given, in which case the explicit flag wins and the content is used
+	// verbatim.
+	if intent.Priority == nil {
+		if rest, parsed, ok := cloudflareDNSSplitPriority(recordType, content); ok {
+			intent.Content = rest
+			value := parsed
+			intent.Priority = &value
+			intent.PriorityFromContent = true
+		}
+	}
+	return intent
+}
+
+// cloudflareDNSApplyReplace reads the strict opt-in for overwriting an
+// existing record that has DIFFERENT content at the same name+type.
+//
+// Strict for the same reason allow_pending_zone is: this is the flag that
+// re-enables the destructive behaviour of enclii#530, so it must be a
+// deliberate literal "true", never a truthy accident.
+func cloudflareDNSApplyReplace(req operatorOperationRequest) bool {
+	return strings.EqualFold(strings.TrimSpace(req.Args["replace"]), "true")
 }
 
 func cloudflareDNSApplyProxied(req operatorOperationRequest, recordType string) bool {

@@ -56,12 +56,17 @@ type ResultInfo struct {
 
 // DNSRecord represents a Cloudflare DNS record
 type DNSRecord struct {
-	ID         string    `json:"id"`
-	ZoneID     string    `json:"zone_id"`
-	ZoneName   string    `json:"zone_name"`
-	Name       string    `json:"name"`
-	Type       string    `json:"type"`    // A, AAAA, CNAME, TXT, etc.
-	Content    string    `json:"content"` // Record value
+	ID       string `json:"id"`
+	ZoneID   string `json:"zone_id"`
+	ZoneName string `json:"zone_name"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`    // A, AAAA, CNAME, TXT, etc.
+	Content  string `json:"content"` // Record value
+	// Priority is the MX/SRV preference. Cloudflare omits it entirely for
+	// record types that have none, so it is a pointer: a *missing* priority
+	// and an explicit priority 0 are different facts, and an MX create that
+	// sends no priority at all is rejected by Cloudflare with a 400.
+	Priority   *int      `json:"priority,omitempty"`
 	Proxied    bool      `json:"proxied"` // Orange cloud enabled
 	Proxiable  bool      `json:"proxiable"`
 	TTL        int       `json:"ttl"`
