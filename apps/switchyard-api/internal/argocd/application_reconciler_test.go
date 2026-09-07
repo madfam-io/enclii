@@ -2,6 +2,7 @@ package argocd
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,15 +48,55 @@ func TestBuildApplicationMirrorsApplicationSetSemantics(t *testing.T) {
 		}
 	}
 
+	// ServerSideDiff is only honoured through the compare-options annotation in
+	// ArgoCD v3.2.5; it is deliberately NOT a syncOption.
+	compareOptions := app.GetAnnotations()["argocd.argoproj.io/compare-options"]
+	for _, want := range []string{"IgnoreExtraneous=true", "ServerSideDiff=true"} {
+		if !hasCompareOption(compareOptions, want) {
+			t.Fatalf("compare-options = %q, missing %q", compareOptions, want)
+		}
+	}
+	if hasString(syncOptions, "ServerSideDiff=true") {
+		t.Fatalf("syncOptions = %#v, must not carry ServerSideDiff (ArgoCD ignores it there)", syncOptions)
+	}
+
 	ignore, found, err := unstructured.NestedSlice(app.Object, "spec", "ignoreDifferences")
 	if err != nil || !found {
 		t.Fatalf("ignoreDifferences not found: found=%v err=%v", found, err)
 	}
-	if len(ignore) < 8 {
-		t.Fatalf("ignoreDifferences length = %d, want at least 8 entries", len(ignore))
+	if len(ignore) < 7 {
+		t.Fatalf("ignoreDifferences length = %d, want at least 7 entries", len(ignore))
 	}
 	if !hasIgnoreDifference(ignore, "batch", "CronJob", "/metadata/annotations") {
 		t.Fatalf("ignoreDifferences missing CronJob Kyverno verify-images rule: %#v", ignore)
+	}
+
+	// Regression guard: an ignoreDifferences rule on a CRD whose jqPathExpressions
+	// reach inside a list makes RespectIgnoreDifferences=true replay the whole live
+	// list over the desired one (RFC 7386 merge patch), so new spec.data entries
+	// never reach the cluster. ExternalSecret must therefore have no rule at all.
+	for _, rule := range ignore {
+		entry, ok := rule.(map[string]any)
+		if !ok {
+			continue
+		}
+		if entry["group"] == "external-secrets.io" && entry["kind"] == "ExternalSecret" {
+			t.Fatalf("ExternalSecret ignoreDifferences rule must not be reintroduced: %#v", entry)
+		}
+	}
+
+	// The rules that remain must only target built-in kinds, which resolve in the
+	// Kubernetes scheme and so take ArgoCD's safe strategic-merge path.
+	builtInGroups := map[string]bool{"": true, "apps": true, "batch": true, "policy": true}
+	for _, rule := range ignore {
+		entry, ok := rule.(map[string]any)
+		if !ok {
+			continue
+		}
+		group, _ := entry["group"].(string)
+		if _, hasJQ := entry["jqPathExpressions"]; hasJQ && !builtInGroups[group] {
+			t.Fatalf("jqPathExpressions on non-built-in group %q is unsafe with RespectIgnoreDifferences: %#v", group, entry)
+		}
 	}
 }
 
@@ -140,6 +181,17 @@ func TestNormalizeRegistrationMode(t *testing.T) {
 			t.Fatalf("NormalizeRegistrationMode(%q) = %q, want %q", input, got, want)
 		}
 	}
+}
+
+// hasCompareOption mirrors how ArgoCD reads the compare-options annotation
+// (gitops-engine resource.GetAnnotationCSVs): comma separated, values trimmed.
+func hasCompareOption(annotation string, want string) bool {
+	for _, item := range strings.Split(annotation, ",") {
+		if strings.TrimSpace(item) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func hasString(values []string, want string) bool {
