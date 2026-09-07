@@ -350,3 +350,70 @@ func TestPorkbunScopeKnownTenantWithoutBindingStillUsesGlobal(t *testing.T) {
 		t.Fatalf("tenant = %q, want janua", scope.Tenant)
 	}
 }
+
+// Registering a read verb takes THREE edits that nothing tied together: the
+// capability registry (operator_capabilities.go), the CLI (providers.go), and
+// the read-only dispatch allowlist (operatorReadActions). Missing the third
+// silently routes the verb to the generic "adapter_required" stub instead of
+// its handler — which is exactly what happened to `ping` and `credentials`
+// here, and would have made the operator one-shot's verification step
+// permanently non-functional.
+//
+// Every non-apply porkbun capability must be in the allowlist.
+func TestPorkbunReadActionsAreAllRoutable(t *testing.T) {
+	var porkbun *operatorCapability
+	for i := range providerCapabilities {
+		if providerCapabilities[i].Name == "porkbun" {
+			porkbun = &providerCapabilities[i]
+			break
+		}
+	}
+	if porkbun == nil {
+		t.Fatal("porkbun is missing from the provider capability registry")
+	}
+
+	for _, action := range porkbun.Actions {
+		if strings.HasSuffix(action, "-apply") {
+			// Apply verbs route through handleApplyOperator*, not the
+			// read-only allowlist.
+			continue
+		}
+		t.Run(action, func(t *testing.T) {
+			if !isReadOnlyOperatorAction("providers", "porkbun", action) {
+				t.Fatalf("providers.porkbun.%s is advertised as a capability but is not in operatorReadActions, so it falls through to the adapter_required stub", action)
+			}
+		})
+	}
+}
+
+// The converse: an allowlisted verb the read handler does not implement would
+// answer "not wired for this operation" while the catalog advertises it.
+func TestPorkbunAllowlistedActionsAreAdvertised(t *testing.T) {
+	advertised := map[string]bool{}
+	for i := range providerCapabilities {
+		if providerCapabilities[i].Name != "porkbun" {
+			continue
+		}
+		for _, action := range providerCapabilities[i].Actions {
+			advertised[action] = true
+		}
+	}
+	for action := range operatorReadActions["providers"]["porkbun"] {
+		if !advertised[action] {
+			t.Fatalf("providers.porkbun.%s is routable but not advertised in the capability registry", action)
+		}
+	}
+}
+
+// Apply verbs are gated by operationSupported against the same capability
+// registry, so a verb the CLI offers but the registry omits 404s at the
+// endpoint. Pin it.
+func TestPorkbunApplyActionsAreSupportedOperations(t *testing.T) {
+	for _, action := range []string{"dns-apply", "nameservers-apply", "auto-renew-apply"} {
+		t.Run(action, func(t *testing.T) {
+			if !operationSupported("porkbun", action, providerCapabilities) {
+				t.Fatalf("providers.porkbun.%s is not in the capability registry, so the endpoint 404s", action)
+			}
+		})
+	}
+}
