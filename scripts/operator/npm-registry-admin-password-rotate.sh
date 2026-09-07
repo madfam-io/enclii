@@ -192,11 +192,15 @@ step "3/6 Write ${VAULT_PATH} #htpasswd (token and value both over stdin)"
 # token with `read -r`, exports it for one command, and feeds the REMAINDER of
 # stdin to `vault kv patch … htpasswd=-`. Neither value is ever an argument, so
 # neither appears in `ps` output or in any shell history, here or there.
-# `kv patch` (not `put`) preserves any other keys already at this path.
+# `kv patch` (not `put`) preserves any other keys already at this path — but
+# KV v2 answers 404 to a patch on a path that does not exist yet (the first
+# rotation after #529 hit exactly that: the path was never seeded). So: patch
+# when the path exists, `put` (create) when it does not. The value still
+# travels on stdin either way.
 if ! printf '%s\n%s\n' "$VT" "$HTLINE" \
-  | ssh "$BASTION" "$KX -n $VAULT_NS exec -i $VPOD -- sh -c 'read -r T; VAULT_TOKEN=\"\$T\" vault kv patch $VAULT_PATH htpasswd=- >/dev/null'"
+  | ssh "$BASTION" "$KX -n $VAULT_NS exec -i $VPOD -- sh -c 'read -r T; export VAULT_TOKEN=\"\$T\"; if vault kv get $VAULT_PATH >/dev/null 2>&1; then vault kv patch $VAULT_PATH htpasswd=- >/dev/null; else vault kv put $VAULT_PATH htpasswd=- >/dev/null; fi'"
 then
-  die "vault kv patch failed (token lacks write on ${VAULT_PATH}?). Nothing changed:
+  die "vault kv write failed (token lacks write on ${VAULT_PATH}?). Nothing changed:
        the registry still accepts the OLD password. Safe to re-run."
 fi
 ok "Vault updated"
