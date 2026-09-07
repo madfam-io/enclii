@@ -1,12 +1,18 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/madfam-org/enclii/apps/switchyard-api/internal/cloudflare"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func intPtr(v int) *int { return &v }
@@ -420,4 +426,78 @@ func TestSingleValueUpdateTargetIsOrderIndependent(t *testing.T) {
 	if first.Match.ID != second.Match.ID {
 		t.Fatalf("update target depends on listing order: %q vs %q", first.Match.ID, second.Match.ID)
 	}
+}
+
+// End-to-end through the real HTTP route: a malformed priority must be a 400
+// with the reason stated, not a 5xx and not a silently defaulted record.
+//
+// This asserts the wiring, not just the parser. The #530 report was
+// "--type MX --apply returns 502 every time"; the operator's whole experience
+// of that bug was the status code and the empty message, so the status code is
+// worth a test that goes through the router.
+func TestDNSApplyRejectsBadPriorityWithBadRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := &Handler{}
+	router := gin.New()
+	router.POST("/v1/providers/:provider/:action", handler.HandleProviderOperation)
+
+	body, err := json.Marshal(operatorOperationRequest{
+		Operation: "providers.cloudflare.dns-apply",
+		DryRun:    false,
+		Reason:    "add the backup MX",
+		Args: map[string]string{
+			"target":   "creatumundo.mx",
+			"type":     "MX",
+			"content":  "mailsec.protonmail.ch",
+			"priority": "not-a-number",
+		},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/providers/cloudflare/dns-apply", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	// 400, not 502 and not 503: the request is wrong, and that verdict does
+	// not depend on whether the Cloudflare adapter happens to be configured.
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var resp operatorOperationResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "invalid_request", resp.Status)
+	require.NotEmpty(t, resp.Warnings)
+	assert.Contains(t, resp.Warnings[0], "priority")
+}
+
+// The same argument in a dry-run must fail the same way, so an operator finds
+// the mistake before reaching for --apply.
+func TestDNSApplyDryRunRejectsBadPriority(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := &Handler{}
+	router := gin.New()
+	router.POST("/v1/providers/:provider/:action", handler.HandleProviderOperation)
+
+	body, err := json.Marshal(operatorOperationRequest{
+		Operation: "providers.cloudflare.dns-apply",
+		DryRun:    true,
+		Args: map[string]string{
+			"target":   "creatumundo.mx",
+			"type":     "MX",
+			"content":  "mailsec.protonmail.ch",
+			"priority": "99999",
+		},
+	})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/providers/cloudflare/dns-apply", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	var resp operatorOperationResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, "invalid_request", resp.Status)
+	require.NotEmpty(t, resp.Warnings)
+	assert.Contains(t, resp.Warnings[0], "out of range")
 }
