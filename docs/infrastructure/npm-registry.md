@@ -598,6 +598,88 @@ kubectl scale deploy/verdaccio --replicas=2 -n enclii-workloads
 
 ---
 
+## htpasswd credential (Vault-sourced)
+
+The registry's htpasswd file is **not in this repository**. It is materialized
+from Vault by an ExternalSecret.
+
+| | |
+|---|---|
+| Vault path | `secret/npm-registry`, property `htpasswd` |
+| ClusterSecretStore | `vault-store` (the only store backed by real Vault) |
+| ExternalSecret | `npm-registry/verdaccio-auth` — `infra/k8s/base/verdaccio/auth-externalsecret.yaml` |
+| K8s Secret | `npm-registry/verdaccio-auth`, key `htpasswd` |
+| Mounted at | `/verdaccio/conf/htpasswd` (`deployment.yaml`, unchanged) |
+| Refresh | 15m, or immediately via a `force-sync` annotation |
+
+`vault-store` is the right store here, and the `kubernetes-store` /
+`enclii-builds-kubernetes-store` used by `token-rotation-externalsecrets.yaml`
+are not: those are ESO *Kubernetes* providers that mirror Secrets out of the
+`enclii` / `enclii-builds` namespaces. They hold no Vault data, so an
+operator-rotated credential cannot live in them.
+
+No Vault policy change is required to read this path — `eso-reader` already
+grants `read` on `secret/data/*` (`scripts/cluster-ops-deploy.sh`). Writing it
+needs a token with write on `secret/npm-registry`.
+
+### 2026-09-07 incident: the hash was public
+
+Until this change, `infra/k8s/base/verdaccio/secret.yaml` was a plain
+`kind: Secret` committed to **madfam-org/enclii, a public repository**, holding
+the bcrypt hash for `admin@madfam.io`. Two things made it worse than a bare
+disclosure:
+
+- The hash was **bcrypt cost 5** (`$2y$05$…`) — 32 rounds, about 1/32 the work
+  of the cost-10 default. Cheap to attack offline.
+- It was listed in `kustomization.yaml`, so ArgoCD applied it. Editing the live
+  Secret by hand was reverted on the next sync, which is why the credential
+  could not simply be changed in the cluster.
+
+`git rm` does **not** remove a blob from history, so the published hash must be
+treated as permanently disclosed. The remediation is **rotation** — after which
+the published hash verifies nothing. History rewriting is deliberately out of
+scope; see `docs/PUBLIC_REPO_BOUNDARY.md`.
+
+Compounding it operationally: nobody held the plaintext, which is why
+`npm login --registry https://npm.madfam.io` failed for everyone.
+
+### Rotating the admin password
+
+One shot, from anywhere, on macOS or Linux:
+
+```bash
+bash scripts/operator/npm-registry-admin-password-rotate.sh
+```
+
+It prompts silently for the new password and for a Vault token with write on
+`secret/npm-registry`. Neither value is echoed, written to disk, or passed in
+argv — both travel over stdin. The bcrypt hash is computed **locally** at cost
+10, so the plaintext never leaves your machine.
+
+The script then: writes `secret/npm-registry #htpasswd`; reads the cost back to
+prove the write landed (never the hash); forces the ExternalSecret to resync;
+waits for the pod (`strategy: Recreate` + `reloader.stakater.com/auto`, ~30s);
+and verifies with `GET /-/whoami`. It performs no `kubectl apply` — the only
+cluster mutation is the Vault KV write.
+
+To rotate a different user: `REGISTRY_USER=someone@madfam.io bash scripts/…`.
+
+Afterwards, log in with the password you chose:
+
+```bash
+npm login --registry https://npm.madfam.io --auth-type=legacy
+```
+
+`--auth-type=legacy` is required — without it npm attempts the web login flow,
+which this registry does not serve.
+
+> [!NOTE]
+> The script refuses to run until the `verdaccio-auth` ExternalSecret exists in
+> the cluster. Writing Vault before ArgoCD has synced would leave Vault ahead of
+> the running pod, with nothing consuming the new value.
+
+---
+
 ## Security Considerations
 
 1. **Authentication**: htpasswd with bcrypt (upgrade to Janua OAuth later)
@@ -606,6 +688,8 @@ kubectl scale deploy/verdaccio --replicas=2 -n enclii-workloads
 4. **Rate Limiting**: Cloudflare rate limiting rules
 5. **Audit Logging**: All publish/unpublish actions logged
 6. **Token Rotation**: CI tokens rotated quarterly (current token expires ~Jun 12, 2026)
+7. **htpasswd provenance**: the htpasswd file is Vault-sourced, never committed
+   — see [htpasswd credential (Vault-sourced)](#htpasswd-credential-vault-sourced)
 
 ---
 

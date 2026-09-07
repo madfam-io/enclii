@@ -13,7 +13,7 @@ resources:
   - namespace.yaml
   - pvc.yaml
   - configmap.yaml
-  - secret.yaml
+  - auth-externalsecret.yaml
   - deployment.yaml
   - service.yaml
   - networkpolicy.yaml

@@ -231,11 +231,23 @@ kubectl get externalsecret -n <namespace> \
 | `arc-runners-secrets` | arc-runners | `secret/arc-runners` | 3 |
 | `enclii-builds-secrets` | enclii-builds | `secret/enclii-builds` | 3 |
 | `npm-registry-secrets` | npm-registry | `secret/npm-registry` | 1 |
+| `verdaccio-auth` | npm-registry | `secret/npm-registry` (`htpasswd`) | 1 |
 | `madfam-site-secrets` | madfam-site | `secret/madfam-site` + **`secret/comms`** (Resend fan-out) | 3 |
 | `longhorn-secrets` | longhorn-system | `secret/longhorn-system` | 1 |
 | `kyverno-secrets` | kyverno | `secret/kyverno` | 1 |
 
 Files located at `infra/k8s/base/external-secrets/vault-secrets/`.
+
+**Two readers of `secret/npm-registry` (2026-09-07).** `verdaccio-auth` lives
+with the workload it serves (`infra/k8s/base/verdaccio/auth-externalsecret.yaml`),
+not in `vault-secrets/`, because the Verdaccio deployment mounts that exact
+Secret name and key. It reads the same Vault path as `npm-registry-secrets`
+but writes a **different** target Secret, so the multi-writer rule does not
+apply — each target has exactly one writer. `npm-registry-secrets`
+(target `npm-registry-secrets`, key `HTPASSWD`) is consumed by nothing today
+and is not present in the live cluster; it is left in place because
+`scripts/check-zero-touch-boundaries.sh` allowlists the filename. Retiring it
+is a separate change.
 
 **Dhanam merge model (2026-06-16, corrected 2026-08-06):** `dhanam-secrets`
 (core), `dhanam-secrets-extended` and the platform
