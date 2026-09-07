@@ -316,7 +316,11 @@ For monitoring policy drift, force sync from ArgoCD to reconcile annotations.
 
 ## ExternalSecret `spec.data` Changes Never Applied (Runtime-Registered Apps)
 
-**Status:** Fixed (reconciler emits `ServerSideDiff=true`, ExternalSecret ignore rule removed)
+**Status:** Fixed and **verified in production 2026-09-07** — ArgoCD's own auto-sync wrote the object with no
+operator step (reconciler emits `ServerSideDiff=true`, ExternalSecret ignore rule removed). See
+[Outcome](#outcome-verified-in-production-2026-09-07) for what was measured, and
+[SSA co-ownership](#the-real-second-order-cause-ssa-co-ownership-delays-the-write-by-one-self-heal-cycle) for
+the residual gotcha that makes a landed write look dropped.
 **Affected Apps:** every Application registered at runtime by Enclii
 (`app.kubernetes.io/managed-by: enclii-platform`, `enclii.dev/registration-mode: runtime`) — observed on `nauta-services`
 **Impact:** Additions to an ExternalSecret's `spec.data` were silently discarded. The app stayed
@@ -434,6 +438,100 @@ kubectl -n <namespace> get externalsecret nauta-web-secrets -o json \
 
 A stale timestamp in step 4 alongside a `Succeeded` sync means the no-op apply has returned — re-check that no
 list-selecting ignore rule was reintroduced for a CRD.
+
+### Outcome (verified in production, 2026-09-07)
+
+The fix works. On `nauta-services`, ArgoCD's own automated self-heal wrote the object at **04:18:07 UTC** with
+no operator step:
+
+```
+"msg":"Applying resource ExternalSecret/nauta-web-secrets ...","dry-run":"none",
+"manager":"argocd-controller","serverSideApply":true,"serverSideDiff":true
+```
+
+Live `spec.data` went 13 -> 17 (both `JANUA_DELEGATE_*` and both `JANUA_PORTAL_*` present), the
+`argocd-controller` Apply `managedFields` timestamp advanced from `2026-08-13T05:24:28Z` to
+`2026-09-07T04:18:07Z`, ESO re-synced the derived Secret, and Reloader restarted `nauta-web`. App settled
+`Synced` / `Healthy`.
+
+Two hypotheses from the first pass were tested and **disproved**; record them so nobody re-investigates:
+
+- **The repo-server manifest cache was NOT stale.** The cache entry for the synced revision was read directly
+  out of Redis (`mfst|app.kubernetes.io/instance|nauta-services|<sha>|nauta|...`) and already contained the
+  correct 17-entry render. A `argocd.argoproj.io/refresh: hard` is **not** part of this fix.
+- **`removeWebhookMutation` did NOT collapse predicted-live to live.** It strips fields not owned by the
+  configured manager, but `argocd-controller` owned `.spec.data` outright, so nothing was stripped. There is
+  also no mutating webhook registered for `external-secrets.io` on this cluster.
+
+### The real second-order cause: SSA co-ownership delays the write by one self-heal cycle
+
+`spec.data` carries **no `x-kubernetes-list-type` marker** in the ESO CRD (verified against the live CRD on
+chart 0.9.11), so server-side apply treats the whole list as a single **atomic** ownership unit. It cannot be
+co-owned field-by-field: whoever last applied it owns all of it.
+
+A hand `kubectl patch` on 2026-08-16 made `kubectl-patch` a second owner of `.spec.data`. While that lasted, a
+**non-forced** SSA from `argocd-controller` was rejected:
+
+```
+error: Apply failed with 1 conflict: conflict with "kubectl-patch" using
+external-secrets.io/v1beta1: .spec.data
+```
+
+gitops-engine sets `ForceConflicts = true` whenever server-side apply is on
+(`pkg/utils/kube/resource_ops.go:462-463` at the SHA argo-cd v3.2.5 pins,
+`gitops-engine v0.7.1-0.20251217140045-5baed5604d2d`), so ArgoCD does eventually win — but only on a sync that
+actually reaches the apply. The earlier `Succeeded` syncs that left the object untouched were self-heal
+attempts already deep into backoff (`SelfHealAttemptsCount:18`); the write landed on the run where the counter
+had reset to `1`. **Net effect: a legitimate change can look "applied but ignored" for one or more self-heal
+cycles before it lands.** It is not lost, and no operator step is required — but it is easy to misread as a
+regression.
+
+Reading a live object once is not enough to conclude a write was dropped. Re-read it, and check whether the
+`argocd-controller` Apply timestamp advanced, before opening an investigation.
+
+#### Detecting the hazard elsewhere
+
+Any ExternalSecret whose `.spec.data` is owned by a manager other than `argocd-controller` will show the same
+delay the next time git changes it:
+
+One `kubectl` call, all namespaces, no per-object shell quoting:
+
+```bash
+kubectl get externalsecrets -A -o json --show-managed-fields | python3 -c '
+import json, sys
+for it in json.load(sys.stdin)["items"]:
+    m = it["metadata"]
+    owners = [f["manager"] for f in m.get("managedFields", [])
+              if "f:data" in json.dumps(f.get("fieldsV1", {}).get("f:spec", {}))]
+    foreign = [o for o in owners if o != "argocd-controller"]
+    if foreign:
+        print(f'"'"'{m["namespace"]}/{m["name"]}: {owners}'"'"')'
+```
+
+As of 2026-09-07 this reports `fortuna/fortuna-secrets` and `fortuna/fortuna-acca-secrets` (co-owned by
+`kubectl`), plus several ExternalSecrets that were only ever created by hand
+(`kubectl-client-side-apply`, in `dhanam`, `enclii`, `janua`, `madfam-site`) and are not ArgoCD-managed.
+
+**Do not "fix" these by hand-patching again** — that is what created the condition. If a specific object must
+land immediately rather than on the next self-heal, hand ownership back to ArgoCD once, from the platform, with
+the manifest that is already in git:
+
+```bash
+kubectl -n <ns> apply --server-side --force-conflicts \
+  --field-manager=argocd-controller -f <path-to-git-manifest>.yaml
+```
+
+Verify with `--dry-run=server` first; a clean run prints `serverside-applied (server dry run)` and a conflicting
+one names the competing manager.
+
+### Why `Replace=true` was considered and rejected
+
+Emitting `argocd.argoproj.io/sync-options: Replace=true` for ExternalSecret kinds would force the write on the
+first sync. It is the wrong trade: gitops-engine routes CRDs and Namespaces away from `kubectl replace` and
+through `UpdateResource` (`pkg/sync/sync_context.go:1185-1199`), which drops SSA field ownership entirely and
+sends a full-object update. That reintroduces last-writer-wins on every field of the object and gives up the
+conflict detection that surfaced this problem in the first place. Force-conflicts SSA already converges; it just
+converges one cycle later.
 
 ---
 

@@ -177,6 +177,13 @@ func BuildApplication(desired DesiredApplication, namespace string) (*unstructur
 					"prune":    true,
 					"selfHeal": true,
 				},
+				// ServerSideApply=true also makes gitops-engine set ForceConflicts on
+				// every apply (pkg/utils/kube/resource_ops.go, the SHA argo-cd v3.2.5
+				// pins), so ArgoCD reclaims a field a hand `kubectl patch` took over.
+				// It reclaims it on the next sync that reaches the apply, which under
+				// self-heal backoff can be several minutes later -- a landed change can
+				// briefly read as a dropped one. See ARGOCD_KNOWN_ISSUES.md,
+				// "SSA co-ownership delays the write by one self-heal cycle".
 				"syncOptions": []any{
 					"CreateNamespace=true",
 					"RespectIgnoreDifferences=true",
