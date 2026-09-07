@@ -97,7 +97,7 @@ func planCloudflareDNSApply(intent cloudflareDNSApplyIntent, live []cloudflare.D
 
 	if !cloudflareDNSTypeHoldsManyAtOneName(intent.RecordType) {
 		// Single-value type: the record at this name IS the record to change.
-		match := live[0]
+		match := cloudflareDNSPickTarget(live)
 		return cloudflareDNSPlan{
 			Mutation: "update",
 			Match:    &match,
@@ -118,9 +118,9 @@ func planCloudflareDNSApply(intent cloudflareDNSApplyIntent, live []cloudflare.D
 		}
 	}
 
-	// Explicit replace: overwrite the first existing record, and say loudly
-	// which one and what else is at that name.
-	match := live[0]
+	// Explicit replace: overwrite one existing record, and say loudly which
+	// one and what else is at that name.
+	match := cloudflareDNSPickTarget(live)
 	warnings := []string{fmt.Sprintf(
 		"replace=true: %s record %q at %s will be OVERWRITTEN with %q and its previous value is not recoverable through Enclii",
 		intent.RecordType, match.Content, intent.Target, intent.Content,
@@ -138,6 +138,25 @@ func planCloudflareDNSApply(intent cloudflareDNSApplyIntent, live []cloudflare.D
 		Siblings: siblings,
 		Warnings: warnings,
 	}
+}
+
+// cloudflareDNSPickTarget chooses which record a destructive mutation acts on,
+// deterministically.
+//
+// Cloudflare does not contract a stable ordering for a DNS record listing, so
+// taking `live[0]` means a dry-run can name one record and the apply moments
+// later overwrite a different one. On the --replace path that is a silent
+// destruction of a record the operator was never shown — the same failure
+// shape as enclii#530, just narrower. Ordering by record ID makes the plan
+// reproducible: the dry-run's `existingRecord` is the record the apply writes.
+func cloudflareDNSPickTarget(live []cloudflare.DNSRecord) cloudflare.DNSRecord {
+	target := live[0]
+	for _, record := range live[1:] {
+		if record.ID < target.ID {
+			target = record
+		}
+	}
+	return target
 }
 
 // cloudflareDNSExactMatch finds the live record that already expresses the

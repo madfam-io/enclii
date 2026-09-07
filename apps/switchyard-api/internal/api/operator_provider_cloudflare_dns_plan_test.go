@@ -364,3 +364,60 @@ func TestMultiValueTypeClassification(t *testing.T) {
 		}
 	}
 }
+
+// Cloudflare does not contract a stable ordering for a DNS record listing, so
+// a plan that acts on "the first record returned" can show one record in the
+// dry-run and overwrite a different one in the apply moments later. On the
+// --replace path that is a silent destruction of a record the operator was
+// never shown — the same failure shape as #530, just narrower. The same live
+// set in any order must choose the same record.
+func TestReplaceTargetIsOrderIndependent(t *testing.T) {
+	a := txt("rec_a", "google-site-verification=one")
+	b := txt("rec_b", "protonmail-verification=two")
+	c := txt("rec_c", "atlassian-domain-verification=three")
+
+	intent := cloudflareDNSApplyIntent{
+		Target:     "creatumundo.mx",
+		RecordType: "TXT",
+		Content:    "protonmail-verification=ROTATED",
+		Replace:    true,
+	}
+
+	orders := [][]cloudflare.DNSRecord{
+		{a, b, c},
+		{c, b, a},
+		{b, c, a},
+		{c, a, b},
+	}
+	for i, live := range orders {
+		plan := planCloudflareDNSApply(intent, live)
+		if plan.Match == nil {
+			t.Fatalf("order %d: replace must name a record", i)
+		}
+		if plan.Match.ID != "rec_a" {
+			t.Fatalf("order %d: replace chose %q — the target must not depend on listing order", i, plan.Match.ID)
+		}
+		if len(plan.Siblings) != 2 {
+			t.Fatalf("order %d: the other two records must be reported untouched, got %d", i, len(plan.Siblings))
+		}
+	}
+}
+
+// The same determinism applies to a single-value type with an unexpected
+// duplicate at the name: whichever record is chosen, it must be the same one
+// the dry-run showed.
+func TestSingleValueUpdateTargetIsOrderIndependent(t *testing.T) {
+	a := cloudflare.DNSRecord{ID: "rec_a", Name: "app.example.com", Type: "CNAME", Content: "one.example.com"}
+	b := cloudflare.DNSRecord{ID: "rec_b", Name: "app.example.com", Type: "CNAME", Content: "two.example.com"}
+	intent := cloudflareDNSApplyIntent{Target: "app.example.com", RecordType: "CNAME", Content: "three.example.com"}
+
+	first := planCloudflareDNSApply(intent, []cloudflare.DNSRecord{a, b})
+	second := planCloudflareDNSApply(intent, []cloudflare.DNSRecord{b, a})
+
+	if first.Match == nil || second.Match == nil {
+		t.Fatal("both plans must name the record they update")
+	}
+	if first.Match.ID != second.Match.ID {
+		t.Fatalf("update target depends on listing order: %q vs %q", first.Match.ID, second.Match.ID)
+	}
+}
