@@ -6,6 +6,16 @@ tags: [runbook, dns, cloudflare, domains, email, tenancy]
 
 # Domain and email DNS onboarding
 
+> **Boundary checkpoint (2026-09-07, platform on-call):** Public-safe runbook.
+> The domain and mail-provider hostnames here are the client's own public DNS
+> and the providers' documented public endpoints; no node identity, no
+> credential, and no tunnel identifier appears. Per-domain values an operator
+> must supply — the Proton DKIM `<hash>`, verification tokens, the tunnel CNAME,
+> `enclii-verification=<id>` — are placeholders, not values. Private
+> operational detail and the onboarding sink live in `internal-devops`
+> (2026-09-07 CTM tenant onboarding). Policy:
+> `docs/PUBLIC_REPO_BOUNDARY.md` (repo-boundary contract).
+
 What an operator actually has to do — and what currently bites — to bring a new
 host, and a mail provider's record set, onto a zone Enclii hosts in Cloudflare.
 
