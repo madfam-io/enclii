@@ -317,6 +317,69 @@ become live on merge. Either run the sequence above, or use
 `enclii domains reconcile <service>` to provision the declared hostname
 server-side.
 
+## Host redirects: no Enclii op yet (dashboard break-glass)
+
+When a brand migrates, the old hosts must keep answering with a 301 to the new
+ones. **Enclii has no adapter for this.** Cloudflare **Redirect Rules** are a
+ruleset (`http_request_dynamic_redirect` phase), not DNS records and not tunnel
+ingress, and `dns-apply` cannot express one: a redirect needs the edge to answer
+with a `Location:` header instead of routing to a backend.
+
+Tracked as [#538](https://github.com/madfam-org/enclii/issues/538), which
+proposes:
+
+```bash
+enclii providers cloudflare redirect-apply crea-map.madfam.io \
+  --to https://map.creatumundo.mx --status 301 --preserve-query \
+  --apply --reason "brand migration: MADFAM host to the client's own apex"
+```
+
+Until that ships, this is **documented break-glass** — record actor, reason,
+target, what you did and the result, per the Enclii-first contract.
+
+### Break-glass procedure
+
+1. **The source host must still resolve, and must be proxied.** A redirect rule
+   only fires on a request Cloudflare actually receives. Leave the existing
+   proxied record in place — do *not* delete the old host's DNS when you cut
+   over, or the redirect never runs and clients get NXDOMAIN instead of a 301.
+
+2. Cloudflare dashboard → the **source** host's zone → **Rules → Redirect
+   Rules → Create rule**:
+
+   | Field | Value |
+   |---|---|
+   | When incoming requests match | `Hostname` `equals` `<source host>` |
+   | Type | Dynamic |
+   | Expression | `concat("https://<target host>", http.request.uri.path)` |
+   | Query string | Preserve |
+   | Status code | `301` |
+
+   Use `301` only once the target is confirmed serving — browsers and
+   intermediaries cache a permanent redirect, and a premature one is expensive
+   to walk back. Use `302` while you are still verifying.
+
+3. **Mind the rule order.** Redirect rules are an ordered list and the first
+   match wins; a new rule placed above an existing one silently changes that
+   one's behaviour. Read the whole list before adding.
+
+4. Verify from outside, and check the `Location` header — not just the status:
+
+   ```bash
+   curl -sSI https://crea-map.madfam.io/some/path | grep -i '^HTTP/\|^location'
+   # HTTP/2 301
+   # location: https://map.creatumundo.mx/some/path
+   ```
+
+5. **Do not create the redirect until public resolvers agree on the target** —
+   see [the resolver caveat](#resolver-caveat-after-a-nameserver-switch) below.
+   A 301 to a host that a stale resolver still cannot see is a cached failure.
+
+Created this way on **2026-09-07** during the CTM onboarding:
+`crea-map.madfam.io` → `https://map.creatumundo.mx` and `crea-erp.madfam.io` →
+`https://erp.creatumundo.mx`, both 301. Nothing reconciles them: if someone
+deletes one in the dashboard, no Enclii check notices.
+
 ## Resolver caveat after a nameserver switch
 
 For up to the **old** zone's NS TTL after a registrar delegation change, clients
@@ -350,21 +413,39 @@ writes to `OutOrStderr()`. The CLI never calls `SetOut`, so **all of that output
 is on stderr**. `enclii whoami > /tmp/who` captures an empty file and reads as
 "not logged in". Redirect with `2>&1`, or use `-o json`.
 
-### The released CLI predates per-tenant Porkbun
+### The released CLI is older than this runbook — build from `main`
 
-`--tenant` and `providers porkbun ping` landed in
-[#527](https://github.com/madfam-org/enclii/pull/527), which is **not** in
-`v1.0.0-alpha.8` — that tag was cut from the commit immediately before it. On
-alpha.8 the flag is rejected as unknown and `ping` does not exist. Build from
-`main`:
+**Every command in this runbook assumes a CLI built from `main`, or a release
+`>= v1.0.0-alpha.9`.** The newest tag today is **`v1.0.0-alpha.8`**, cut
+2026-09-06 from the commit *before* any of 2026-09-07's work. **No release
+carries #527 or #536.** Tracked in
+[#537](https://github.com/madfam-org/enclii/issues/537).
+
+| Verb / flag | Landed in | In `v1.0.0-alpha.8`? |
+|---|---|---|
+| `--tenant`, `providers porkbun ping` | [#527](https://github.com/madfam-org/enclii/pull/527) | no — flag rejected as unknown, `ping` does not exist |
+| `dns-apply --priority` | [#536](https://github.com/madfam-org/enclii/pull/536) | no — flag rejected as unknown |
+| Non-destructive multi-record TXT/MX, `--replace`, the 400/409/422/424 taxonomy | [#536](https://github.com/madfam-org/enclii/pull/536) | no |
+
+:::danger An alpha.8 CLI will destroy records this runbook says are safe
+
+The missing flags fail loudly, which is survivable. The record-identity fix does
+not. On `alpha.8`, `dns-apply` still keys a TXT/MX by name + type only, so
+applying the apex SPF above onto a zone that already holds a Proton ownership
+TXT is planned `create` and executed as a destructive `update` — issue
+[#530](https://github.com/madfam-org/enclii/issues/530), which is exactly what
+happened on a live client zone on 2026-09-07. Confirm your binary before you
+follow the apex steps.
+
+:::
 
 ```bash
 go build -o ~/bin/enclii ./packages/cli/cmd/enclii
-enclii providers porkbun ping --tenant crea
+enclii providers porkbun ping --tenant crea      # exists only with #527
 ```
 
-The next release tag — **`v1.0.0-alpha.9`** — is the one that should carry
-these verbs.
+The same floor applies to the operator scripts that shell out to the CLI,
+including `scripts/operator/npm-registry-admin-password-rotate.sh`.
 
 ### `enclii login` follows the browser's Janua session
 

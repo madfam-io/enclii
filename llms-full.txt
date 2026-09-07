@@ -118,12 +118,57 @@ wrong about all of it.
   `cmd.Println` -> `OutOrStderr()`; the CLI never calls `SetOut`), so
   `whoami > file` captures nothing. `enclii login` resolves whichever Janua
   identity the browser session holds — log out of a client app first.
-  `--tenant` and `providers porkbun ping` (#527) are **not** in
-  `v1.0.0-alpha.8`; build from `main` until `v1.0.0-alpha.9`.
+  **No release carries 2026-09-07's work.** `v1.0.0-alpha.8` was cut 2026-09-06
+  from the commit before it, so `--tenant` / `providers porkbun ping` (#527)
+  and `dns-apply --priority` plus the non-destructive multi-record fix (#536)
+  are all absent. Build from `main` (`go build -o ~/bin/enclii
+  ./packages/cli/cmd/enclii`) until `v1.0.0-alpha.9` exists (issue #537). This
+  matters beyond missing flags: an alpha.8 `dns-apply` still keys TXT/MX by
+  name+type and will destructively overwrite a sibling record that the current
+  runbook says is safe to add.
 - Per-tenant Porkbun (#527): merging does NOT apply the Vault policy. Run
   `scripts/apply-switchyard-vault-policy-remote.sh` (token on stdin, never
   argv) before the first `--tenant` call, or it 403s and reads as "credentials
   missing". Recipe: `docs/infrastructure/porkbun-tenant-credentials.md`.
+- ExternalSecrets under `infra/k8s/base/external-secrets/vault-secrets/` are
+  **excluded from ArgoCD**: the `external-secrets-config` Application syncs a
+  five-entry `directory.include` allowlist, so a merged change to any of the 19
+  per-app manifests is a **silent no-op** — no OutOfSync, no drift alert, no CI
+  failure. #535 (a `CTM_RESEND_API_KEY` key on `janua-secrets.yaml`) merged
+  green and never reached the cluster; it was applied by a raw JSON patch on the
+  live object. Issue #539 tracks the sanctioned path (`enclii secrets es-apply`,
+  or reconcile-then-include). Do NOT assume merging a `vault-secrets/*.yaml`
+  change deploys it. Doc: `docs/infrastructure/EXTERNAL_SECRETS.md`.
+- ExternalSecret ordering: **Vault property first, manifest second.** An
+  ExternalSecret is all-or-nothing — one missing property fails the whole sync
+  and the target Secret keeps its old data, or on a first sync is never created.
+  Use `vault kv patch` when the path exists and `vault kv put` when it does not:
+  KV v2 answers **404** to a patch on a never-written path. #529 retired the
+  committed Verdaccio Secret in the same change that introduced its
+  ExternalSecret replacement, so ArgoCD pruned the old value before the Vault
+  key existed (fixed in #534).
+- Reloader reads `reloader.stakater.com/auto` on the **Deployment's own
+  `metadata.annotations`**, never on the pod template. An annotation on the
+  template is silently inert — Verdaccio carried one there since 2026-05 and it
+  never fired, so a rotated htpasswd left the pod serving the kubelet's stale
+  projection while reporting `Ready` (#534).
+- npm.madfam.io credentials do not mix: a **Janua API key** (`jnk_…`) goes in
+  `_auth` (HTTP Basic) and NEVER in `_authToken` — `security.api.jwt` makes
+  Verdaccio verify a Bearer token as its own JWT before any plugin runs, and the
+  failure degrades to *anonymous* rather than 401, so the key is never seen. An
+  **htpasswd password** (e.g. the rotated admin) uses
+  `npm login --auth-type=legacy` (without it npm tries a web login flow this
+  registry does not serve). The **CI service token** is a Verdaccio-issued JWT
+  and does belong in `_authToken`. htpasswd itself is Vault-sourced
+  (`secret/npm-registry #htpasswd` -> ExternalSecret `verdaccio-auth`), never
+  committed; rotate one-shot with
+  `scripts/operator/npm-registry-admin-password-rotate.sh`. Doc:
+  `docs/infrastructure/npm-registry.md`.
+- Cloudflare **Redirect Rules** have no Enclii op (issue #538). The 2026-09-07
+  brand-migration 301s (`crea-map.madfam.io` -> `map.creatumundo.mx`,
+  `crea-erp` -> `erp`) were created in the dashboard as documented break-glass.
+  The source host must keep a **proxied** DNS record or the rule never fires.
+  Break-glass procedure: `docs/runbooks/DOMAIN_AND_EMAIL_DNS_ONBOARDING.md`.
 
 
 ## Boundary
