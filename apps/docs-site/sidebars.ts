@@ -145,6 +145,7 @@ const sidebars: SidebarsConfig = {
         'infrastructure/EXTERNAL_SECRETS',
         'infrastructure/INFRA_ANATOMY',
         'infrastructure/dns-setup-porkbun',
+        'infrastructure/porkbun-tenant-credentials',
         'infrastructure/npm-registry',
       ],
     },

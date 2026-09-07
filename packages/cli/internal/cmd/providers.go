@@ -42,13 +42,21 @@ once the server-side provider adapter supports the operation.`,
 		{name: "hostnames", short: "Inspect custom hostname verification", readOnly: true},
 		{name: "credentials", short: "Inspect Cloudflare provider credential readiness", readOnly: true},
 	}))
-	cmd.AddCommand(newProviderCommand(cfg, "porkbun", "Porkbun domains, DNS fallback, and renewals", []providerAction{
+	// Porkbun credentials are per Porkbun ACCOUNT, so every command below takes
+	// --tenant/--project to select which account it authenticates against. A
+	// client that keeps its own registrar account (CTM/creatumundo.mx) is
+	// unreachable with the estate's global key — see
+	// docs/infrastructure/porkbun-tenant-credentials.md.
+	cmd.AddCommand(newProviderCommand(cfg, "porkbun", "Porkbun domains, DNS fallback, renewals, and per-tenant registrar accounts", []providerAction{
+		{name: "credentials", short: "Inspect which Porkbun account a scope resolves to and whether it is usable", readOnly: true},
+		{name: "ping", short: "Verify the scope's Porkbun credentials against the live API", readOnly: true},
 		{name: "domains", short: "Inspect domain inventory and registration state", readOnly: true},
 		{name: "dns", short: "Inspect or plan Porkbun DNS fallback changes", readOnly: true},
 		{name: "dns-apply", short: "Apply Porkbun DNS fallback record changes", readOnly: false},
-		{name: "renewals", short: "Inspect or plan domain renewal actions", readOnly: true},
+		{name: "renewals", short: "Inspect expiry, auto-renew, and per-domain API access", readOnly: true},
 		{name: "nameservers", short: "Inspect or plan nameserver changes", readOnly: true},
 		{name: "nameservers-apply", short: "Apply registrar nameserver changes", readOnly: false},
+		{name: "auto-renew-apply", short: "Turn registrar auto-renew on or off for a domain", readOnly: false},
 	}))
 	cmd.AddCommand(newProviderCommand(cfg, "resend", "Resend transactional email domains and send-test", []providerAction{
 		{name: "credentials", short: "Inspect Resend API key and sender readiness", readOnly: true},
@@ -122,6 +130,7 @@ func newProviderReadCommand(cfg *config.Config, provider, action, short string) 
 	addReadFlags(cmd, &flags)
 	cmd.Flags().StringVar(&flags.project, "project", "", "Enclii project slug scope")
 	cmd.Flags().StringVar(&flags.service, "service", "", "Enclii service name/id scope")
+	addTenantScopeFlag(cmd, &flags)
 	return cmd
 }
 
@@ -134,6 +143,7 @@ func newProviderActionCommand(cfg *config.Config, provider, action, short string
 	var recordName string
 	var nameservers string
 	var proxied string
+	var autoRenew string
 	cmd := &cobra.Command{
 		Use:   action + " [target]",
 		Short: short,
@@ -164,10 +174,14 @@ func newProviderActionCommand(cfg *config.Config, provider, action, short string
 			if proxied != "" {
 				extra["proxied"] = proxied
 			}
+			if autoRenew != "" {
+				extra["auto_renew"] = autoRenew
+			}
 			return runOperation(cmd, cfg, providerPath(provider, action), fmt.Sprintf("providers.%s.%s", provider, action), flags, extra)
 		},
 	}
 	addOperationFlags(cmd, &flags)
+	addTenantScopeFlag(cmd, &flags)
 	if provider == "cloudflare" && action == "dns-apply" {
 		cmd.Flags().StringVar(&recordType, "type", "", "DNS record type (default: CNAME)")
 		cmd.Flags().StringVar(&content, "content", "", "DNS record content (default: Enclii tunnel CNAME)")
@@ -182,6 +196,11 @@ func newProviderActionCommand(cfg *config.Config, provider, action, short string
 	}
 	if provider == "porkbun" && action == "nameservers-apply" {
 		cmd.Flags().StringVar(&nameservers, "nameservers", "", "Comma or space separated authoritative nameservers")
+		cmd.Flags().StringVar(&zoneDomain, "domain", "", "Apex domain managed by Porkbun (derived from target if omitted)")
+	}
+	if provider == "porkbun" && action == "auto-renew-apply" {
+		cmd.Flags().StringVar(&autoRenew, "auto-renew", "", "Desired registrar auto-renew state: on or off (required)")
+		cmd.Flags().StringVar(&zoneDomain, "domain", "", "Apex domain managed by Porkbun (derived from target if omitted)")
 	}
 	return cmd
 }

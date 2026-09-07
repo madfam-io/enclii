@@ -314,3 +314,28 @@ targets:
       - courier_webhook_signing_key_enclii_ops
       - courier_webhook_signing_key_tulana
       - courier_webhook_signing_key_madfam_site
+
+  # Per-tenant REGISTRAR credentials. Porkbun API keys are per Porkbun ACCOUNT,
+  # and CTM holds creatumundo.mx in its own Porkbun account — the estate's
+  # global ENCLII_PORKBUN_* pair cannot see that domain at all (Porkbun answers
+  # INVALID_DOMAIN, which reads like a typo). This target is how CTM's key pair
+  # reaches Vault without any human, agent, or terminal scrollback holding a
+  # copy of it.
+  #
+  # Read at REQUEST time by switchyard-api's Vault client, not projected by ESO
+  # into the pod: registrar accounts arrive whenever a client onboards, and an
+  # env-var pair per tenant would mean an ExternalSecret edit plus a restart for
+  # each one. There is deliberately no external_secret here — nothing should
+  # mount these into a pod's environment.
+  #
+  # The Vault path and property names are matched by
+  # ecosystem/tenants.json → registrar; changing one without the other resolves
+  # to "credentials missing", not to a wrong-account call.
+  crea/porkbun-registrar:
+    label: CTM Porkbun registrar API credentials
+    description: Llave y llave secreta de la cuenta Porkbun de Crea Tu Mundo (creatumundo.mx). Permiten que Enclii opere el registrador del cliente por API. Requisito del lado de Porkbun - la cuenta debe habilitar el acceso API por dominio en su tablero.
+    vault_path: secret/crea
+    namespace: crea
+    keys:
+      - porkbun_api_key
+      - porkbun_secret_key

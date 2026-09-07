@@ -159,6 +159,9 @@ func (h *Handler) handleApplyOperatorDryRun(ctx context.Context, prefix, domain,
 		if domain == "porkbun" && action == "nameservers-apply" {
 			return h.handleProviderPorkbunNameserversApplyDryRun(ctx, operation, req), true
 		}
+		if domain == "porkbun" && action == "auto-renew-apply" {
+			return h.handleProviderPorkbunAutoRenewApplyDryRun(ctx, operation, req), true
+		}
 		if domain == "resend" && action == "domain-add-apply" {
 			return h.handleResendDomainAddApplyDryRun(ctx, operation, req), true
 		}
@@ -299,6 +302,10 @@ func (h *Handler) handleApplyOperatorOperation(ctx context.Context, prefix, doma
 	}
 	if prefix == "providers" && domain == "porkbun" && action == "nameservers-apply" {
 		resp, statusCode := h.handleProviderPorkbunNameserversApply(ctx, operation, req)
+		return resp, statusCode, true
+	}
+	if prefix == "providers" && domain == "porkbun" && action == "auto-renew-apply" {
+		resp, statusCode := h.handleProviderPorkbunAutoRenewApply(ctx, operation, req)
 		return resp, statusCode, true
 	}
 	if prefix == "providers" && domain == "resend" && action == "domain-add-apply" {

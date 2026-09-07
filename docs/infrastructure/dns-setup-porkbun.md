@@ -12,6 +12,21 @@ tags: [infrastructure, dns, porkbun, cloudflare]
 - **Cloudflare**: [Cloudflare Integration](/infrastructure/CLOUDFLARE)
 - **npm Registry**: [npm Registry Implementation](/infrastructure/npm-registry)
 - **Troubleshooting**: [Networking Issues](/troubleshooting/networking)
+- **Per-tenant registrar accounts**: [Porkbun per-tenant credentials](/infrastructure/porkbun-tenant-credentials)
+
+:::note Which Porkbun account?
+
+Everything on this page assumes MADFAM's own Porkbun account, which is what the
+global `ENCLII_PORKBUN_*` credentials operate. Porkbun API keys are scoped to
+**one account**, so a domain a client holds in the client's own Porkbun login is
+unreachable with those credentials — Porkbun answers `INVALID_DOMAIN`, which
+reads like a typo rather than a permissions problem.
+
+For a client-owned registrar account (for example `creatumundo.mx`, in Crea Tu
+Mundo's own account), scope the operation with `--tenant` or `--project` and see
+[Porkbun per-tenant credentials](/infrastructure/porkbun-tenant-credentials).
+
+:::
 
 ## Overview
 

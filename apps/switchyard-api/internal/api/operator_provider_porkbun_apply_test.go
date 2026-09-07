@@ -88,3 +88,57 @@ func TestSameStringSetIgnoresOrderAndCase(t *testing.T) {
 		t.Fatalf("sets should match: %#v %#v", left, right)
 	}
 }
+
+func TestPorkbunAutoRenewIntentParsesOnAndOff(t *testing.T) {
+	for _, value := range []string{"on", "true", "yes", "1", "enable", "enabled", "ON"} {
+		req := operatorOperationRequest{Args: map[string]string{"target": "creatumundo.mx", "auto_renew": value}}
+		intent := porkbunAutoRenewApplyIntentFromRequest(req)
+		if !intent.Enabled {
+			t.Fatalf("auto_renew=%q should parse as enabled", value)
+		}
+		if invalid := validatePorkbunAutoRenewApplyIntent(intent); invalid != "" {
+			t.Fatalf("auto_renew=%q should be valid: %s", value, invalid)
+		}
+	}
+	for _, value := range []string{"off", "false", "no", "0", "disable", "disabled"} {
+		req := operatorOperationRequest{Args: map[string]string{"target": "creatumundo.mx", "auto_renew": value}}
+		intent := porkbunAutoRenewApplyIntentFromRequest(req)
+		if intent.Enabled {
+			t.Fatalf("auto_renew=%q should parse as disabled", value)
+		}
+		if invalid := validatePorkbunAutoRenewApplyIntent(intent); invalid != "" {
+			t.Fatalf("auto_renew=%q should be valid: %s", value, invalid)
+		}
+	}
+}
+
+// An unparseable or absent --auto-renew must be REFUSED, not defaulted. Both
+// would default to "off", which is a mutation that turns off auto-renew on a
+// live client domain — the exact outage this operation exists to prevent.
+func TestPorkbunAutoRenewIntentRefusesAmbiguousValues(t *testing.T) {
+	for _, value := range []string{"", "maybe", "onn", "2"} {
+		req := operatorOperationRequest{Args: map[string]string{"target": "creatumundo.mx", "auto_renew": value}}
+		intent := porkbunAutoRenewApplyIntentFromRequest(req)
+		if invalid := validatePorkbunAutoRenewApplyIntent(intent); invalid == "" {
+			t.Fatalf("auto_renew=%q must be rejected, not defaulted to off", value)
+		}
+	}
+}
+
+func TestPorkbunAutoRenewIntentRequiresDomain(t *testing.T) {
+	intent := porkbunAutoRenewApplyIntentFromRequest(operatorOperationRequest{Args: map[string]string{"auto_renew": "on"}})
+	if invalid := validatePorkbunAutoRenewApplyIntent(intent); invalid == "" {
+		t.Fatal("an auto-renew intent with no domain must be rejected")
+	}
+}
+
+// The apex derivation must survive a two-label .mx apex, which is what
+// creatumundo.mx is — a regression here would send DNS writes to "mundo.mx".
+func TestPorkbunManagedDomainFromTargetHandlesCreaApex(t *testing.T) {
+	if got := porkbunManagedDomainFromTarget("map.creatumundo.mx"); got != "creatumundo.mx" {
+		t.Fatalf("apex = %q, want creatumundo.mx", got)
+	}
+	if got := porkbunRecordName("map.creatumundo.mx", "creatumundo.mx"); got != "map" {
+		t.Fatalf("record name = %q, want map", got)
+	}
+}

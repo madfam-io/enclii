@@ -26,6 +26,20 @@ export type TenantBinding = {
   resend_domain_status?: string
 }
 
+// Porkbun credentials are per Porkbun ACCOUNT. This is one row of the
+// registrar table: which account a tenant's domains resolve to, and whether
+// that account's credentials are usable. Never carries a credential value —
+// vault_path is a location, not a secret.
+export type PorkbunRegistrarScope = {
+  tenant: string
+  display_name: string
+  account: 'madfam' | 'tenant'
+  domains: string[]
+  vault_path?: string
+  configured: boolean
+  detail?: string
+}
+
 export type ProviderCatalogEntry = {
   name: string
   status: string

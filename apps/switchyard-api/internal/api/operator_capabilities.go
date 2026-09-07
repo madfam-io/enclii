@@ -90,9 +90,11 @@ var providerCapabilities = []operatorCapability{
 	{
 		Name:        "porkbun",
 		Status:      "partial",
-		Description: "Domain inventory, DNS fallback create, renewals, and nameserver ops",
-		Actions:     []string{"domains", "dns", "dns-apply", "renewals", "nameservers", "nameservers-apply"},
-		Scopes:      []string{"target"},
+		Description: "Domain inventory, DNS fallback create, renewals, auto-renew, and nameserver ops — per-tenant or MADFAM registrar account",
+		Actions:     []string{"ping", "credentials", "domains", "dns", "dns-apply", "renewals", "nameservers", "nameservers-apply", "auto-renew-apply"},
+		// tenant/project select WHICH Porkbun account the operation
+		// authenticates against; see porkbun_credential_scope.go.
+		Scopes: []string{"target", "tenant", "project"},
 	},
 	{
 		Name:        "resend",
