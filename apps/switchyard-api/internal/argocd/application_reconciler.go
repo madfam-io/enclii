@@ -145,7 +145,14 @@ func BuildApplication(desired DesiredApplication, namespace string) (*unstructur
 				"enclii.dev/registration-mode": RegistrationModeRuntime,
 			},
 			"annotations": map[string]any{
-				"argocd.argoproj.io/compare-options": "IgnoreExtraneous=true",
+				// ServerSideDiff=true makes the controller compute the diff from a
+				// server-side apply dry-run, so apiserver-defaulted CRD fields (for
+				// example the ESO ExternalSecret spec.data[].remoteRef
+				// conversionStrategy/decodingStrategy/metadataPolicy defaults) stop
+				// showing as drift without an ignoreDifferences rule. In ArgoCD v3.2.5
+				// this option is only read from this annotation or the controller-wide
+				// env var -- it is NOT honoured inside spec.syncPolicy.syncOptions.
+				"argocd.argoproj.io/compare-options": "IgnoreExtraneous=true,ServerSideDiff=true",
 				"enclii.dev/source-repo":             repoURL,
 				"enclii.dev/source-branch":           branch,
 				"enclii.dev/manifest-path":           manifestPath,
@@ -296,14 +303,24 @@ func ignoreDifferences() []any {
 				"/stringData",
 			},
 		},
-		map[string]any{
-			"group": "external-secrets.io",
-			"kind":  "ExternalSecret",
-			"jqPathExpressions": []any{
-				".spec.data[]?.remoteRef.conversionStrategy",
-				".spec.data[]?.remoteRef.decodingStrategy",
-				".spec.data[]?.remoteRef.metadataPolicy",
-			},
-		},
+		// NOTE: there is deliberately no ExternalSecret rule here.
+		//
+		// An ignoreDifferences rule whose jqPathExpressions select fields *inside a
+		// list* is unsafe for any CRD while RespectIgnoreDifferences=true is set.
+		// On sync, ArgoCD calls normalizeTargetResources(), which copies the ignored
+		// fields from the live object into the desired object. For a CRD the
+		// Kubernetes scheme has no strategic-merge metadata, so ArgoCD falls back to
+		// an RFC 7386 JSON merge patch (controller/sync.go: getMergePatch ->
+		// jsonpatch.CreateMergePatch, applyMergePatch -> jsonpatch.MergePatch). RFC
+		// 7386 replaces arrays wholesale instead of merging them element-wise, so the
+		// live spec.data list overwrote the desired one and newly added keys never
+		// reached the cluster: the sync reported "serverside-applied" while being a
+		// no-op, and the app stayed OutOfSync forever.
+		//
+		// The three fields this rule used to hide (remoteRef conversionStrategy,
+		// decodingStrategy and metadataPolicy) are apiserver-applied CRD schema
+		// defaults, so ServerSideDiff=true -- set through the
+		// argocd.argoproj.io/compare-options annotation in BuildApplication --
+		// removes that diff noise without any ignore rule.
 	}
 }

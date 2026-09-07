@@ -314,6 +314,129 @@ For monitoring policy drift, force sync from ArgoCD to reconcile annotations.
 
 ---
 
+## ExternalSecret `spec.data` Changes Never Applied (Runtime-Registered Apps)
+
+**Status:** Fixed (reconciler emits `ServerSideDiff=true`, ExternalSecret ignore rule removed)
+**Affected Apps:** every Application registered at runtime by Enclii
+(`app.kubernetes.io/managed-by: enclii-platform`, `enclii.dev/registration-mode: runtime`) — observed on `nauta-services`
+**Impact:** Additions to an ExternalSecret's `spec.data` were silently discarded. The app stayed
+`OutOfSync` forever while auto-sync kept reporting `Succeeded`. Operators worked around it by hand-patching
+the live object, which is exactly the raw-`kubectl` drift this platform exists to remove.
+
+### Symptom
+
+After a repo PR added two `spec.data` entries to an ExternalSecret:
+
+- `nauta-services` showed `OutOfSync`, with the ExternalSecret as the only out-of-sync resource.
+- The auto-sync operation reported `Succeeded`, message
+  `externalsecret.external-secrets.io/nauta-web-secrets serverside-applied`.
+- The live object still held its original 13 keys, and its `managedFields` entry for manager
+  `argocd-controller` / operation `Apply` had not moved for weeks — a **no-op apply**.
+
+### Root Cause
+
+The generated Application set `RespectIgnoreDifferences=true` **and** an `ignoreDifferences` rule whose
+`jqPathExpressions` reach *inside a list*:
+
+```yaml
+- group: external-secrets.io
+  kind: ExternalSecret
+  jqPathExpressions:
+    - .spec.data[]?.remoteRef.conversionStrategy
+    - .spec.data[]?.remoteRef.decodingStrategy
+    - .spec.data[]?.remoteRef.metadataPolicy
+```
+
+With `RespectIgnoreDifferences=true`, ArgoCD copies the live values at ignored paths into the desired
+object *before* applying (`controller/sync.go` → `normalizeTargetResources`). How it copies them depends on
+the resource kind:
+
+```go
+versionedObject, err := scheme.Scheme.New(normalizedTarget.GroupVersionKind())
+if err == nil { /* strategic merge: lists merged by patch key */ }
+// CRDs land here instead:
+return jsonpatch.CreateMergePatch(originalJSON, modifiedJSON)  // RFC 7386
+```
+
+`scheme.Scheme` only knows built-in Kubernetes types. `ExternalSecret` is a CRD, so both patch creation and
+application fall back to **RFC 7386 JSON merge patch, in which arrays are atomic** — the whole live
+`spec.data` list replaced the desired one, discarding the new entries. The diff is computed on a separate
+path that does not do this substitution, so ArgoCD kept reporting `OutOfSync` while applying nothing.
+
+The three fields the rule hid are apiserver-applied CRD schema defaults (ESO is pinned to chart `0.9.11`,
+whose `v1beta1` types carry `+kubebuilder:default=` on `conversionStrategy`, `decodingStrategy` and
+`metadataPolicy`), so the rule existed only to silence defaulting noise.
+
+> [!WARNING]
+> Never add an `ignoreDifferences` rule with `jqPathExpressions` (or JSON pointers) that select fields
+> inside a **list** on a **CRD** while `RespectIgnoreDifferences=true` is set. It will silently drop writes
+> to that list. Built-in kinds (`apps`, `batch`, `policy`, core) are safe: they resolve in the scheme and
+> take the strategic-merge path. A unit test in `application_reconciler_test.go` enforces this.
+
+### Fix
+
+In `apps/switchyard-api/internal/argocd/application_reconciler.go`:
+
+1. The `external-secrets.io/ExternalSecret` `ignoreDifferences` rule is **removed**.
+2. `ServerSideDiff=true` is added to the `argocd.argoproj.io/compare-options` annotation, so the diff comes
+   from a server-side-apply dry run. The apiserver returns the object with CRD defaults already applied, so
+   the defaulted fields are identical on both sides and cancel out of the diff with no ignore rule.
+
+`ServerSideDiff` must go in the **`argocd.argoproj.io/compare-options` annotation**, not in
+`spec.syncPolicy.syncOptions`. In ArgoCD v3.2.5 the controller reads it only from that annotation or the
+`ARGOCD_APPLICATION_CONTROLLER_SERVER_SIDE_DIFF` env var (`controller/state.go`); placing it in
+`syncOptions` is silently ignored. All other ignore rules (Deployment/StatefulSet replicas, Secret data,
+`volumeClaimTemplates`, etc.) are unchanged.
+
+### How the change reaches already-registered Applications
+
+`ReconcileApplication` is **idempotent and re-applies the full desired spec on every call** — `mergeApplication`
+compares the whole `spec` plus labels and annotations against the live Application and writes back on any
+difference. It is not first-registration-only. So an existing Application picks the fix up as soon as the
+reconciler runs against it, with no manual ArgoCD edit:
+
+```bash
+# Re-run reconciliation for an already-onboarded repo (idempotent; safe to repeat).
+curl -sS -X POST "$ENCLII_API/v1/admin/onboard/ensure" \
+  -H "Authorization: Bearer $ENCLII_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"repo_full_name":"madfam-org/nauta","project_name":"nauta"}'
+```
+
+Deploying the new switchyard-api alone does **not** rewrite existing Applications; the reconcile above (or the
+next onboard/ensure for that repo) is what propagates it.
+
+### Smoke Test
+
+After rollout and the `onboard/ensure` call:
+
+```bash
+# 1. Annotation carries both compare options.
+kubectl -n argocd get application nauta-services \
+  -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/compare-options}{"\n"}'
+# want: IgnoreExtraneous=true,ServerSideDiff=true
+
+# 2. No ExternalSecret ignore rule remains.
+kubectl -n argocd get application nauta-services \
+  -o jsonpath='{range .spec.ignoreDifferences[*]}{.kind}{"\n"}{end}' | grep -c ExternalSecret
+# want: 0
+
+# 3. Sync status settles at Synced.
+kubectl -n argocd get application nauta-services -o jsonpath='{.status.sync.status}{"\n"}'
+# want: Synced
+
+# 4. On the NEXT change to the ExternalSecret spec, the argocd-controller Apply
+#    managedFields timestamp must ADVANCE (proof the apply is no longer a no-op).
+kubectl -n <namespace> get externalsecret nauta-web-secrets -o json \
+  | jq -r '.metadata.managedFields[] | select(.manager=="argocd-controller" and .operation=="Apply") | .time'
+# want: a timestamp newer than the previous change, and the new keys present in spec.data
+```
+
+A stale timestamp in step 4 alongside a `Succeeded` sync means the no-op apply has returned — re-check that no
+list-selecting ignore rule was reintroduced for a CRD.
+
+---
+
 ## Other Known Issues
 
 _No other known issues at this time._

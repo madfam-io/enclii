@@ -291,6 +291,11 @@ kubectl get application <app-name> -n argocd -o yaml | \
 - ArgoCD with `ServerSideApply=true` can show OutOfSync due to SSA metadata fields
 - Use `RespectIgnoreDifferences=true` sync option to reduce noise
 - Not a functional issue — resources work correctly
+- **Caveat:** with `RespectIgnoreDifferences=true`, never write an `ignoreDifferences`
+  rule that selects fields *inside a list* on a **CRD** — ArgoCD replays the whole live
+  list over the desired one and silently drops your writes. Prefer `ServerSideDiff=true`
+  in the `argocd.argoproj.io/compare-options` annotation for CRD-default noise. See
+  [ArgoCD Known Issues](./ARGOCD_KNOWN_ISSUES.md#externalsecret-specdata-changes-never-applied-runtime-registered-apps).
 
 ## Verification
 
