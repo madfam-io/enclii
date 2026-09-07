@@ -51,6 +51,12 @@ Two rules make this safe:
 and silently reached MADFAM's account would be told the domain does not exist,
 with nothing on screen explaining why.
 
+**A `--tenant`/`--project` value no tenant claims is REFUSED**, not treated as a
+request for the global account. It is overwhelmingly a typo, and answering a
+typo with MADFAM's key produces `INVALID_DOMAIN` for a domain that exists. The
+error names the bad id and tells the operator to correct it — never to drop the
+flag, which would be the wrong-account call.
+
 **A tenant scope that cannot produce credentials FAILS.** It never falls back to
 the global key. Falling back would send the operation to the wrong registrar
 account and report `INVALID_DOMAIN` for a domain that plainly exists — the
