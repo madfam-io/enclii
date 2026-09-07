@@ -317,7 +317,23 @@ Enclii uses MADFAM's private npm registry for internal packages. Configure your 
 
 `@enclii/*` and `@janua/*` packages have public read access — no token required for `npm install`. The `NPM_MADFAM_TOKEN` is only needed for publishing or installing private scopes (`@madfam/*`, `@dhanam/*`, etc.).
 
-See [NPM Registry](./docs/infrastructure/npm-registry.md) for details.
+> [!IMPORTANT]
+> `_authToken` above is for **`NPM_MADFAM_TOKEN` only** — a Verdaccio-issued JWT
+> used by CI. If you are a person holding a **Janua API key** (`jnk_…`), it goes
+> in `_auth` as HTTP Basic, never in `_authToken`:
+>
+> ```bash
+> npm config set //npm.madfam.io/:_auth "$(printf 'janua:%s' "$JANUA_API_KEY" | base64)"
+> ```
+>
+> A Janua key in `_authToken` **fails silently** — Verdaccio verifies a Bearer
+> token as its own JWT before any auth plugin runs, and the failure degrades to
+> *anonymous*, so you get "authorization required" with no sign the key was
+> seen. And `npm login` here authenticates against **htpasswd**, not Janua;
+> it needs `--auth-type=legacy`.
+
+See [NPM Registry](./docs/infrastructure/npm-registry.md) for details, including
+[which credential to use](./docs/infrastructure/npm-registry.md#do-not-use-_authtoken-and-do-not-npm-login).
 
 </details>
 

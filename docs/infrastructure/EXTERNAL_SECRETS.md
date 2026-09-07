@@ -8,7 +8,7 @@
 > missing Enclii adapter gap.
 
 
-**Last Updated:** 2026-06-16
+**Last Updated:** 2026-09-07
 **Status:** Operational (Vault-backed)
 **Active Providers:** `vault-store` (HashiCorp Vault KV v2) + `kubernetes-store` (legacy, cross-namespace)
 
@@ -259,6 +259,70 @@ Merged total: 23 keys. Optional keys (R2, Cloudflare, Sentry, SendGrid) are
 intentionally omitted until intake — see
 [recovery session](https://github.com/madfam-org/internal-devops/blob/main/runbooks/2026-06-16-dhanam-secrets-recovery-session.md).
 
+## What ArgoCD actually syncs — and what it does not
+
+**A merged change to a file under `vault-secrets/` does not reach the cluster.**
+There is no OutOfSync, no drift alert, and no CI failure: the file is not part
+of any Application's manifest set at all.
+
+The `external-secrets-config` Application
+(`infra/argocd/apps/external-secrets-operator.yaml`) syncs a five-entry
+allowlist, not the directory:
+
+```yaml
+directory:
+  include: '{cluster-secret-store.yaml,vault-cluster-secret-store.yaml,external-secrets-tokenreview-rbac.yaml,ecosystem-service-auth-external-secrets.yaml,README.md}'
+```
+
+| Path | Synced by ArgoCD? |
+|------|-------------------|
+| `external-secrets/cluster-secret-store.yaml`, `vault-cluster-secret-store.yaml` | yes |
+| `external-secrets/external-secrets-tokenreview-rbac.yaml` | yes |
+| `external-secrets/ecosystem-service-auth-external-secrets.yaml` | yes |
+| **`external-secrets/vault-secrets/*.yaml`** (all 19 per-app manifests) | **no — excluded** |
+| `verdaccio/auth-externalsecret.yaml` (lives with its workload) | yes, via `npm-registry-services` |
+
+The exclusion is deliberate, and the in-repo comment says why: several legacy
+mirror manifests in that directory do not match current production Secret
+shapes, and syncing a stale mirror over a working Secret is worse than not
+syncing it. But the consequence is a silent no-op on merge, and that has to be
+stated rather than rediscovered.
+
+### Current break-glass, and how it bit (2026-09-07)
+
+[#535](https://github.com/madfam-org/enclii/pull/535) added a
+`CTM_RESEND_API_KEY` entry to `vault-secrets/janua-secrets.yaml`. It merged
+green, and the key did **not** appear in `janua/janua-secrets`. It was made live
+by a raw JSON patch against the live ExternalSecret object.
+
+Until [#539](https://github.com/madfam-org/enclii/issues/539) lands a sanctioned
+path (an `enclii secrets es-apply <app>` op, or reconciling the manifests to
+live and widening the allowlist), that patch **is** the break-glass — and like
+any break-glass it must record actor, reason, target, commands and result. Note
+what it costs: the cluster and the repo now agree only by coincidence. Nothing
+reconciles them, and the next hand-edit of that object drops the key with no
+signal.
+
+### Ordering rule: Vault first, manifest second
+
+An ExternalSecret is **all-or-nothing**. One missing Vault property fails the
+whole sync, and the target Secret keeps its old data — or, on a first sync, is
+never created at all.
+
+1. Write the Vault property **first**. Use `vault kv patch secret/<path>
+   key=value` when the path exists, and `vault kv put` when it does not: KV v2
+   answers **404** to a patch on a path that has never been written.
+2. Only then apply the manifest change.
+
+That 404 is not hypothetical: it is exactly how the first Verdaccio htpasswd
+rotation failed on 2026-09-07, because
+[#529](https://github.com/madfam-org/enclii/pull/529) shipped the
+`verdaccio-auth` ExternalSecret before `secret/npm-registry` had ever been
+written. See
+[npm-registry.md](./npm-registry.md#2026-09-07-the-secret-was-pruned-before-the-vault-key-existed).
+
+---
+
 ## Operations
 
 ### Check Status
@@ -286,9 +350,22 @@ kubectl annotate externalsecret <name> -n <namespace> \
 
 ### Add a New Secret
 
-1. Write to Vault: `vault kv put secret/<namespace> key=value`
-2. Add entry to the namespace's ExternalSecret YAML in `infra/k8s/base/external-secrets/vault-secrets/`
-3. Commit and let ArgoCD sync, or `kubectl apply -f` directly
+1. Write to Vault **first** — `vault kv patch secret/<namespace> key=value` if
+   the path exists, `vault kv put` if it has never been written (KV v2 answers
+   404 to a patch on a new path). The manifest is all-or-nothing: a property
+   the manifest references but Vault lacks fails the entire sync.
+2. Add the entry to the namespace's ExternalSecret YAML in
+   `infra/k8s/base/external-secrets/vault-secrets/`.
+3. Get the change onto the cluster. **Merging is not enough** —
+   `vault-secrets/` is excluded from the `external-secrets-config` Application,
+   so a merged manifest change is a silent no-op. See
+   [What ArgoCD actually syncs](#what-argocd-actually-syncs--and-what-it-does-not)
+   for the current break-glass and
+   [#539](https://github.com/madfam-org/enclii/issues/539) for the sanctioned
+   path being built.
+4. Confirm it landed: the ExternalSecret reports `SecretSynced`, and the target
+   Secret's key count went up by what you added —
+   `kubectl get secret <name> -n <ns> -o jsonpath='{.data}' | jq 'keys | length'`.
 
 ## Troubleshooting
 

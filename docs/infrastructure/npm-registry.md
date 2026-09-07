@@ -577,6 +577,19 @@ npm config set //npm.madfam.io/:always-auth true
 > even when the account is perfectly valid. This is the single most common
 > confusion with this registry. Mint an API key instead.
 
+**The two credentials do not mix.** Which one you hold decides which command
+you run — there is no combination that works both ways:
+
+| You hold | Put it in | Command |
+|---|---|---|
+| A Janua API key (`jnk_…`) | `_auth` (HTTP Basic) | `npm config set //npm.madfam.io/:_auth "$(printf 'janua:%s' "$JANUA_API_KEY" \| base64)"` — never `npm login`, never `_authToken` |
+| An htpasswd password (e.g. the rotated `admin@madfam.io`) | interactive login | `npm login --registry https://npm.madfam.io --auth-type=legacy` |
+| The CI service token (a Verdaccio-issued JWT) | `_authToken` | set in CI; rotated by the `npm-token-rotation` CronJob |
+
+`--auth-type=legacy` is required on that middle row: without it npm attempts the
+web login flow, which this registry does not serve. See
+[Rotating the admin password](#rotating-the-admin-password).
+
 Verified against production on 2026-09-07:
 
 | Credential | Result | Verdaccio log |
@@ -891,11 +904,22 @@ It prompts silently for the new password and for a Vault token with write on
 argv — both travel over stdin. The bcrypt hash is computed **locally** at cost
 10, so the plaintext never leaves your machine.
 
-The script then: writes `secret/npm-registry #htpasswd`; reads the cost back to
-prove the write landed (never the hash); forces the ExternalSecret to resync;
-waits for the pod (`strategy: Recreate` + `reloader.stakater.com/auto`, ~30s);
-and verifies with `GET /-/whoami`. It performs no `kubectl apply` — the only
-cluster mutation is the Vault KV write.
+The script then:
+
+1. writes `secret/npm-registry #htpasswd` — `vault kv patch` when the path
+   already exists, `vault kv put` when it does not, because **KV v2 answers 404
+   to a patch on a path that has never been written** (#534);
+2. reads the bcrypt **cost** back to prove the write landed — never the hash;
+3. forces the `verdaccio-auth` ExternalSecret to resync;
+4. waits for the pod (`strategy: Recreate` + `reloader.stakater.com/auto` on the
+   **Deployment's own metadata**, ~30s), and compares the pod's
+   `creationTimestamp` against the Secret's — if the pod is older it runs an
+   explicit `rollout restart`, so the verification tests the new file even on a
+   cluster where Reloader is absent or not firing (#534);
+5. verifies with `GET /-/whoami`.
+
+It performs no `kubectl apply` — the only cluster mutation is the Vault KV
+write.
 
 To rotate a different user: `REGISTRY_USER=someone@madfam.io bash scripts/…`.
 
@@ -912,6 +936,55 @@ which this registry does not serve.
 > The script refuses to run until the `verdaccio-auth` ExternalSecret exists in
 > the cluster. Writing Vault before ArgoCD has synced would leave Vault ahead of
 > the running pod, with nothing consuming the new value.
+
+### 2026-09-07: the Secret was pruned before the Vault key existed
+
+The first real rotation failed twice, in two different places. Both failures
+were **ordering**, and both are fixed in
+[#534](https://github.com/madfam-org/enclii/pull/534).
+
+**1. Vault path did not exist — `404` on patch.**
+[#529](https://github.com/madfam-org/enclii/pull/529) removed
+`secret.yaml` from `kustomization.yaml` and shipped the `verdaccio-auth`
+ExternalSecret in the same change. ArgoCD pruned the committed Secret on sync,
+but **`secret/npm-registry #htpasswd` had never been written**, so the
+ExternalSecret had nothing to materialize and the registry had no htpasswd file
+at all. The rotation script then died on
+`Error writing data to secret/data/npm-registry … Code: 404`: it used
+`vault kv patch`, and KV v2 refuses to patch a path that has never existed.
+
+> **The ordering rule.** Write the Vault property **before** the manifest change
+> that consumes it reaches the cluster. An ExternalSecret is all-or-nothing: a
+> property it references but Vault lacks fails the entire sync, and on a first
+> sync the target Secret is never created. Retiring a committed Secret in the
+> same change that introduces its ExternalSecret replacement inverts this — the
+> old value is pruned before the new one can exist. Seed Vault first, merge
+> second. The same rule governs every manifest under
+> `vault-secrets/`; see
+> [EXTERNAL_SECRETS.md](./EXTERNAL_SECRETS.md#ordering-rule-vault-first-manifest-second).
+
+**2. The pod never restarted — the Reloader annotation was on the wrong object.**
+With Vault seeded, ESO re-created `Secret/verdaccio-auth` and the pod kept
+serving the kubelet's stale projection of `/verdaccio/conf/htpasswd` — dated
+2026-09-05 — while reporting `Ready`. `/-/whoami` rejected the new password
+until a manual `kubectl rollout restart deploy/verdaccio`.
+
+The cause: `reloader.stakater.com/auto` sat on the **pod template**
+(`spec.template.metadata.annotations`), where Reloader does not look. It had
+been there since 2026-05 and had never fired.
+`kubectl get deploy verdaccio -o jsonpath='{.metadata.annotations}'` returned
+empty.
+
+> **Reloader reads its annotations on the Deployment's own `metadata`, not on
+> the pod template.** An annotation on the template is silently inert — there is
+> no warning, and the Deployment looks correctly configured to anyone grepping
+> the file for `reloader`. `auto: "true"` on the Deployment covers every
+> ConfigMap and Secret it mounts (`verdaccio-config`,
+> `verdaccio-janua-plugin`, `verdaccio-auth`).
+
+Both symptoms present as "the new password does not work", and neither surfaces
+an error on the object you would think to check: the ExternalSecret reported
+`SecretSynced` and the pod reported `Ready` throughout the second one.
 
 ---
 
