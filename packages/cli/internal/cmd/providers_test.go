@@ -133,9 +133,92 @@ func TestProviderPorkbun_Subcommands(t *testing.T) {
 	porkbun := findSubcommand(NewProvidersCommand(cfg), "porkbun")
 	require.NotNil(t, porkbun)
 
-	for _, want := range []string{"domains", "dns", "dns-apply", "renewals", "nameservers", "nameservers-apply"} {
+	for _, want := range []string{"credentials", "ping", "domains", "dns", "dns-apply", "renewals", "nameservers", "nameservers-apply", "auto-renew-apply"} {
 		assert.NotNil(t, findSubcommand(porkbun, want), "expected providers porkbun %s", want)
 	}
+}
+
+// Porkbun API keys are per Porkbun ACCOUNT. A client that keeps its own
+// registrar account (CTM/creatumundo.mx) cannot be reached with the estate's
+// global key at all — Porkbun answers INVALID_DOMAIN, which reads like a typo.
+// --tenant/--project is what selects the account, so EVERY porkbun verb must
+// offer it; a verb that silently omits it would route to MADFAM's account and
+// report a domain that plainly exists as missing.
+func TestProviderPorkbun_EveryVerbOffersTenantScope(t *testing.T) {
+	cfg := &config.Config{APIEndpoint: "https://api.test.dev"}
+	porkbun := findSubcommand(NewProvidersCommand(cfg), "porkbun")
+	require.NotNil(t, porkbun)
+	require.NotEmpty(t, porkbun.Commands())
+
+	for _, sub := range porkbun.Commands() {
+		t.Run(sub.Name(), func(t *testing.T) {
+			assert.NotNil(t, sub.Flags().Lookup("tenant"), "expected --tenant on porkbun %s", sub.Name())
+			assert.NotNil(t, sub.Flags().Lookup("project"), "expected --project on porkbun %s", sub.Name())
+		})
+	}
+}
+
+func TestProviderPorkbunAutoRenewApplyFlags(t *testing.T) {
+	cfg := &config.Config{APIEndpoint: "https://api.test.dev"}
+	autoRenew := findSubcommand(findSubcommand(NewProvidersCommand(cfg), "porkbun"), "auto-renew-apply")
+	require.NotNil(t, autoRenew)
+
+	// Mutating verb: dry-run by default, --apply requires --reason.
+	for _, want := range []string{"apply", "reason", "idempotency-key", "auto-renew", "domain", "tenant"} {
+		assert.NotNil(t, autoRenew.Flags().Lookup(want), "expected --%s", want)
+	}
+}
+
+// Read verbs must never grow an --apply: a registrar read that could mutate is
+// exactly the surprise the dry-run-by-default contract exists to prevent.
+func TestProviderPorkbunReadVerbs_AreReadOnly(t *testing.T) {
+	cfg := &config.Config{APIEndpoint: "https://api.test.dev"}
+	porkbun := findSubcommand(NewProvidersCommand(cfg), "porkbun")
+	require.NotNil(t, porkbun)
+
+	for _, action := range []string{"credentials", "ping", "domains", "dns", "renewals", "nameservers"} {
+		t.Run(action, func(t *testing.T) {
+			cmd := findSubcommand(porkbun, action)
+			require.NotNil(t, cmd)
+			assert.Nil(t, cmd.Flags().Lookup("apply"), "%s is read-only and must not offer --apply", action)
+			assert.Nil(t, cmd.Flags().Lookup("reason"), "%s is read-only and must not offer --reason", action)
+		})
+	}
+}
+
+// Peer of TestProviderCloudflare_MatchesServerCapabilityActions: the CLI module
+// cannot import switchyard-api's internal package, so the server's registered
+// porkbun actions are pinned here. Drift in either direction fails loudly
+// rather than leaving a verb the server does not route (or a server capability
+// no operator can reach).
+func TestProviderPorkbun_MatchesServerCapabilityActions(t *testing.T) {
+	serverActions := []string{
+		"ping", "credentials", "domains", "dns", "dns-apply",
+		"renewals", "nameservers", "nameservers-apply", "auto-renew-apply",
+	}
+
+	cfg := &config.Config{APIEndpoint: "https://api.test.dev"}
+	porkbun := findSubcommand(NewProvidersCommand(cfg), "porkbun")
+	require.NotNil(t, porkbun)
+
+	cliActions := make([]string, 0, len(porkbun.Commands()))
+	for _, sub := range porkbun.Commands() {
+		cliActions = append(cliActions, sub.Name())
+	}
+	assert.ElementsMatch(t, serverActions, cliActions,
+		"CLI porkbun verbs must match the server capability registry")
+}
+
+func TestOperationScope_CarriesTenant(t *testing.T) {
+	scope := operationScope(operationFlags{tenant: "crea", project: "crea-map"})
+	require.NotNil(t, scope)
+	assert.Equal(t, "crea", scope["tenant"])
+	assert.Equal(t, "crea-map", scope["project"])
+
+	// An unscoped operation must not invent a tenant — the server reads an
+	// absent tenant as "fall back to the global MADFAM account", and a phantom
+	// value here would silently reroute every unscoped call.
+	assert.Nil(t, operationScope(operationFlags{}))
 }
 
 func TestProviderActionFlags(t *testing.T) {

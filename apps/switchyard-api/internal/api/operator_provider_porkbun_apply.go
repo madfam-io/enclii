@@ -44,18 +44,19 @@ func (h *Handler) handleProviderPorkbunDNSApplyDryRun(ctx context.Context, opera
 		}
 	}
 
-	client := h.porkbunProviderClient()
+	client, scope := h.porkbunClientForRequest(ctx, req)
+	data["credentialScope"] = scope.asData()
 	if client == nil {
 		return operatorOperationResponse{
 			OperationID: operationID,
 			Operation:   operation,
 			Status:      "adapter_unconfigured",
 			DryRun:      true,
-			Summary:     "porkbun.dns-apply cannot run until Porkbun API credentials are configured",
+			Summary:     fmt.Sprintf("porkbun.dns-apply cannot run until %s Porkbun API credentials are configured", porkbunScopeLabel(scope)),
 			Data:        data,
 			Steps:       steps,
-			Warnings:    []string{"porkbun API credentials are not configured on switchyard-api"},
-			Next:        []string{"configure ENCLII_PORKBUN_API_KEY and ENCLII_PORKBUN_SECRET_API_KEY on switchyard-api through Enclii secrets, then rerun this dry-run"},
+			Warnings:    []string{porkbunScopeWarning(scope)},
+			Next:        porkbunUnconfiguredNext(scope),
 		}
 	}
 
@@ -113,18 +114,19 @@ func (h *Handler) handleProviderPorkbunDNSApply(ctx context.Context, operation s
 		}, http.StatusBadRequest
 	}
 
-	client := h.porkbunProviderClient()
+	client, scope := h.porkbunClientForRequest(ctx, req)
+	data["credentialScope"] = scope.asData()
 	if client == nil {
 		return operatorOperationResponse{
 			OperationID: operationID,
 			Operation:   operation,
 			Status:      "adapter_unconfigured",
 			DryRun:      false,
-			Summary:     "porkbun.dns-apply cannot run until Porkbun API credentials are configured",
+			Summary:     fmt.Sprintf("porkbun.dns-apply cannot run until %s Porkbun API credentials are configured", porkbunScopeLabel(scope)),
 			Data:        data,
 			Steps:       steps,
-			Warnings:    []string{"porkbun API credentials are not configured on switchyard-api"},
-			Next:        []string{"configure Porkbun provider credentials through Enclii secrets, then retry"},
+			Warnings:    []string{porkbunScopeWarning(scope)},
+			Next:        porkbunUnconfiguredNext(scope),
 		}, http.StatusServiceUnavailable
 	}
 
@@ -210,18 +212,19 @@ func (h *Handler) handleProviderPorkbunNameserversApplyDryRun(ctx context.Contex
 	if invalid := validatePorkbunNameserversApplyIntent(intent); invalid != "" {
 		return operatorOperationResponse{OperationID: operationID, Operation: operation, Status: "invalid_request", DryRun: true, Summary: invalid, Data: data, Steps: steps, Warnings: []string{invalid}}
 	}
-	client := h.porkbunProviderClient()
+	client, scope := h.porkbunClientForRequest(ctx, req)
+	data["credentialScope"] = scope.asData()
 	if client == nil {
 		return operatorOperationResponse{
 			OperationID: operationID,
 			Operation:   operation,
 			Status:      "adapter_unconfigured",
 			DryRun:      true,
-			Summary:     "porkbun.nameservers-apply cannot run until Porkbun API credentials are configured",
+			Summary:     fmt.Sprintf("porkbun.nameservers-apply cannot run until %s Porkbun API credentials are configured", porkbunScopeLabel(scope)),
 			Data:        data,
 			Steps:       steps,
-			Warnings:    []string{"porkbun API credentials are not configured on switchyard-api"},
-			Next:        []string{"configure ENCLII_PORKBUN_API_KEY and ENCLII_PORKBUN_SECRET_API_KEY through Enclii secrets, then rerun this dry-run"},
+			Warnings:    []string{porkbunScopeWarning(scope)},
+			Next:        porkbunUnconfiguredNext(scope),
 		}
 	}
 	current, err := client.GetNameservers(ctx, intent.Domain)
@@ -256,18 +259,19 @@ func (h *Handler) handleProviderPorkbunNameserversApply(ctx context.Context, ope
 	if invalid := validatePorkbunNameserversApplyIntent(intent); invalid != "" {
 		return operatorOperationResponse{OperationID: operationID, Operation: operation, Status: "invalid_request", DryRun: false, Summary: invalid, Data: data, Steps: steps, Warnings: []string{invalid}}, http.StatusBadRequest
 	}
-	client := h.porkbunProviderClient()
+	client, scope := h.porkbunClientForRequest(ctx, req)
+	data["credentialScope"] = scope.asData()
 	if client == nil {
 		return operatorOperationResponse{
 			OperationID: operationID,
 			Operation:   operation,
 			Status:      "adapter_unconfigured",
 			DryRun:      false,
-			Summary:     "porkbun.nameservers-apply cannot run until Porkbun API credentials are configured",
+			Summary:     fmt.Sprintf("porkbun.nameservers-apply cannot run until %s Porkbun API credentials are configured", porkbunScopeLabel(scope)),
 			Data:        data,
 			Steps:       steps,
-			Warnings:    []string{"porkbun API credentials are not configured on switchyard-api"},
-			Next:        []string{"configure Porkbun provider credentials through Enclii secrets, then retry"},
+			Warnings:    []string{porkbunScopeWarning(scope)},
+			Next:        porkbunUnconfiguredNext(scope),
 		}, http.StatusServiceUnavailable
 	}
 	current, err := client.GetNameservers(ctx, intent.Domain)
@@ -538,4 +542,235 @@ func porkbunProviderReadFailed(operationID, operation string, dryRun bool, summa
 		Steps:       steps,
 		Warnings:    []string{err.Error()},
 	}
+}
+
+// --- auto-renew ------------------------------------------------------------
+//
+// Auto-renew is the one registrar mutation besides nameservers that a tenant
+// actually needs from the platform: a client-owned domain that silently loses
+// auto-renew is an outage with a 60-day fuse. Renewal itself is deliberately
+// NOT wired — Porkbun's /domain/renew spends account credit and requires the
+// caller to pass the exact current price in pennies, so an automated apply
+// would be a money mutation gated on a price the platform would have to guess.
+// Read `providers porkbun renewals` and renew in the dashboard.
+
+type porkbunAutoRenewApplyIntent struct {
+	Domain  string
+	Enabled bool
+	// Requested is the raw flag as typed, so an unparseable value is reported
+	// rather than silently defaulting to "off" — which would be a mutation the
+	// operator never asked for.
+	Requested string
+}
+
+func porkbunAutoRenewApplyIntentFromRequest(req operatorOperationRequest) porkbunAutoRenewApplyIntent {
+	requested := strings.TrimSpace(operationArg(req, "auto_renew", "auto-renew", "enabled", "status"))
+	return porkbunAutoRenewApplyIntent{
+		Domain:    porkbunManagedDomainFromRequest(req),
+		Enabled:   porkbunAutoRenewEnabled(requested),
+		Requested: requested,
+	}
+}
+
+func porkbunAutoRenewEnabled(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "on", "true", "yes", "1", "enable", "enabled":
+		return true
+	default:
+		return false
+	}
+}
+
+func validatePorkbunAutoRenewApplyIntent(intent porkbunAutoRenewApplyIntent) string {
+	if strings.TrimSpace(intent.Domain) == "" {
+		return "porkbun.auto-renew-apply requires a target domain"
+	}
+	switch strings.ToLower(strings.TrimSpace(intent.Requested)) {
+	case "on", "true", "yes", "1", "enable", "enabled",
+		"off", "false", "no", "0", "disable", "disabled":
+		return ""
+	case "":
+		return "porkbun.auto-renew-apply requires --auto-renew on|off"
+	default:
+		return fmt.Sprintf("porkbun.auto-renew-apply --auto-renew must be on or off, got %q", intent.Requested)
+	}
+}
+
+func porkbunAutoRenewApplyData(intent porkbunAutoRenewApplyIntent) map[string]any {
+	return map[string]any{
+		"domain":    intent.Domain,
+		"autoRenew": intent.Enabled,
+		"can_apply": false,
+	}
+}
+
+// findPorkbunDomain returns the account's record for one domain, or nil when the
+// account does not hold it. Used to diff auto-renew before mutating and to tell
+// "not in this account" apart from "API access not enabled".
+func findPorkbunDomain(ctx context.Context, client *porkbun.Client, domain string) (*porkbun.Domain, error) {
+	domains, err := client.ListDomains(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, candidate := range domains.Domains {
+		if strings.EqualFold(strings.Trim(candidate.Domain.String(), "."), strings.Trim(domain, ".")) {
+			match := candidate
+			return &match, nil
+		}
+	}
+	return nil, nil
+}
+
+func (h *Handler) handleProviderPorkbunAutoRenewApplyDryRun(ctx context.Context, operation string, req operatorOperationRequest) operatorOperationResponse {
+	operationID := fmt.Sprintf("op_%d", time.Now().UTC().UnixNano())
+	intent := porkbunAutoRenewApplyIntentFromRequest(req)
+	data := porkbunAutoRenewApplyData(intent)
+	steps := porkbunProviderSteps("load Porkbun domain state through Enclii", "compare desired auto-renew with live registrar state")
+	if invalid := validatePorkbunAutoRenewApplyIntent(intent); invalid != "" {
+		return operatorOperationResponse{OperationID: operationID, Operation: operation, Status: "invalid_request", DryRun: true, Summary: invalid, Data: data, Steps: steps, Warnings: []string{invalid}}
+	}
+	client, scope := h.porkbunClientForRequest(ctx, req)
+	data["credentialScope"] = scope.asData()
+	if client == nil {
+		return operatorOperationResponse{
+			OperationID: operationID,
+			Operation:   operation,
+			Status:      "adapter_unconfigured",
+			DryRun:      true,
+			Summary:     fmt.Sprintf("porkbun.auto-renew-apply cannot run until %s Porkbun API credentials are configured", porkbunScopeLabel(scope)),
+			Data:        data,
+			Steps:       steps,
+			Warnings:    []string{porkbunScopeWarning(scope)},
+			Next:        porkbunUnconfiguredNext(scope),
+		}
+	}
+	current, err := findPorkbunDomain(ctx, client, intent.Domain)
+	if err != nil {
+		return porkbunProviderReadFailed(operationID, operation, true, "failed to read Porkbun domain state", data, steps, err)
+	}
+	if current == nil {
+		return operatorOperationResponse{
+			OperationID: operationID,
+			Operation:   operation,
+			Status:      "target_not_found",
+			DryRun:      true,
+			Summary:     fmt.Sprintf("%s is not held by the %s Porkbun account", intent.Domain, porkbunScopeLabel(scope)),
+			Data:        data,
+			Steps:       steps,
+			Warnings:    []string{fmt.Sprintf("domain %s was not returned by domain/listAll for this credential scope", intent.Domain)},
+			Next:        []string{"confirm the --tenant/--project scope names the account that holds this domain", "run providers porkbun domains for this scope to see what it does hold"},
+		}
+	}
+	data["currentAutoRenew"] = current.AutoRenew
+	data["apiAccess"] = current.APIAccess
+	mutation := "update"
+	if (current.AutoRenew.Int() == 1) == intent.Enabled {
+		mutation = "noop"
+	}
+	data["mutation"] = mutation
+	data["can_apply"] = true
+	warnings := []string{}
+	if current.APIAccess.Int() != 1 {
+		warnings = append(warnings, fmt.Sprintf("API access is not enabled for %s in the owning Porkbun dashboard; apply will be refused by Porkbun", intent.Domain))
+	}
+	return operatorOperationResponse{
+		OperationID: operationID,
+		Operation:   operation,
+		Status:      "ready_to_apply",
+		DryRun:      true,
+		Summary:     fmt.Sprintf("porkbun.auto-renew-apply dry-run completed for %s", intent.Domain),
+		Data:        data,
+		Steps:       steps,
+		Warnings:    warnings,
+		Next:        []string{"rerun with --apply and a reason to execute this registrar mutation through Enclii", "poll providers.porkbun.renewals until autoRenew converges"},
+	}
+}
+
+func (h *Handler) handleProviderPorkbunAutoRenewApply(ctx context.Context, operation string, req operatorOperationRequest) (operatorOperationResponse, int) {
+	operationID := fmt.Sprintf("op_%d", time.Now().UTC().UnixNano())
+	intent := porkbunAutoRenewApplyIntentFromRequest(req)
+	data := porkbunAutoRenewApplyData(intent)
+	steps := porkbunProviderSteps("load Porkbun domain state through Enclii", "compare desired auto-renew with live registrar state")
+	steps[0].Status = "completed"
+	if invalid := validatePorkbunAutoRenewApplyIntent(intent); invalid != "" {
+		return operatorOperationResponse{OperationID: operationID, Operation: operation, Status: "invalid_request", DryRun: false, Summary: invalid, Data: data, Steps: steps, Warnings: []string{invalid}}, http.StatusBadRequest
+	}
+	client, scope := h.porkbunClientForRequest(ctx, req)
+	data["credentialScope"] = scope.asData()
+	if client == nil {
+		return operatorOperationResponse{
+			OperationID: operationID,
+			Operation:   operation,
+			Status:      "adapter_unconfigured",
+			DryRun:      false,
+			Summary:     fmt.Sprintf("porkbun.auto-renew-apply cannot run until %s Porkbun API credentials are configured", porkbunScopeLabel(scope)),
+			Data:        data,
+			Steps:       steps,
+			Warnings:    []string{porkbunScopeWarning(scope)},
+			Next:        porkbunUnconfiguredNext(scope),
+		}, http.StatusServiceUnavailable
+	}
+	current, err := findPorkbunDomain(ctx, client, intent.Domain)
+	if err != nil {
+		resp := porkbunProviderReadFailed(operationID, operation, false, "failed to read Porkbun domain state", data, steps, err)
+		return resp, http.StatusBadGateway
+	}
+	steps[1].Status = "completed"
+	if current == nil {
+		return operatorOperationResponse{
+			OperationID: operationID,
+			Operation:   operation,
+			Status:      "target_not_found",
+			DryRun:      false,
+			Summary:     fmt.Sprintf("%s is not held by the %s Porkbun account", intent.Domain, porkbunScopeLabel(scope)),
+			Data:        data,
+			Steps:       steps,
+			Warnings:    []string{fmt.Sprintf("domain %s was not returned by domain/listAll for this credential scope", intent.Domain)},
+		}, http.StatusNotFound
+	}
+	data["currentAutoRenew"] = current.AutoRenew
+	data["apiAccess"] = current.APIAccess
+	if (current.AutoRenew.Int() == 1) == intent.Enabled {
+		data["mutation"] = "noop"
+		steps[2].Status = "completed"
+		steps[2].Detail = "live Porkbun auto-renew already matches desired state"
+		steps[3].Status = "completed"
+		return operatorOperationResponse{
+			OperationID: operationID,
+			Operation:   operation,
+			Status:      "noop",
+			DryRun:      false,
+			Summary:     fmt.Sprintf("Porkbun auto-renew for %s already matches desired Enclii state", intent.Domain),
+			Data:        data,
+			Steps:       steps,
+		}, http.StatusOK
+	}
+	result, err := client.UpdateAutoRenew(ctx, intent.Domain, intent.Enabled, req.IdempotencyKey)
+	if err != nil {
+		return operatorOperationResponse{
+			OperationID: operationID,
+			Operation:   operation,
+			Status:      "provider_apply_failed",
+			DryRun:      false,
+			Summary:     fmt.Sprintf("failed to update Porkbun auto-renew for %s", intent.Domain),
+			Data:        data,
+			Steps:       steps,
+			Warnings:    []string{err.Error()},
+		}, http.StatusBadGateway
+	}
+	data["mutation"] = "update"
+	data["result"] = result.Results
+	steps[2].Status = "completed"
+	steps[2].Detail = fmt.Sprintf("set auto-renew=%t through Porkbun", intent.Enabled)
+	steps[3].Status = "completed"
+	return operatorOperationResponse{
+		OperationID: operationID,
+		Operation:   operation,
+		Status:      "succeeded",
+		DryRun:      false,
+		Summary:     fmt.Sprintf("updated Porkbun auto-renew for %s through Enclii", intent.Domain),
+		Data:        data,
+		Steps:       steps,
+		Next:        []string{"poll providers.porkbun.renewals until autoRenew converges"},
+	}, http.StatusAccepted
 }

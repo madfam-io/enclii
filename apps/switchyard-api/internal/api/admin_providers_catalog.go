@@ -75,7 +75,17 @@ func (h *Handler) providerReadinessSnapshot(ctx context.Context, provider string
 		}
 		return gin.H{"configured": true, "tokenPresent": true, "secretValuesExposed": false}
 	case "porkbun":
-		return gin.H{"configured": h.porkbunConfigured()}
+		// Porkbun readiness is per ACCOUNT, not per estate: the global key
+		// operates MADFAM's domains and cannot touch a tenant that keeps its
+		// own registrar account. Reporting one boolean would tell an operator
+		// "configured" while every crea operation fails, so the catalog lists
+		// each registrar scope and its own readiness.
+		return gin.H{
+			"configured":         h.porkbunConfigured(),
+			"globalConfigured":   h.porkbunConfigured(),
+			"vaultClientEnabled": h.vaultClient != nil && h.vaultClient.IsEnabled(),
+			"registrarScopes":    h.porkbunRegistrarScopes(ctx),
+		}
 	default:
 		return gin.H{"configured": false}
 	}
@@ -116,4 +126,57 @@ func (h *Handler) resendTenantBindings(ctx context.Context) []tenantBinding {
 
 func (h *Handler) porkbunConfigured() bool {
 	return h != nil && h.config != nil && strings.TrimSpace(h.config.PorkbunAPIKey) != ""
+}
+
+// porkbunRegistrarScope is one row of the admin console's registrar table: the
+// account a tenant's domains resolve to, and whether that account's credentials
+// are usable. Never carries a credential value.
+type porkbunRegistrarScope struct {
+	Tenant      string   `json:"tenant"`
+	DisplayName string   `json:"display_name"`
+	Account     string   `json:"account"`
+	Domains     []string `json:"domains"`
+	VaultPath   string   `json:"vault_path,omitempty"`
+	Configured  bool     `json:"configured"`
+	Detail      string   `json:"detail,omitempty"`
+}
+
+// porkbunRegistrarScopes reports, per tenant, which Porkbun account its domains
+// resolve to and whether that account can actually be operated right now.
+//
+// Tenants on the MADFAM account are collapsed onto the global readiness rather
+// than probed individually — they all share one key pair, so probing each would
+// be N identical answers. Tenant-owned accounts are resolved for real (a Vault
+// read per tenant), because that is the answer an operator is looking at this
+// table to get.
+func (h *Handler) porkbunRegistrarScopes(ctx context.Context) []porkbunRegistrarScope {
+	scopes := make([]porkbunRegistrarScope, 0)
+	for _, tenant := range ecosystem.AllTenants() {
+		if tenant.ID == ecosystem.TenantOther {
+			continue
+		}
+		row := porkbunRegistrarScope{
+			Tenant:      string(tenant.ID),
+			DisplayName: tenant.DisplayName,
+			Account:     "madfam",
+			Domains:     tenant.DomainSuffixes,
+			Configured:  h.porkbunConfigured(),
+		}
+		if !h.porkbunConfigured() {
+			row.Detail = "global ENCLII_PORKBUN_* credentials are not configured"
+		}
+		if tenant.Registrar.IsTenantOwned() {
+			req := operatorOperationRequest{Scope: map[string]string{"tenant": string(tenant.ID)}}
+			client, scope := h.porkbunClientForRequest(ctx, req)
+			row.Account = "tenant"
+			row.VaultPath = scope.VaultPath
+			row.Configured = client != nil
+			row.Detail = ""
+			if client == nil {
+				row.Detail = porkbunScopeWarning(scope)
+			}
+		}
+		scopes = append(scopes, row)
+	}
+	return scopes
 }

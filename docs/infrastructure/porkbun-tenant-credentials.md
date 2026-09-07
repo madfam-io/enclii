@@ -1,0 +1,205 @@
+---
+title: Porkbun per-tenant registrar credentials
+description: How Enclii operates a registrar account that belongs to a client rather than to MADFAM
+sidebar_position: 21
+tags: [infrastructure, dns, porkbun, registrar, tenancy, secrets]
+---
+
+# Porkbun per-tenant registrar credentials
+
+## The problem this solves
+
+Porkbun API keys are scoped to **one Porkbun account**. Every Porkbun operation
+Enclii shipped before this change authenticated with a single global pair —
+`ENCLII_PORKBUN_API_KEY` / `ENCLII_PORKBUN_SECRET_API_KEY`, projected into
+switchyard-api from `secret/enclii` — which belongs to MADFAM's own account.
+
+That is correct for `madfam.io` and every other domain the estate registered
+itself. It is *structurally unable* to touch a domain a client holds in the
+client's own Porkbun login. The failure is not a permission error: Porkbun
+answers **`INVALID_DOMAIN`**, which reads exactly like a typo. So "operate the
+client's registrar through the platform API" was never a permission to be
+granted — it was an impossible call.
+
+`creatumundo.mx` is the live case. It was transferred into Crea Tu Mundo's own
+Porkbun account on 2026-09-05. Enclii has already created its Cloudflare zone,
+which stays `pending` until the nameservers move at the registrar — and that
+move is precisely the call the global key cannot make.
+
+## Credential resolution
+
+Every Porkbun operation asks which account it is talking to before it does
+anything else. Resolution order:
+
+| # | Signal | Result |
+|---|--------|--------|
+| 1 | `--tenant <id>`, or `--project <slug>` whose slug a tenant claims | that tenant |
+| 2 | the owning tenant of the operation's domain, by suffix | that tenant |
+| 3 | nothing claims it | MADFAM's global credentials |
+
+A resolved tenant then splits two ways:
+
+- **Tenant declares no registrar binding** → its domains live in MADFAM's
+  account, so the global credentials are used. The tenant is still named in the
+  response, for the operator's benefit.
+- **Tenant declares a tenant-owned registrar binding** → switchyard-api reads
+  that tenant's key pair from its Vault path at request time.
+
+Two rules make this safe:
+
+**Explicit scope beats domain inference.** An operator who typed `--tenant crea`
+and silently reached MADFAM's account would be told the domain does not exist,
+with nothing on screen explaining why.
+
+**A tenant scope that cannot produce credentials FAILS.** It never falls back to
+the global key. Falling back would send the operation to the wrong registrar
+account and report `INVALID_DOMAIN` for a domain that plainly exists — the
+single most confusing outcome available. The fallback in row 3 is for domains
+nobody claims, never for a claim that could not be honoured.
+
+## Why Vault at request time rather than another env var
+
+The Cloudflare precedent — `h.config.CloudflareAPIToken`, projected by
+ExternalSecrets into the pod — works because there is exactly **one** Cloudflare
+account for the whole estate. Registrar accounts are per client and arrive
+whenever a client onboards. An env-var pair per tenant would mean, for each new
+client: an ExternalSecret edit, a config field, a redeploy, and a pod restart.
+
+switchyard-api already holds a Vault client for exactly this shape of problem
+(`h.vaultClient`; the kalya feed provisioner reads `secret/kalya` at request
+time the same way). Using it means a new tenant is **a Vault write plus a
+registry entry** — no restart, and no new deployment surface.
+
+There is deliberately **no ExternalSecret** for these credentials. Nothing
+should mount a client's registrar keys into a pod's environment.
+
+## Where the pieces live
+
+| Piece | Location |
+|-------|----------|
+| Tenant → registrar binding | `apps/switchyard-api/internal/ecosystem/tenants.json` |
+| Resolver | `apps/switchyard-api/internal/api/porkbun_credential_scope.go` |
+| Intake target (how the key pair reaches Vault) | `apps/switchyard-api/internal/secretsintake/registry.yaml` |
+| Operator one-shot | `scripts/operator/porkbun-tenant-credentials.sh` |
+| CLI verbs | `packages/cli/internal/cmd/providers.go` |
+
+The binding for CTM:
+
+```json
+{
+  "id": "crea",
+  "displayName": "Crea Tu Mundo",
+  "domainSuffixes": ["creatumundo.mx"],
+  "projects": ["crea-map", "nauta"],
+  "registrar": {
+    "provider": "porkbun",
+    "account": "tenant",
+    "vaultPath": "secret/crea",
+    "apiKeyProperty": "porkbun_api_key",
+    "secretKeyProperty": "porkbun_secret_key"
+  }
+}
+```
+
+The Vault path and property names here must match the intake registry entry
+exactly. A mismatch resolves to "credentials missing" — never to a wrong-account
+call.
+
+## Loading a tenant's credentials
+
+One command, run by a human operator. It prompts silently, sends the values
+straight to Vault through Enclii, and verifies them against the live Porkbun
+API. No agent, log, shell history, or terminal scrollback ever holds a value.
+
+```bash
+ENCLII_TENANT=crea VERIFY_DOMAIN=creatumundo.mx \
+  scripts/operator/porkbun-tenant-credentials.sh
+```
+
+Equivalent by hand:
+
+```bash
+enclii secrets intake submit crea/porkbun-registrar \
+  --reason "load CTM Porkbun registrar credentials"
+enclii providers porkbun ping --tenant crea
+```
+
+### The one manual step that stays manual
+
+In the **client's** Porkbun dashboard, per domain:
+
+> Domain Management → the domain → Details → enable **API Access**
+
+Porkbun refuses every API call for a domain that has not been opted in, and
+reports it identically to a bad key. Nothing in Enclii can flip this toggle.
+
+Two commands tell the failures apart:
+
+- `enclii providers porkbun ping --tenant crea` — validates the key pair alone,
+  naming no domain. Fails ⇒ wrong or mistyped key.
+- `enclii providers porkbun renewals --tenant crea` — lists each domain with
+  `apiAccess`. `0` ⇒ the toggle is off.
+
+## CLI usage for CTM
+
+Read-only, safe at any time:
+
+```bash
+enclii providers porkbun credentials --tenant crea   # which account, is it usable
+enclii providers porkbun ping        --tenant crea   # validate the key pair live
+enclii providers porkbun domains     --tenant crea   # what the account holds
+enclii providers porkbun renewals    --tenant crea   # expiry, autoRenew, apiAccess
+enclii providers porkbun nameservers creatumundo.mx --tenant crea
+enclii providers porkbun dns         creatumundo.mx --tenant crea
+```
+
+`--project crea-map` and `--project nauta` resolve to the same account, so an
+operator working in a project context does not have to learn a second
+vocabulary.
+
+Mutating verbs are dry-run by default; `--apply` requires `--reason`:
+
+```bash
+# Dry run first — always.
+enclii providers porkbun nameservers-apply creatumundo.mx --tenant crea \
+  --nameservers <ns1>,<ns2>
+
+enclii providers porkbun nameservers-apply creatumundo.mx --tenant crea \
+  --nameservers <ns1>,<ns2> \
+  --apply --reason "delegate creatumundo.mx to its Enclii-managed Cloudflare zone"
+```
+
+```bash
+enclii providers porkbun auto-renew-apply creatumundo.mx --tenant crea --auto-renew on
+enclii providers porkbun auto-renew-apply creatumundo.mx --tenant crea --auto-renew on \
+  --apply --reason "protect the client apex from lapsing"
+```
+
+Every response carries a `credentialScope` block naming the tenant, the account,
+how the scope was decided, and the Vault path consulted — never a value.
+
+## What is deliberately not wired
+
+**Domain renewal.** Porkbun's `/domain/renew` spends account credit and requires
+the caller to pass the exact current renewal price in pennies. An automated
+apply would be a money mutation gated on a price the platform would have to
+guess. Read `providers porkbun renewals` and renew in the dashboard.
+`auto-renew-apply` covers the case that actually causes outages.
+
+**DNS record update and delete.** Unchanged from before: `dns-apply` creates a
+missing record and refuses to overwrite a conflicting one.
+
+## Adding another client's registrar account
+
+1. Add the tenant to `tenants.json` with its `domainSuffixes`, `projects`, and a
+   `registrar` block pointing at its Vault path.
+2. Add a matching intake target to `secretsintake/registry.yaml` — same path,
+   same property names, and **no** `external_secret`.
+3. Update the target-count assertions in
+   `apps/switchyard-api/internal/secretsintake/registry_test.go`.
+4. Deploy switchyard-api, then run the one-shot with `ENCLII_TENANT=<id>`.
+
+## Related
+
+- [DNS Setup (Porkbun)](/infrastructure/dns-setup-porkbun)
+- [Cloudflare Integration](/infrastructure/CLOUDFLARE)

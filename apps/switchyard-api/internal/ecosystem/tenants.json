@@ -41,6 +41,22 @@
       "resendRegion": "us-east-1"
     },
     {
+      "id": "crea",
+      "displayName": "Crea Tu Mundo",
+      "domainSuffixes": ["creatumundo.mx"],
+      "defaultSenderDomain": "creatumundo.mx",
+      "defaultSenderAddress": "noreply@creatumundo.mx",
+      "resendRegion": "us-east-1",
+      "projects": ["crea-map", "nauta"],
+      "registrar": {
+        "provider": "porkbun",
+        "account": "tenant",
+        "vaultPath": "secret/crea",
+        "apiKeyProperty": "porkbun_api_key",
+        "secretKeyProperty": "porkbun_secret_key"
+      }
+    },
+    {
       "id": "other",
       "displayName": "Other",
       "domainSuffixes": [],

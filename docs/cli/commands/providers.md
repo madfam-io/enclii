@@ -16,7 +16,9 @@ coverage includes GitHub workflow runs, repository Actions secrets, GHCR package
 metadata/versions, branch protection, Cloudflare DNS, Cloudflare tunnel status,
 Cloudflare DNS apply for zones Enclii controls, tunnel route inventory, Porkbun
 domain inventory, Porkbun DNS reads, Porkbun DNS create fallback, Porkbun
-renewal reads, and Porkbun nameserver apply. Hetzner, Cloudflare Access, and R2
+renewal reads, Porkbun credential/ping checks, Porkbun auto-renew apply, and
+Porkbun nameserver apply (against MADFAM's registrar account or, with
+`--tenant`/`--project`, a client's own). Hetzner, Cloudflare Access, and R2
 remain contract surfaces until their adapters are wired; missing coverage
 returns `adapter_unconfigured`.
 
@@ -27,7 +29,7 @@ returns `adapter_unconfigured`.
 | `enclii providers capabilities` | List server-supported provider capabilities |
 | `enclii providers github runs|rerun|cancel|secrets|packages|protection` | GitHub Actions, repo secrets, GHCR, branch protection |
 | `enclii providers cloudflare zones|zone-add-apply|zone-settings-apply|dns|dns-apply|tunnels|tunnels-apply|access|r2|hostnames` | Zones, DNS, tunnels, Access, R2, custom hostnames |
-| `enclii providers porkbun domains|dns|dns-apply|renewals|nameservers|nameservers-apply` | Domain inventory, DNS create fallback, renewal state, registrar delegation |
+| `enclii providers porkbun credentials|ping|domains|dns|dns-apply|renewals|nameservers|nameservers-apply|auto-renew-apply` | Domain inventory, DNS create fallback, renewal state, auto-renew, registrar delegation — per registrar account |
 | `enclii providers hetzner nodes|lb|vswitch|storage|firewall` | Robot/Cloud nodes, DR LB, vSwitch, storage boxes, firewall |
 
 ## Examples
@@ -45,6 +47,9 @@ enclii providers cloudflare tunnels --json
 enclii providers cloudflare tunnels-apply --project example --apply --reason "reconcile junction tunnel routes to correct K8s backends"
 enclii providers porkbun dns-apply crm.phynd.app --domain phynd.app --type CNAME --content c9fac286-497b-4aac-9288-f784a1ea561c.cfargotunnel.com --apply --reason "restore PhyndCRM app host through Enclii"
 enclii providers porkbun nameservers-apply phynd.app --nameservers ns1.cloudflare.com,ns2.cloudflare.com --apply --reason "delegate phynd.app to Enclii-managed Cloudflare"
+enclii providers porkbun ping --tenant crea
+enclii providers porkbun domains --tenant crea
+enclii providers porkbun nameservers-apply creatumundo.mx --tenant crea --nameservers <NS1>,<NS2> --apply --reason "delegate the client apex to its Enclii-managed Cloudflare zone"
 enclii providers github rerun 25430873929 --apply --reason "re-run after GHCR token scope fix"
 ```
 
@@ -79,7 +84,15 @@ enclii providers github rerun 25430873929 --apply --reason "re-run after GHCR to
   blocks on existing records with different content until explicit update/delete
   support is added.
 - Porkbun `nameservers-apply` supports registrar delegation updates through the
-  configured Switchyard Porkbun credentials.
+  Porkbun credentials of whichever registrar account the operation is scoped to.
+- Porkbun credentials are per Porkbun **account**. Domains a client holds in the
+  client's own Porkbun login are unreachable with the estate's global key —
+  Porkbun answers `INVALID_DOMAIN`, which reads like a typo. Scope such
+  operations with `--tenant <id>` or `--project <slug>`; see
+  [Porkbun per-tenant credentials](/infrastructure/porkbun-tenant-credentials).
+- Porkbun domain `renew` is deliberately not wired: it spends account credit and
+  requires the caller to pass the exact current price, so it stays a dashboard
+  action. `auto-renew-apply` covers the case that actually causes outages.
 - Hetzner surfaces are declared but not yet backed by clients.
 
 ## Cloudflare DNS apply

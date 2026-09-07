@@ -30,26 +30,49 @@ func (h *Handler) handleProviderReadOperation(ctx context.Context, provider, act
 }
 
 func (h *Handler) handlePorkbunReadOperation(ctx context.Context, provider, action, operation string, req operatorOperationRequest) operatorOperationResponse {
-	client := h.porkbunProviderClient()
-	if client == nil {
-		return operatorReadUnavailable(operation, provider, action, "porkbun API credentials are not configured on switchyard-api")
+	// Every Porkbun read authenticates against ONE Porkbun account, so a read
+	// is only meaningful once the scope has decided which account that is —
+	// see porkbun_credential_scope.go. `credentials` answers from the scope
+	// alone and therefore runs before any client is required.
+	if action == "credentials" {
+		return h.handlePorkbunCredentialsReadOperation(ctx, provider, action, operation, req)
 	}
+
+	client, scope := h.porkbunClientForRequest(ctx, req)
+	if client == nil {
+		return operatorReadUnavailable(operation, provider, action, porkbunScopeWarning(scope))
+	}
+	scopeData := scope.asData()
 
 	target := operationTarget(req)
 	switch action {
+	case "ping":
+		// Cheapest possible proof that a scope's credentials actually work:
+		// Porkbun validates the pair and returns the caller IP, nothing else.
+		// This is what the operator one-shot verifies with after writing a key
+		// pair into Vault.
+		ping, err := client.Ping(ctx)
+		if err != nil {
+			return operatorReadFailed(operation, provider, action, err)
+		}
+		return operatorReadSuccess(operation, provider, action, gin.H{
+			"credentialScope":  scopeData,
+			"credentialsValid": ping.CredentialsValid,
+			"callerIP":         ping.YourIP.String(),
+		})
 	case "domains":
 		if target != "" {
 			domain, err := client.GetDomain(ctx, target)
 			if err != nil {
 				return operatorReadFailed(operation, provider, action, err)
 			}
-			return operatorReadSuccess(operation, provider, action, gin.H{"target": target, "domain": domain.Domain})
+			return operatorReadSuccess(operation, provider, action, gin.H{"credentialScope": scopeData, "target": target, "domain": domain.Domain})
 		}
 		domains, err := client.ListDomains(ctx)
 		if err != nil {
 			return operatorReadFailed(operation, provider, action, err)
 		}
-		return operatorReadSuccess(operation, provider, action, gin.H{"domains": domains.Domains, "count": len(domains.Domains)})
+		return operatorReadSuccess(operation, provider, action, gin.H{"credentialScope": scopeData, "domains": domains.Domains, "count": len(domains.Domains)})
 	case "nameservers":
 		domain := porkbunManagedDomainFromRequest(req)
 		if domain == "" {
@@ -59,7 +82,7 @@ func (h *Handler) handlePorkbunReadOperation(ctx context.Context, provider, acti
 		if err != nil {
 			return operatorReadFailed(operation, provider, action, err)
 		}
-		return operatorReadSuccess(operation, provider, action, gin.H{"target": domain, "nameservers": nameservers.Nameservers})
+		return operatorReadSuccess(operation, provider, action, gin.H{"credentialScope": scopeData, "target": domain, "nameservers": nameservers.Nameservers})
 	case "dns":
 		domain := porkbunManagedDomainFromRequest(req)
 		if domain == "" {
@@ -70,9 +93,10 @@ func (h *Handler) handlePorkbunReadOperation(ctx context.Context, provider, acti
 			return operatorReadFailed(operation, provider, action, err)
 		}
 		return operatorReadSuccess(operation, provider, action, gin.H{
-			"target":  domain,
-			"records": records.Records,
-			"count":   len(records.Records),
+			"credentialScope": scopeData,
+			"target":          domain,
+			"records":         records.Records,
+			"count":           len(records.Records),
 		})
 	case "renewals":
 		domains, err := client.ListDomains(ctx)
@@ -86,11 +110,44 @@ func (h *Handler) handlePorkbunReadOperation(ctx context.Context, provider, acti
 				"status":     domain.Status,
 				"expireDate": domain.ExpireDate,
 				"autoRenew":  domain.AutoRenew,
+				// apiAccess is 0 until the per-domain API toggle is enabled in
+				// the owning account's dashboard. Surfacing it here is what
+				// turns "INVALID_DOMAIN for a domain I can see" into a
+				// one-line diagnosis.
+				"apiAccess": domain.APIAccess,
 			})
 		}
-		return operatorReadSuccess(operation, provider, action, gin.H{"domains": renewals, "count": len(renewals)})
+		return operatorReadSuccess(operation, provider, action, gin.H{"credentialScope": scopeData, "domains": renewals, "count": len(renewals)})
 	default:
 		return operatorReadUnavailable(operation, provider, action, "porkbun read adapter is not wired for this operation")
+	}
+}
+
+// handlePorkbunCredentialsReadOperation reports which Porkbun account a scope
+// resolves to and whether its credentials are present — the Porkbun peer of
+// providers.cloudflare.credentials. It never returns a credential value; the
+// most it says about one is that it exists.
+func (h *Handler) handlePorkbunCredentialsReadOperation(ctx context.Context, provider, action, operation string, req operatorOperationRequest) operatorOperationResponse {
+	client, scope := h.porkbunClientForRequest(ctx, req)
+	data := gin.H{
+		"credentialScope":     scope.asData(),
+		"configured":          client != nil,
+		"secretValuesExposed": false,
+		"globalConfigured":    h.porkbunConfigured(),
+		"vaultClientEnabled":  h != nil && h.vaultClient != nil && h.vaultClient.IsEnabled(),
+	}
+	if client != nil {
+		return operatorReadSuccess(operation, provider, action, data)
+	}
+	return operatorOperationResponse{
+		OperationID: fmt.Sprintf("op_%d", time.Now().UTC().UnixNano()),
+		Operation:   operation,
+		Status:      "adapter_unconfigured",
+		DryRun:      true,
+		Summary:     fmt.Sprintf("porkbun.credentials readiness is incomplete for %s account", porkbunScopeLabel(scope)),
+		Data:        data,
+		Warnings:    []string{porkbunScopeWarning(scope)},
+		Next:        porkbunUnconfiguredNext(scope),
 	}
 }
 

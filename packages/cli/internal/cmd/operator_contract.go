@@ -21,6 +21,11 @@ type operationFlags struct {
 	namespace      string
 	project        string
 	service        string
+	// tenant names the ecosystem tenant an operation belongs to. For provider
+	// operations whose credentials are per tenant — Porkbun registrar ops,
+	// where a client's domains live in the CLIENT's own registrar account —
+	// this is what selects which account the call authenticates against.
+	tenant string
 }
 
 type operationRequest struct {
@@ -77,6 +82,19 @@ func addOperationFlags(cmd *cobra.Command, flags *operationFlags) {
 	cmd.Flags().StringVar(&flags.service, "service", "", "Enclii service name/id scope")
 }
 
+// addTenantScopeFlag registers the ecosystem-tenant scope on ONE command.
+//
+// Deliberately not part of addOperationFlags: `ops secrets
+// provision-kalya-feed` and `secrets provision kalya-feed` already own a
+// --tenant flag that means a kalya tenant SLUG (an operation argument), not a
+// credential scope. Registering both on the same command is a cobra panic at
+// construction time, and quietly merging the two meanings would be worse —
+// one selects which Porkbun account to authenticate against, the other names
+// whose feed token to mint.
+func addTenantScopeFlag(cmd *cobra.Command, flags *operationFlags) {
+	cmd.Flags().StringVar(&flags.tenant, "tenant", "", "Enclii ecosystem tenant scope (selects per-tenant provider credentials)")
+}
+
 func operationScope(flags operationFlags) map[string]string {
 	scope := map[string]string{}
 	if flags.namespace != "" {
@@ -87,6 +105,9 @@ func operationScope(flags operationFlags) map[string]string {
 	}
 	if flags.service != "" {
 		scope["service"] = flags.service
+	}
+	if flags.tenant != "" {
+		scope["tenant"] = flags.tenant
 	}
 	if len(scope) == 0 {
 		return nil

@@ -181,3 +181,78 @@ func TestClient_Reads_UsePostWithBodyCredentials(t *testing.T) {
 		})
 	}
 }
+
+// Ping is the only Porkbun call that validates a credential pair without
+// naming a domain, which is what makes it usable as the verification step after
+// per-tenant credentials are written to Vault.
+func TestClient_Ping_SendsCredentialsAndReportsValidity(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ping" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		var body map[string]any
+		decodeJSONBody(t, r, &body)
+		// Porkbun authenticates every call by these two body fields — headers
+		// do not establish the credential context its domain-scoped reads need.
+		if body["apikey"] != "test-key" || body["secretapikey"] != "test-secret" {
+			t.Errorf("credentials missing from ping body: %#v", body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"SUCCESS","yourIp":"203.0.113.7","credentialsValid":true}`))
+	})
+
+	out, err := client.Ping(context.Background())
+	if err != nil {
+		t.Fatalf("Ping returned error: %v", err)
+	}
+	if !out.CredentialsValid {
+		t.Fatal("credentialsValid should be true")
+	}
+	if out.YourIP.String() != "203.0.113.7" {
+		t.Fatalf("yourIp = %q, want 203.0.113.7", out.YourIP.String())
+	}
+}
+
+// A wrong key pair comes back as a Porkbun ERROR envelope, not an HTTP error,
+// so it must surface as a Go error rather than a successful-looking Ping.
+func TestClient_Ping_InvalidCredentialsIsAnError(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ERROR","message":"Invalid API key."}`))
+	})
+
+	if _, err := client.Ping(context.Background()); err == nil {
+		t.Fatal("invalid credentials must return an error")
+	}
+}
+
+func TestClient_UpdateAutoRenew_SendsStatusAndKeepsPerDomainResults(t *testing.T) {
+	for _, tc := range []struct {
+		enabled bool
+		want    string
+	}{{true, "on"}, {false, "off"}} {
+		client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/domain/updateAutoRenew/creatumundo.mx" {
+				t.Errorf("unexpected path %q", r.URL.Path)
+			}
+			var body map[string]any
+			decodeJSONBody(t, r, &body)
+			if body["status"] != tc.want {
+				t.Errorf("status = %v, want %q", body["status"], tc.want)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"status":"SUCCESS","results":{"creatumundo.mx":{"status":"SUCCESS"}}}`))
+		})
+
+		out, err := client.UpdateAutoRenew(context.Background(), "creatumundo.mx", tc.enabled, "")
+		if err != nil {
+			t.Fatalf("UpdateAutoRenew returned error: %v", err)
+		}
+		if out.Results["creatumundo.mx"].Status.String() != "SUCCESS" {
+			t.Fatalf("per-domain result lost: %#v", out.Results)
+		}
+	}
+}

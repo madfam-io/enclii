@@ -63,6 +63,29 @@ type ListDomainsResponse struct {
 	Domains []Domain `json:"domains"`
 }
 
+// PingResponse is /ping. `credentialsValid` is present and true only when a
+// valid pair was supplied; do() always supplies one, so a successful Ping with
+// CredentialsValid false means Porkbun accepted the call without accepting the
+// credentials and must not be read as a working key pair.
+type PingResponse struct {
+	BasicResponse
+	YourIP           FlexibleString `json:"yourIp"`
+	CredentialsValid bool           `json:"credentialsValid"`
+}
+
+// AutoRenewResult is Porkbun's per-domain outcome for an auto-renew change.
+type AutoRenewResult struct {
+	Status  FlexibleString `json:"status"`
+	Message FlexibleString `json:"message,omitempty"`
+}
+
+// UpdateAutoRenewResponse is /domain/updateAutoRenew/{domain}. `results` is
+// keyed by domain name.
+type UpdateAutoRenewResponse struct {
+	BasicResponse
+	Results map[string]AutoRenewResult `json:"results,omitempty"`
+}
+
 type GetDomainResponse struct {
 	BasicResponse
 	Domain Domain `json:"domain"`
@@ -128,6 +151,37 @@ func (c *Client) Configured() bool {
 // with a misleading "INVALID_DOMAIN" for a domain the account actually owns
 // (observed live against getNs for ctm.ac). So every read below is POST; `do()`
 // injects the credentials into the body for every request.
+
+// Ping validates the credential pair and returns the caller's public IP.
+//
+// This is the only Porkbun call that proves a key pair works without naming a
+// domain, which makes it the right verification step after credentials are
+// written to Vault: it separates "wrong key" from "right key, domain not opted
+// in to API access", two failures Porkbun otherwise reports identically.
+func (c *Client) Ping(ctx context.Context) (*PingResponse, error) {
+	var out PingResponse
+	if err := c.do(ctx, http.MethodPost, "/ping", nil, "", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// UpdateAutoRenew turns auto-renew on or off for one domain.
+//
+// Porkbun's response is keyed by domain rather than a flat status, so the
+// per-domain result is preserved for the operator instead of collapsed.
+func (c *Client) UpdateAutoRenew(ctx context.Context, domain string, enabled bool, idempotencyKey string) (*UpdateAutoRenewResponse, error) {
+	status := "off"
+	if enabled {
+		status = "on"
+	}
+	var out UpdateAutoRenewResponse
+	body := map[string]any{"status": status}
+	if err := c.do(ctx, http.MethodPost, "/domain/updateAutoRenew/"+url.PathEscape(domain), body, idempotencyKey, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
 
 func (c *Client) ListDomains(ctx context.Context) (*ListDomainsResponse, error) {
 	var out ListDomainsResponse
