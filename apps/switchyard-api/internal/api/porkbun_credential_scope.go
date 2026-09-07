@@ -72,7 +72,9 @@ type porkbunCredentialScope struct {
 	// Tenant is the ecosystem tenant that owns the operation, or "" when the
 	// operation fell through to the global MADFAM account.
 	Tenant ecosystem.TenantID
-	// Account is "madfam" or "tenant".
+	// Account is "madfam", "tenant", or "unknown" — the last meaning the
+	// scope named a tenant that does not exist, which is refused rather than
+	// resolved to anything.
 	Account string
 	// Source is one of the porkbunScopeSource* constants.
 	Source string
@@ -157,6 +159,23 @@ func (h *Handler) porkbunCredentialScopeFor(req operatorOperationRequest) porkbu
 	if tenant == "" {
 		return h.porkbunGlobalScope(porkbunScopeSourceGlobal)
 	}
+	// A tenant id nobody recognises is a TYPO, not a request for the global
+	// account. Letting `--tenant crea-tu-mundo` fall through to MADFAM's key
+	// would produce INVALID_DOMAIN for a domain that exists — the precise
+	// wrong-account confusion this resolver exists to eliminate — and would do
+	// it for the one input most likely to be mistyped.
+	if ecosystem.TenantByID(tenant) == nil {
+		return porkbunCredentialScope{
+			Tenant:  tenant,
+			Account: "unknown",
+			Source:  source,
+			Detail: fmt.Sprintf(
+				"no ecosystem tenant or project named %q; check the spelling rather than rerunning unscoped, which would call MADFAM's registrar account",
+				tenant,
+			),
+		}
+	}
+
 	binding := ecosystem.RegistrarForTenant(tenant)
 	if !binding.IsTenantOwned() {
 		// A known tenant whose domains sit in MADFAM's account: the global
@@ -193,6 +212,13 @@ func (h *Handler) porkbunCredentialScopeFor(req operatorOperationRequest) porkbu
 // anything derived from the client.
 func (h *Handler) porkbunClientForRequest(ctx context.Context, req operatorOperationRequest) (*porkbun.Client, porkbunCredentialScope) {
 	scope := h.porkbunCredentialScopeFor(req)
+
+	// An unrecognised tenant id never resolves to credentials — see
+	// porkbunCredentialScopeFor. It is a typo, and answering it with MADFAM's
+	// key is the failure mode this whole file exists to remove.
+	if scope.Account == "unknown" {
+		return nil, scope
+	}
 
 	if scope.Account != "tenant" {
 		if !scope.Configured {
@@ -280,6 +306,9 @@ func vaultStringProperty(data map[string]interface{}, property string) string {
 
 // porkbunScopeLabel names the account an operation resolved to, for summaries.
 func porkbunScopeLabel(scope porkbunCredentialScope) string {
+	if scope.Account == "unknown" {
+		return fmt.Sprintf("unrecognised tenant %q's", scope.Tenant)
+	}
 	if scope.Account == "tenant" && scope.Tenant != "" {
 		return fmt.Sprintf("tenant %s's", scope.Tenant)
 	}
@@ -297,6 +326,12 @@ func porkbunScopeWarning(scope porkbunCredentialScope) string {
 // porkbunUnconfiguredNext renders the operator's next steps for a scope that
 // could not produce credentials.
 func porkbunUnconfiguredNext(scope porkbunCredentialScope) []string {
+	if scope.Account == "unknown" {
+		return []string{
+			"correct the --tenant/--project value; run `enclii providers capabilities` or check ecosystem/tenants.json for valid ids",
+			"omit the scope entirely only if the domain really does belong to MADFAM's own registrar account",
+		}
+	}
 	if scope.Account == "tenant" {
 		return []string{
 			fmt.Sprintf("run scripts/operator/porkbun-tenant-credentials.sh to load %s's registrar key pair into %s", scope.Tenant, scope.VaultPath),

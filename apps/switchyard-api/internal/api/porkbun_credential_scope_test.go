@@ -297,3 +297,56 @@ func TestVaultStringPropertyIgnoresNonStrings(t *testing.T) {
 		t.Fatalf("case-insensitive lookup = %q, want sk1_upper", got)
 	}
 }
+
+// A mistyped --tenant must NOT fall through to MADFAM's account. That fallback
+// would call the wrong registrar and answer INVALID_DOMAIN for a domain that
+// exists — the exact confusion this resolver removes — and it would do it for
+// the single most mistypeable input in the whole operation.
+func TestPorkbunScopeUnknownTenantIsRefusedNotSilentlyGlobal(t *testing.T) {
+	for _, typo := range []string{"crea-tu-mundo", "creaa", "ctm"} {
+		t.Run(typo, func(t *testing.T) {
+			h := tenantPorkbunHandler(creaVault())
+			req := operatorOperationRequest{Scope: map[string]string{"tenant": typo}}
+
+			client, scope := h.porkbunClientForRequest(context.Background(), req)
+
+			if client != nil {
+				t.Fatalf("--tenant %q must not produce a client", typo)
+			}
+			if scope.Account == "madfam" {
+				t.Fatalf("--tenant %q silently resolved to MADFAM's account", typo)
+			}
+			if scope.Account != "unknown" {
+				t.Fatalf("account = %q, want unknown", scope.Account)
+			}
+			if !strings.Contains(scope.Detail, typo) {
+				t.Fatalf("detail should quote the bad id, got %q", scope.Detail)
+			}
+			// The advice must not be "drop the flag" — that is precisely the
+			// wrong-account call.
+			next := porkbunUnconfiguredNext(scope)
+			if len(next) == 0 || !strings.Contains(next[0], "correct the") {
+				t.Fatalf("next steps should tell the operator to fix the id, got %#v", next)
+			}
+		})
+	}
+}
+
+// A real tenant that simply has no registrar binding still uses the global key
+// — that is the estate default, not a typo, and must keep working.
+func TestPorkbunScopeKnownTenantWithoutBindingStillUsesGlobal(t *testing.T) {
+	h := tenantPorkbunHandler(creaVault())
+	req := operatorOperationRequest{Scope: map[string]string{"tenant": "janua"}}
+
+	client, scope := h.porkbunClientForRequest(context.Background(), req)
+
+	if client == nil {
+		t.Fatalf("a known tenant on MADFAM's account should get the global client: %s", scope.Detail)
+	}
+	if scope.Account != "madfam" {
+		t.Fatalf("account = %q, want madfam", scope.Account)
+	}
+	if scope.Tenant != ecosystem.TenantJanua {
+		t.Fatalf("tenant = %q, want janua", scope.Tenant)
+	}
+}
