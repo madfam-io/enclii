@@ -20,100 +20,157 @@ What an operator actually has to do — and what currently bites — to bring a 
 host, and a mail provider's record set, onto a zone Enclii hosts in Cloudflare.
 
 Every step below was executed against `creatumundo.mx` on **2026-09-07** during
-the CTM tenant onboarding. The gaps in
-[Known gaps in `dns-apply`](#known-gaps-in-dns-apply) are open bugs
-([#530](https://github.com/madfam-org/enclii/issues/530)), not preferences: read
-them before you plan a record set, because two of them silently destroy records
-you already created.
+the CTM tenant onboarding. Read
+[How `dns-apply` decides](#how-dns-apply-decides) before you plan a record set.
 
-## Known gaps in `dns-apply`
+:::info This runbook changed with #536
 
-### A record is keyed by name + type, so a second record at that name REPLACES the first
+The 2026-09-07 run hit
+[#530](https://github.com/madfam-org/enclii/issues/530): a record was keyed by
+name + type only, so a second `TXT` or `MX` at one name was applied as a
+destructive `update` of the first, and every apex `TXT`/`MX` in the tables below
+had to be added in the Cloudflare dashboard as break-glass.
+[#536](https://github.com/madfam-org/enclii/pull/536) fixed that. **The whole
+Proton and Resend record set now goes through `dns-apply`.** If you are working
+from a copy of this runbook, or from notes, that says "dashboard — collides",
+that copy predates #536.
 
-`dns-apply` reads the live record with
-`GetDNSRecordByTypeInZone(zoneID, name, type)` and plans `create` when that read
-returns nothing, `update` when it returns a record whose content differs. There
-is no notion of "another record of this type at this name". So:
+:::
+
+## How `dns-apply` decides
+
+### Several records of one type at one name
+
+For `TXT`, `MX`, `NS` and `SRV`, a record's identity is **name + type +
+content**. That is the shape DNS actually has: an apex `TXT` name carries an SPF
+record *plus* every provider's verification token, and mail providers ship an
+`MX` pair.
+
+| Live state at that name+type | Plan |
+|---|---|
+| nothing | `create` |
+| same content, same proxied/priority | `noop` |
+| different content | `create` — existing records untouched |
+| different content, with `--replace` | `update` — overwrites one existing record |
 
 ```bash
-# 1. creates the Proton ownership TXT
+# Both survive. No --replace, no dashboard.
 enclii providers cloudflare dns-apply creatumundo.mx \
   --type TXT --content 'protonmail-verification=<token>' \
   --apply --reason "prove domain ownership to Proton"
 # → created
 
-# 2. DESTROYS it. The plan says `create`; the apply says `updated`.
 enclii providers cloudflare dns-apply creatumundo.mx \
   --type TXT --content 'v=spf1 include:_spf.protonmail.ch ~all' \
   --apply --reason "publish SPF"
-# → updated   ← the verification TXT is gone
+# → created (1 existing TXT record left in place)
 ```
 
-This is not theoretical: it happened, and Proton loses the domain at its next
-ownership re-check. The same limitation means the standard Proton MX **pair**
-(priority 10 and 20 at the apex) cannot be expressed at all — the second apply
-overwrites the first.
+The dry-run plan is what the apply executes; both read the live set once and
+decide from the same function. The response lists every record already at that
+name (`existingRecordsAtName`), so an add shows what it is joining.
 
-:::danger Break-glass until #530 lands
+`CNAME`, `A` and `AAAA` keep single-record semantics: applying to a name that
+already has one is an `update`, which is what repointing a host means.
 
-**Multiple records of the same type at one name must be added in the Cloudflare
-dashboard by hand.** That is the exact manual DNS edit the Enclii-first doctrine
-exists to prevent, and it is temporary. It applies to:
+Use `--replace` only to overwrite a record's **value** — a rotated verification
+token, say. It overwrites exactly one record and warns about both the value it
+destroys and the records at that name it leaves alone. Like
+`--allow-pending-zone` it accepts only a literal `true`.
 
-- more than one apex `TXT` (SPF *plus* any provider verification token — Proton,
-  Google, Resend, Atlassian…), and
-- more than one `MX` at any name (every real mail provider ships a pair).
-
-A single record of a type at a name — the overwhelmingly common case, including
-every `CNAME` — is safe through `dns-apply` and should go through it.
-
-After a dashboard edit, re-read the authoritative state before you trust it:
+Re-read authoritative state after any record-set change:
 
 ```bash
 dig +short TXT creatumundo.mx @<one of the zone's Cloudflare nameservers>
 ```
 
-:::
+### MX priority
 
-### `--type MX --apply` can 502 while the dry-run passes
-
-Two consecutive MX applies answered `502 origin_bad_gateway` from
-`api.enclii.dev` while the dry-run for the same operation planned cleanly; the
-same calls succeeded about 60 seconds later. If an MX apply 502s, **re-read the
-zone before retrying** — a 502 is returned by the edge and does not tell you
-whether the origin committed the write.
-
-### MX priority rides inside `--content`
-
-There is no `--priority` flag. The priority is the first token of the content
-string:
+`--priority` is a first-class flag. The older form — the preference inside
+`--content` as `'10 host'` — still works and is split back out server-side;
+`--priority` wins when both are given, and the response reports which was used.
 
 ```bash
 enclii providers cloudflare dns-apply creatumundo.mx \
-  --type MX --content '10 mail.protonmail.ch' \
+  --type MX --priority 10 --content mail.protonmail.ch \
   --apply --reason "primary MX for Proton Mail"
+
+enclii providers cloudflare dns-apply creatumundo.mx \
+  --type MX --priority 20 --content mailsec.protonmail.ch \
+  --apply --reason "backup MX for Proton Mail"
 ```
+
+A create with no priority defaults to `10` and says so. A priority that is not a
+number in `0..65535` is refused as `invalid_request` rather than silently
+defaulted. Priority `0` is legal and preserved.
+
+The pre-#536 symptom — `--type MX --apply` answering `502 origin_bad_gateway`
+while its own dry-run planned cleanly — was this path: the MX create carried no
+`priority` field at all, Cloudflare answered HTTP 400, and every provider error
+below the handler was rendered as `502`.
+
+### Reading a failure
+
+| Status | Meaning |
+|---|---|
+| `400 invalid_request` | a malformed argument (e.g. a non-numeric `--priority`) |
+| `422 provider_apply_failed` | Cloudflare rejected the record; the message is Cloudflare's own |
+| `409 provider_apply_failed` | a record with that content already exists at that name |
+| `424 blocked_by_dns_authority` | the zone is not delegated/visible to the token |
+| `502` | the provider was genuinely unreachable or unparseable |
+
+A `502` still does not tell you whether the origin committed the write — re-read
+the zone before retrying.
 
 ## Worked example: Proton Mail on a zone Enclii hosts
 
-The full record set Proton requires. Each row notes whether `dns-apply` can
-carry it today.
+The full record set Proton requires. Since
+[#536](https://github.com/madfam-org/enclii/pull/536) every row goes through
+`dns-apply`; the "Notes" column records why each one used to need the dashboard.
 
-| Name | Type | Content | Via |
-|------|------|---------|-----|
-| `@` | TXT | `protonmail-verification=<token>` | dashboard — collides with SPF |
-| `@` | MX | `10 mail.protonmail.ch` | dashboard — MX pair collides |
-| `@` | MX | `20 mailsec.protonmail.ch` | dashboard — MX pair collides |
-| `@` | TXT | `v=spf1 include:_spf.protonmail.ch ~all` | dashboard — collides with verification TXT |
-| `protonmail._domainkey` | CNAME | `protonmail.domainkey.<hash>.domains.proton.ch` | `dns-apply` |
-| `protonmail2._domainkey` | CNAME | `protonmail2.domainkey.<hash>.domains.proton.ch` | `dns-apply` |
-| `protonmail3._domainkey` | CNAME | `protonmail3.domainkey.<hash>.domains.proton.ch` | `dns-apply` |
-| `_dmarc` | TXT | `v=DMARC1; p=none; rua=mailto:<address>` | `dns-apply` — only TXT at that name |
+| Name | Type | Content | Notes |
+|------|------|---------|-------|
+| `@` | TXT | `protonmail-verification=<token>` | coexists with the apex SPF TXT |
+| `@` | MX | `mail.protonmail.ch`, `--priority 10` | the pair coexists |
+| `@` | MX | `mailsec.protonmail.ch`, `--priority 20` | the pair coexists |
+| `@` | TXT | `v=spf1 include:_spf.protonmail.ch ~all` | coexists with the verification TXT |
+| `protonmail._domainkey` | CNAME | `protonmail.domainkey.<hash>.domains.proton.ch` | only record at that name |
+| `protonmail2._domainkey` | CNAME | `protonmail2.domainkey.<hash>.domains.proton.ch` | only record at that name |
+| `protonmail3._domainkey` | CNAME | `protonmail3.domainkey.<hash>.domains.proton.ch` | only record at that name |
+| `_dmarc` | TXT | `v=DMARC1; p=none; rua=mailto:<address>` | only TXT at that name |
 
 `<hash>` is per-domain and shown in the Proton admin panel; it is not derivable.
 
+The apex set — two TXT and the MX pair — applies in any order; each apply adds a
+record and reports the ones it joined:
+
+```bash
+enclii providers cloudflare dns-apply creatumundo.mx --type TXT \
+  --content 'protonmail-verification=<token>' \
+  --apply --reason "prove domain ownership to Proton"
+
+enclii providers cloudflare dns-apply creatumundo.mx --type TXT \
+  --content 'v=spf1 include:_spf.protonmail.ch ~all' \
+  --apply --reason "publish Proton SPF"
+
+enclii providers cloudflare dns-apply creatumundo.mx --type MX \
+  --priority 10 --content mail.protonmail.ch --proxied false \
+  --apply --reason "primary MX for Proton Mail"
+
+enclii providers cloudflare dns-apply creatumundo.mx --type MX \
+  --priority 20 --content mailsec.protonmail.ch --proxied false \
+  --apply --reason "backup MX for Proton Mail"
+```
+
+Confirm the apex holds the whole set, not the last one written:
+
+```bash
+dig +short TXT creatumundo.mx @<one of the zone's Cloudflare nameservers>   # expect 2 records
+dig +short MX  creatumundo.mx @<one of the zone's Cloudflare nameservers>   # expect 10 and 20
+```
+
 The three DKIM CNAMEs and `_dmarc` are each the only record of their type at
-their name, so they go through Enclii:
+their name:
 
 ```bash
 for n in "" 2 3; do
@@ -146,9 +203,9 @@ records; Proton and Resend do not conflict, because they occupy different names:
 The one place they *do* meet is the apex SPF. Resend's own records live under
 `send.<domain>`, so the apex `v=spf1 include:_spf.protonmail.ch ~all` above is
 correct as written and does not need a Resend `include`. Verify with
-`dig +short TXT send.<domain>` that the Resend records survived any apex edit —
-they are a different name, so they should, but the apex TXT collision above is
-exactly the class of bug that makes checking worthwhile.
+`dig +short TXT send.<domain>` that the Resend records are intact — they are a
+different name so an apex edit cannot reach them, and since #536 an apex edit no
+longer overwrites its own neighbours either, but the check costs nothing.
 
 ## `zone-settings-apply`: the HTTPS posture step
 
@@ -237,8 +294,8 @@ enclii providers cloudflare dns-apply crea-erp.creatumundo.mx \
   --apply --reason "prove ownership of the new brand host to Enclii"
 ```
 
-Safe through `dns-apply`: it is the only TXT at that name. If the host already
-carries another TXT, see the name+type collision above.
+If the host already carries another TXT, this apply adds a second one and leaves
+the first in place — see [How `dns-apply` decides](#how-dns-apply-decides).
 
 ### 5. `domains verify`
 

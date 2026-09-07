@@ -144,6 +144,8 @@ func newProviderActionCommand(cfg *config.Config, provider, action, short string
 	var nameservers string
 	var proxied string
 	var autoRenew string
+	var priority string
+	var replace bool
 	cmd := &cobra.Command{
 		Use:   action + " [target]",
 		Short: short,
@@ -177,6 +179,12 @@ func newProviderActionCommand(cfg *config.Config, provider, action, short string
 			if autoRenew != "" {
 				extra["auto_renew"] = autoRenew
 			}
+			if priority != "" {
+				extra["priority"] = priority
+			}
+			if replace {
+				extra["replace"] = "true"
+			}
 			return runOperation(cmd, cfg, providerPath(provider, action), fmt.Sprintf("providers.%s.%s", provider, action), flags, extra)
 		},
 	}
@@ -186,6 +194,15 @@ func newProviderActionCommand(cfg *config.Config, provider, action, short string
 		cmd.Flags().StringVar(&recordType, "type", "", "DNS record type (default: CNAME)")
 		cmd.Flags().StringVar(&content, "content", "", "DNS record content (default: Enclii tunnel CNAME)")
 		cmd.Flags().StringVar(&proxied, "proxied", "", "Whether Cloudflare should proxy the record: true/false (default by record type)")
+		// MX/SRV preference as its own field. The pre-#530 form — the number
+		// typed into --content as "10 mail.example.com" — still works and is
+		// still what the runbooks say; the server splits it back out. This
+		// flag wins when both are given.
+		cmd.Flags().StringVar(&priority, "priority", "", "MX/SRV preference, e.g. 10 (also accepted inside --content as \"10 host\"; default 10)")
+		// Multiple TXT/MX/NS/SRV at one name is the normal shape, so an apply
+		// that would collide ADDS a record by default. --replace is the
+		// explicit, auditable way to overwrite one instead.
+		cmd.Flags().BoolVar(&replace, "replace", false, "Overwrite an existing record of this type at this name instead of adding another (TXT/MX/NS/SRV)")
 	}
 	if provider == "porkbun" && action == "dns-apply" {
 		cmd.Flags().StringVar(&recordType, "type", "", "DNS record type (default: CNAME)")

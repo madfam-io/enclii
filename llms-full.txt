@@ -75,16 +75,30 @@ registry, not Actions artifacts, and its guard requires pins_written > 0.
 Learned during a live tenant onboarding; an agent carrying older context will be
 wrong about all of it.
 
-- DNS records (`providers cloudflare dns-apply`): a record is keyed by
-  **name + type only**. A second TXT or MX at the same name is applied as a
-  destructive `update` of the first — the dry-run says `create`, the apply says
-  `updated`, and the earlier record is gone (issue #530, hit live on
-  2026-09-07: an SPF TXT destroyed a Proton ownership TXT). Multiple same-type
-  records at one name must go through the Cloudflare dashboard as break-glass
-  until that is fixed; a single record of a type at a name, including every
-  CNAME, is safe. MX priority rides inside `--content` (`"10 mail.example.com"`);
-  there is no `--priority`. `--type MX --apply` has answered 502 from the edge
-  while its own dry-run planned cleanly — re-read the zone before retrying.
+- DNS records (`providers cloudflare dns-apply`), fixed in #536: for
+  **TXT/MX/NS/SRV** a record's identity includes its **content**, so several
+  records coexist at one name. Same name+type+content -> `noop`; different
+  content -> `create`, leaving the existing records alone; `--replace` (literal
+  "true") is the explicit way to overwrite one, and it warns about both the
+  value it destroys and the siblings it leaves. CNAME/A/AAAA keep single-record
+  update semantics. The dry-run plan is what the apply executes — both decide
+  from one live read via one function. Do NOT reach for the Cloudflare
+  dashboard to add a second TXT or MX; any runbook step saying so predates
+  #536. Before it, a record was keyed by name+type only and a second TXT/MX was
+  applied as a destructive `update` of the first (issue #530, hit live on
+  2026-09-07: an SPF TXT destroyed a Proton ownership TXT).
+- MX priority is a first-class `--priority` flag (#536). The old form — the
+  preference inside `--content` as `"10 mail.example.com"` — still works and is
+  split back out server-side; the flag wins when both are given, and the
+  response reports `priority_source`. A create with no priority defaults to 10
+  and says so; a non-numeric or out-of-range value is `invalid_request`, not a
+  silent default; priority 0 is legal and preserved. The old `--type MX --apply`
+  502 was this: the MX create carried no `priority` field at all, Cloudflare
+  answered 400, and every provider error below the handler was rendered 502. A
+  record Cloudflare refuses is now 422 (409 duplicate, 424 zone/credential,
+  400 bad argument) carrying Cloudflare's own message; 502 is reserved for a
+  genuinely unreachable provider, and still does not say whether the write
+  landed — re-read the zone before retrying.
 - Brand-host onboarding order (verified 2026-09-07): `domains add` **from the
   repo root** (the `-f` parser validates `spec.build.dockerfile` against
   `os.Getwd()`, not the manifest's directory) -> `dns-apply` proxied CNAME ->

@@ -177,22 +177,59 @@ func (c *Client) CreateDNSRecord(ctx context.Context, name, recordType, content 
 	return c.CreateDNSRecordInZone(ctx, c.zoneID, name, recordType, content, proxied)
 }
 
-// CreateDNSRecordInZone creates a new DNS record in a specific zone
+// CreateDNSRecordInZone creates a new DNS record in a specific zone.
+//
+// It carries no explicit priority, so an MX/SRV create through this entry
+// point falls back to RecordTypeDefaultPriority — Cloudflare rejects an MX
+// create with no priority field at all (HTTP 400), and that rejection used to
+// surface as an opaque 5xx.
 func (c *Client) CreateDNSRecordInZone(ctx context.Context, zoneID, name, recordType, content string, proxied bool) (*DNSRecord, error) {
-	payload := struct {
-		Type    string `json:"type"`
-		Name    string `json:"name"`
-		Content string `json:"content"`
-		Proxied bool   `json:"proxied"`
-		TTL     int    `json:"ttl"`
-		Comment string `json:"comment,omitempty"`
-	}{
-		Type:    recordType,
-		Name:    name,
-		Content: content,
-		Proxied: proxied,
-		TTL:     1, // Auto
-		Comment: "Managed by Enclii platform",
+	return c.createDNSRecord(ctx, zoneID, name, recordType, content, proxied, nil, "Managed by Enclii platform")
+}
+
+// CreateDNSRecordInZoneWithPriority creates a DNS record, including MX/SRV
+// priority.
+//
+// priority < 0 means "not specified"; 0 is a legal MX preference and is sent
+// verbatim. Callers that genuinely have no priority for an MX get the
+// documented default rather than a Cloudflare 400.
+func (c *Client) CreateDNSRecordInZoneWithPriority(ctx context.Context, zoneID, name, recordType, content string, proxied bool, priority int) (*DNSRecord, error) {
+	var want *int
+	if priority >= 0 {
+		want = &priority
+	}
+	return c.createDNSRecord(ctx, zoneID, name, recordType, content, proxied, want, "Managed by Enclii platform (Resend DNS)")
+}
+
+// RecordTypeDefaultPriority is the preference used when an MX/SRV record is
+// created without one. Cloudflare requires the field for those types and
+// answers HTTP 400 without it; 10 is the conventional single-host MX
+// preference, and a wrong-but-present preference is a record an operator can
+// see and correct, where a 400 rendered as a 5xx is neither.
+const RecordTypeDefaultPriority = 10
+
+// RecordTypeRequiresPriority reports whether Cloudflare requires a priority
+// field for recordType.
+func RecordTypeRequiresPriority(recordType string) bool {
+	switch strings.ToUpper(strings.TrimSpace(recordType)) {
+	case "MX", "SRV", "URI":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Client) createDNSRecord(ctx context.Context, zoneID, name, recordType, content string, proxied bool, priority *int, comment string) (*DNSRecord, error) {
+	payload := map[string]any{
+		"type":    recordType,
+		"name":    name,
+		"content": content,
+		"proxied": proxied,
+		"ttl":     1, // Auto
+		"comment": comment,
+	}
+	if p := effectivePriority(recordType, priority); p != nil {
+		payload["priority"] = *p
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -224,44 +261,32 @@ func (c *Client) CreateDNSRecordInZone(ctx context.Context, zoneID, name, record
 	return &resp.Result, nil
 }
 
-// CreateDNSRecordInZoneWithPriority creates a DNS record, including MX priority when set (>0).
-func (c *Client) CreateDNSRecordInZoneWithPriority(ctx context.Context, zoneID, name, recordType, content string, proxied bool, priority int) (*DNSRecord, error) {
-	payload := map[string]any{
-		"type":    recordType,
-		"name":    name,
-		"content": content,
-		"proxied": proxied,
-		"ttl":     1,
-		"comment": "Managed by Enclii platform (Resend DNS)",
+// effectivePriority resolves the priority to send for a record type: nil for
+// types that have none, the caller's value when given, and the documented
+// default for a priority-requiring type the caller left unset.
+func effectivePriority(recordType string, priority *int) *int {
+	if !RecordTypeRequiresPriority(recordType) {
+		return nil
 	}
-	if strings.EqualFold(recordType, "MX") && priority > 0 {
-		payload["priority"] = priority
+	if priority != nil {
+		return priority
 	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal DNS record: %w", err)
-	}
-
-	var resp APIResponse[DNSRecord]
-	path := fmt.Sprintf("/zones/%s/dns_records", zoneID)
-
-	if err := c.post(ctx, path, bytes.NewReader(payloadBytes), &resp); err != nil {
-		return nil, fmt.Errorf("failed to create DNS record for %s: %w", name, err)
-	}
-
-	if !resp.Success {
-		if len(resp.Errors) > 0 {
-			return nil, fmt.Errorf("API error creating DNS record: %s", resp.Errors[0].Message)
-		}
-		return nil, fmt.Errorf("unknown API error creating DNS record")
-	}
-
-	return &resp.Result, nil
+	fallback := RecordTypeDefaultPriority
+	return &fallback
 }
 
-// UpdateDNSRecordInZone updates an existing DNS record in a specific zone.
+// UpdateDNSRecordInZone updates an existing DNS record in a specific zone,
+// preserving the record's current priority.
 func (c *Client) UpdateDNSRecordInZone(ctx context.Context, zoneID string, record DNSRecord, content string, proxied bool) (*DNSRecord, error) {
+	return c.UpdateDNSRecordInZoneWithPriority(ctx, zoneID, record, content, proxied, record.Priority)
+}
+
+// UpdateDNSRecordInZoneWithPriority updates a record and sets its MX/SRV
+// priority. A nil priority on a priority-requiring type keeps the record's
+// own value, falling back to RecordTypeDefaultPriority — Cloudflare's PUT
+// replaces the whole record, so an MX update that omits priority is a 400,
+// not a partial edit.
+func (c *Client) UpdateDNSRecordInZoneWithPriority(ctx context.Context, zoneID string, record DNSRecord, content string, proxied bool, priority *int) (*DNSRecord, error) {
 	if record.ID == "" {
 		return nil, fmt.Errorf("record ID is required")
 	}
@@ -278,20 +303,20 @@ func (c *Client) UpdateDNSRecordInZone(ctx context.Context, zoneID string, recor
 		ttl = 1
 	}
 
-	payload := struct {
-		Type    string `json:"type"`
-		Name    string `json:"name"`
-		Content string `json:"content"`
-		Proxied bool   `json:"proxied"`
-		TTL     int    `json:"ttl"`
-		Comment string `json:"comment,omitempty"`
-	}{
-		Type:    recordType,
-		Name:    record.Name,
-		Content: content,
-		Proxied: proxied,
-		TTL:     ttl,
-		Comment: "Managed by Enclii platform",
+	if priority == nil {
+		priority = record.Priority
+	}
+
+	payload := map[string]any{
+		"type":    recordType,
+		"name":    record.Name,
+		"content": content,
+		"proxied": proxied,
+		"ttl":     ttl,
+		"comment": "Managed by Enclii platform",
+	}
+	if p := effectivePriority(recordType, priority); p != nil {
+		payload["priority"] = *p
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -525,22 +550,44 @@ func (c *Client) FindZoneForDomainIncludingPending(ctx context.Context, domain s
 // FindZoneForDomainIncludingPending — and must not have the read re-run the
 // strict active-only zone lookup.
 func (c *Client) GetDNSRecordByTypeInZone(ctx context.Context, zoneID, domain, recordType string) (*DNSRecord, error) {
+	records, err := c.ListDNSRecordsByTypeInZone(ctx, zoneID, domain, recordType)
+	if err != nil {
+		return nil, err
+	}
+	if len(records) == 0 {
+		return nil, nil
+	}
+	return &records[0], nil
+}
+
+// ListDNSRecordsByTypeInZone returns EVERY record at (zone, name, type), not
+// just the first.
+//
+// GetDNSRecordByTypeInZone answers `resp.Result[0]` and discards the rest,
+// which silently asserts that a name holds at most one record of a type. For
+// TXT, MX, NS and SRV that assertion is false by design — SPF plus provider
+// verification tokens share the apex TXT name, and every real mail provider
+// ships an MX pair. A caller that plans a mutation from the first record alone
+// will overwrite one of a set it never saw (enclii#530: an SPF TXT applied as
+// an "update" destroyed a Proton ownership TXT on a live zone).
+func (c *Client) ListDNSRecordsByTypeInZone(ctx context.Context, zoneID, domain, recordType string) ([]DNSRecord, error) {
 	query := url.Values{}
 	query.Set("name", domain)
 	query.Set("type", recordType)
+	query.Set("per_page", "100")
 
 	var resp APIResponse[[]DNSRecord]
 	path := fmt.Sprintf("/zones/%s/dns_records", zoneID)
 
 	if err := c.get(ctx, path, query, &resp); err != nil {
-		return nil, fmt.Errorf("failed to get %s record for %s: %w", recordType, domain, err)
+		return nil, fmt.Errorf("failed to get %s records for %s: %w", recordType, domain, err)
 	}
 
-	if !resp.Success || len(resp.Result) == 0 {
+	if !resp.Success {
 		return nil, nil
 	}
 
-	return &resp.Result[0], nil
+	return resp.Result, nil
 }
 
 // bestZoneMatch returns the most specific zone covering domain (longest suffix
