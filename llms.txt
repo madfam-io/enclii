@@ -9,7 +9,7 @@ Compact LLM context index for this repository.
 - `ECOSYSTEM.md` — MADFAM ecosystem and Enclii deployment context when present.
 - `llms-full.txt` — full context map and durable operating contract.
 
-## Platform behaviors agents most often get wrong (updated 2026-08-27)
+## Platform behaviors agents most often get wrong (updated 2026-09-07)
 
 - One-off jobs (`enclii jobs run-once`): the dispatcher resolves the service's
   Deployment as `<name>`, `<name>-web`, then `<namespace>-web`; deterministic
@@ -27,6 +27,42 @@ Compact LLM context index for this repository.
   GHCR (`imagetools inspect` on the immutable `:github.sha` tag) — no Actions
   artifacts in the deploy path; the deploy-state-guard fails any run whose pin
   job wrote zero pins.
+
+- DNS records (`providers cloudflare dns-apply`): a record is keyed by
+  **name + type only**. A second TXT or MX at the same name is applied as a
+  destructive `update` of the first — the dry-run says `create`, the apply says
+  `updated`, and the earlier record is gone (issue #530, hit live on
+  2026-09-07: an SPF TXT destroyed a Proton ownership TXT). Multiple same-type
+  records at one name must go through the Cloudflare dashboard as break-glass
+  until that is fixed; a single record of a type at a name, including every
+  CNAME, is safe. MX priority rides inside `--content` (`"10 mail.example.com"`);
+  there is no `--priority`. `--type MX --apply` has answered 502 from the edge
+  while its own dry-run planned cleanly — re-read the zone before retrying.
+- Brand-host onboarding order (verified 2026-09-07): `domains add` **from the
+  repo root** (the `-f` parser validates `spec.build.dockerfile` against
+  `os.Getwd()`, not the manifest's directory) -> `dns-apply` proxied CNAME ->
+  `tunnels-apply` (plan must show only a create for the new host) -> `dns-apply`
+  the verification TXT -> `domains verify`. Then `zone-settings-apply` once the
+  zone is active (`always_use_https`, `automatic_https_rewrites`,
+  `min_tls_version=1.2`; verify `curl -sSI http://<host>/` -> 301). A
+  manifest-only merge builds nothing, so no capture runs and a newly declared
+  host does not become live. Full runbook:
+  `docs/runbooks/DOMAIN_AND_EMAIL_DNS_ONBOARDING.md`.
+- After a nameserver switch, clients on a stale resolver see NXDOMAIN for hosts
+  that exist only in the new zone (and Cloudflare 1034 for a DNS-only host the
+  old zone pointed at a CDN) for up to the old NS TTL. Do not cut over
+  redirects, and do not "fix" a record that already reads correctly at the
+  zone's own nameservers, until public resolvers agree.
+- CLI: `enclii whoami`/`login`/`logout` print on **stderr** (cobra
+  `cmd.Println` -> `OutOrStderr()`; the CLI never calls `SetOut`), so
+  `whoami > file` captures nothing. `enclii login` resolves whichever Janua
+  identity the browser session holds — log out of a client app first.
+  `--tenant` and `providers porkbun ping` (#527) are **not** in
+  `v1.0.0-alpha.8`; build from `main` until `v1.0.0-alpha.9`.
+- Per-tenant Porkbun (#527): merging does NOT apply the Vault policy. Run
+  `scripts/apply-switchyard-vault-policy-remote.sh` (token on stdin, never
+  argv) before the first `--tenant` call, or it 403s and reads as "credentials
+  missing". Recipe: `docs/infrastructure/porkbun-tenant-credentials.md`.
 
 ## Production operations
 

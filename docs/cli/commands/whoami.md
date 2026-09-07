@@ -12,6 +12,12 @@ enclii whoami [flags]
 
 The `whoami` command displays details about the currently authenticated user, including their email, user ID, and team memberships. Useful for verifying authentication and debugging access issues.
 
+> **Output goes to stderr.** `whoami`, `login`, and `logout` report through
+> cobra's `cmd.Println`, which writes to `OutOrStderr()`, and the CLI never
+> calls `SetOut`. So `enclii whoami > /tmp/who` captures an **empty file** and
+> reads as "not logged in". Capture with `enclii whoami 2>&1`, or use
+> `-o json`.
+
 ## Flags
 
 | Flag | Type | Default | Description |
