@@ -4,7 +4,12 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-GUARD="$(cd "$HERE/.." && pwd)/public-hygiene-check.sh"
+SCRIPTS="$(cd "$HERE/.." && pwd)"
+GUARD="$SCRIPTS/public-hygiene-check.sh"
+# The committed-Secret class is a separate parser the guard shells out to. Each
+# throwaway repo gets a copy, or the class would be silently absent from every
+# case below and the rule would be untested while the suite still printed ok.
+SECRET_CHECKER="$SCRIPTS/check-committed-secret-values.py"
 TMPROOT="$(mktemp -d)"
 trap 'rm -rf "$TMPROOT"' EXIT
 
@@ -16,6 +21,7 @@ new_repo() {
   local dir="$TMPROOT/$1"
   mkdir -p "$dir/scripts"
   cp "$GUARD" "$dir/scripts/public-hygiene-check.sh"
+  cp "$SECRET_CHECKER" "$dir/scripts/check-committed-secret-values.py"
   git -C "$dir" init -q
   git -C "$dir" config user.email t@example.com
   git -C "$dir" config user.name t
@@ -81,9 +87,173 @@ expect private-clean 0 0 "$TMPROOT/patterns.txt"
 d=$(new_repo private-hit); echo 'ssh node-zz-01' > "$d/README.md"
 expect private-hit 1 0 "$TMPROOT/patterns.txt"
 
-# 10. an empty tracked file set is UNDETERMINED, not clean
-d=$(new_repo empty); rm -f "$d/scripts/public-hygiene-check.sh"
+# 10. an empty tracked file set is UNDETERMINED, not clean. Both copied
+# scripts must go: the guard excludes itself from the scan, so anything else
+# left behind would keep the tracked set non-empty and mask the case.
+d=$(new_repo empty)
+rm -f "$d/scripts/public-hygiene-check.sh" "$d/scripts/check-committed-secret-values.py"
 expect empty 2 0
+
+# --- committed Secret values -------------------------------------------------
+# The 2026-09-06 class: a core/v1 Secret holding real credential material in a
+# public repo. The bcrypt fixture below is the shape of the verdaccio finding,
+# generated for this test and never a live credential.
+
+# 11. a Secret carrying a bcrypt hash is a finding
+d=$(new_repo secret-bcrypt)
+cat > "$d/secret.yaml" <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: registry-auth
+type: Opaque
+stringData:
+  htpasswd: |
+    someone@example.com:$2y$05$Ttf2yPzQ1xKdWnV8sBoLXeR4mHjA7cGuZi0NqEbFvYdM3wSpJlKrO
+YAML
+expect secret-bcrypt 1 1
+
+# 12. an ExternalSecret is a reference, not material — it passes
+d=$(new_repo secret-external)
+cat > "$d/es.yaml" <<'YAML'
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: registry-auth
+spec:
+  target:
+    name: registry-auth
+  data:
+    - secretKey: htpasswd
+      remoteRef:
+        key: secret/npm-registry
+        property: htpasswd
+YAML
+expect secret-external 0 1
+
+# 13. a Secret whose values are placeholders is a template, not a leak. Every
+# placeholder form below is one this repo's own Secret templates already use.
+d=$(new_repo secret-placeholders)
+cat > "$d/tpl.yaml" <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tpl
+type: Opaque
+stringData:
+  password: __CHANGE_ME_LOCAL_ONLY__
+  token: "${GITHUB_TOKEN}"
+  stripe: "<sk_live_xxx>"
+  access-key: "REPLACE_ME"
+  endpoint: "https://REPLACE_ME.r2.cloudflarestorage.com"
+YAML
+expect secret-placeholders 0 1
+
+# 14. a name-only Secret shell (no data/stringData) is the approved end state
+d=$(new_repo secret-shell)
+cat > "$d/shell.yaml" <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: enclii-secrets
+type: Opaque
+YAML
+expect secret-shell 0 1
+
+# 15. non-secret config values in a Secret are not findings. Without this the
+# rule would need an allowlist to keep CI green, and an allowlist is the
+# mechanism that lets the next real secret in.
+d=$(new_repo secret-config-values)
+cat > "$d/cfg.yaml" <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: billing
+type: Opaque
+stringData:
+  BILLING_MX_VAT_RATE: "0.16"
+  BILLING_ENABLE_OXXO: "true"
+  CURRENCY: "MXN"
+  url: ghcr.io
+  type: helm
+  username: madfam-org
+  address: "http://vault.vault.svc.cluster.local:8200"
+YAML
+expect secret-config-values 0 1
+
+# 16. one bad document among good ones in a multi-doc file still fails
+d=$(new_repo secret-multidoc)
+cat > "$d/multi.yaml" <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fine
+type: Opaque
+stringData:
+  password: __CHANGE_ME_LOCAL_ONLY__
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm
+data:
+  greeting: hello
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: leaky
+type: Opaque
+stringData:
+  session-key: "Kj8vQm2XpL9wRtYnE7cZa4bHi1Fu6Qs3Nd0Gk5Mv"
+YAML
+expect secret-multidoc 1 1
+
+# 17. base64 `data:` is decoded before judging — encoding is not redaction
+d=$(new_repo secret-base64)
+cat > "$d/b64.yaml" <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: encoded
+type: Opaque
+data:
+  password: azhkOFNqMlBxTHc5dlJ0WG5FN2NZbTRiSGoxRnU2QQ==
+YAML
+expect secret-base64 1 1
+
+# 18. `kind: Secret` nested under ArgoCD ignoreDifferences is a selector, not a
+# Secret document. Matching it would fail every repo that configures ArgoCD.
+d=$(new_repo secret-nested-selector)
+cat > "$d/app.yaml" <<'YAML'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo
+spec:
+  ignoreDifferences:
+    - kind: Secret
+      jsonPointers:
+        - /data
+        - /stringData
+YAML
+expect secret-nested-selector 0 1
+
+# 19. a placeholder word ADJACENT to real material must not launder it. The
+# htpasswd line above is exactly this shape (`…@example.com:$2y$…`): blanking
+# the whole token around the word "example" once erased the hash with it.
+d=$(new_repo secret-adjacent-placeholder)
+cat > "$d/adj.yaml" <<'YAML'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: adjacent
+type: Opaque
+stringData:
+  htpasswd: "example-user:$2y$05$Ttf2yPzQ1xKdWnV8sBoLXeR4mHjA7cGuZi0NqEbFvYdM3wSpJlKrO"
+  note: "REPLACE_ME before applying"
+YAML
+expect secret-adjacent-placeholder 1 1
 
 printf '\npublic-hygiene tests: %s run, %s failed\n' "$run" "$fails"
 exit $(( fails > 0 ? 1 : 0 ))

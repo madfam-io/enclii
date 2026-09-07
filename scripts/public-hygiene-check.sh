@@ -8,6 +8,12 @@ set -euo pipefail
 # Cloudflare tunnel UUIDs, hardware SKUs that identify the estate's topology,
 # and — through a private pattern file — production node hostnames.
 #
+# It also runs one STRUCTURAL class that a grep cannot express: committed
+# `kind: Secret` documents that carry real credential material. That rule lives
+# in scripts/check-committed-secret-values.py because answering it needs the
+# YAML structure, not a line match. See docs/PUBLIC_REPO_BOUNDARY.md for what
+# it does and does not catch.
+#
 # WHY THE NODE HOSTNAMES ARE NOT IN THIS FILE
 # ===========================================
 # They are the exact strings that must not appear in this repo; shipping them
@@ -120,6 +126,29 @@ if [[ -n "$ip_matches" ]]; then
   printf '\n[public-hygiene] Public IPv4 literal\n' >&2
   printf '%s\n' "$ip_matches" >&2
   status=1
+fi
+
+# --- committed Secret values (structural, not line-oriented) ----------------
+# The 2026-09-06 verdaccio finding — a `kind: Secret` holding a live bcrypt
+# hash under `stringData:`, applied by kustomize/ArgoCD out of this PUBLIC repo
+# — passed every check above, because they are greps for known token shapes and
+# a bcrypt hash is none of them. Answering "does this Secret carry a real
+# value?" needs the YAML structure (which document, which block, base64 or
+# not), so the rule lives in a parser rather than another regex here.
+#
+# Skipped-not-passed when PyYAML is unavailable, for the same reason the
+# node-identity class is: a green run must never imply a class was checked when
+# the means to check it were absent.
+SECRET_CHECKER="$ROOT/scripts/check-committed-secret-values.py"
+if [[ -f "$SECRET_CHECKER" ]] && python3 -c 'import yaml' 2>/dev/null; then
+  if ! secret_out=$(cd "$ROOT" && python3 "$SECRET_CHECKER" 2>&1); then
+    printf '\n[public-hygiene] committed Secret carries a real value\n' >&2
+    printf '%s\n' "$secret_out" >&2
+    status=1
+  fi
+elif [[ -f "$SECRET_CHECKER" ]]; then
+  classes_skipped=1
+  echo 'committed-Secret class SKIPPED — PyYAML not available (pip install pyyaml)' >&2
 fi
 
 # --- node identity class (private needles) ----------------------------------

@@ -85,8 +85,36 @@ of them), not the ~doc-only `find` it used before — `.yml`, `.sh`, `.ts`,
 | Unresolved secret placeholders (the `CHANGE`/`REPLACE_WITH_` marker forms) | covered, whole tree |
 | Server hardware SKUs | covered, whole tree |
 | Public IPv4 literals | covered over the OPS file set (docs, manifests, workflows, scripts, env samples; not application source or tests). Octet-range checked; private/loopback/link-local/TEST-NET and documented public resolvers excluded. Measured 0 findings, 0 false positives |
+| **Committed `kind: Secret` values** | covered over every tracked `.yaml`/`.yml`, by `scripts/check-committed-secret-values.py` (a YAML parser, not a grep — added after the 2026-09-06 verdaccio finding, where a live bcrypt hash under `stringData:` passed every token-shape grep above). A core/v1 Secret fails when a `data`/`stringData` value survives the placeholder filter **and** looks like credential material: a known shape (bcrypt/crypt, PEM, Stripe/GitHub/AWS/Vault/Slack/Google/npm/GitLab/SendGrid, JWT), a 32+ char hex digest, or an opaque high-entropy run. `data:` is base64-decoded first. `ExternalSecret`, `SealedSecret`, `SecretStore`/`ClusterSecretStore`, and name-only Secret shells pass. There is **no allowlist, by design** — see the limits below. Skipped (`classes_skipped=1`) when PyYAML is absent |
 | **Node hostnames** | **not covered by this file, by design.** The needles are the exact strings that must not appear here, so shipping them would publish the answer key, and hashing them buys obfuscation while implying secrecy. They are read from a private file via `MADFAM_HYGIENE_PATTERNS`; when it is unreadable the run prints `node-identity class SKIPPED` and `classes_skipped=1`. The enforcing run is `internal-devops/scripts/check-public-repo-node-identity.py` |
 | **Cloudflare tunnel identifiers** | **not covered.** A bare UUID pattern is dominated here by RFC-4122 example ids in CLI docs and by test fixtures; narrowing it to tunnel-context lines returns live findings that belong to the tunnel-identifier lane. Recorded as an open gap rather than assumed fixed |
+
+### What the committed-Secret rule does not catch
+
+Stated plainly, because the target is **zero committed Secret values** and a
+guard that implies more coverage than it has is worse than none.
+
+The rule judges the **shape of the value**, never the name of its key and never
+a registry of blessed files. That choice is deliberate. Measured over this tree
+on 2026-09-07, committed Secrets hold 56 non-empty values, and most are not
+secrets at all — `type: helm`, `enableOCI: "true"`, `BILLING_MX_VAT_RATE:
+"0.16"`, `url: ghcr.io`, `database: enclii_dev`, a verbatim Prometheus scrape
+config. Failing on "any non-placeholder value" would report ~20 non-findings,
+and the only way back to green would be an allowlist — the exact mechanism that
+lets the next real secret through, since an entry is cheap to add and never
+re-reviewed. So there is no allowlist, and the cost is paid here instead:
+
+- **A short, low-entropy secret is not caught.** `password: hunter2` is
+  indistinguishable by shape from `type: helm`. Key-name heuristics were
+  considered and rejected — `htpasswd` is not an obvious credential key name,
+  and a key allowlist is an allowlist.
+- **Only `.yaml`/`.yml` is parsed.** A Secret embedded in a Helm template, a
+  `.json` manifest, or a heredoc inside a shell script is not read.
+- **Unparseable YAML is skipped, not failed.** Templated manifests are not
+  valid YAML and are not applied as-is; the run says which files it skipped.
+- **A genuinely random-looking non-secret would be a false positive.** None
+  exist in this tree today. If one appears, the fix is to move it out of a
+  Secret — not to register an exception.
 
 **Consequence:** passing CI is not evidence that a change is boundary-clean —
 and a green run with `classes_skipped=1` is not evidence that node identity was
