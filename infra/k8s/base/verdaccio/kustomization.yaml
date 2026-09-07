@@ -21,6 +21,7 @@ resources:
   - plugin-configmap.yaml
   - token-rotation-cronjob.yaml
   - token-rotation-externalsecrets.yaml
+  - token-rotation-policy-exception.yaml
   - npm-token-alert.yaml
 
 commonLabels:
