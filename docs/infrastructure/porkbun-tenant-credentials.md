@@ -82,6 +82,22 @@ should mount a client's registrar keys into a pod's environment.
 | Intake target (how the key pair reaches Vault) | `apps/switchyard-api/internal/secretsintake/registry.yaml` |
 | Operator one-shot | `scripts/operator/porkbun-tenant-credentials.sh` |
 | CLI verbs | `packages/cli/internal/cmd/providers.go` |
+| Vault writer policy | `scripts/provision-switchyard-vault-writer.sh` |
+
+:::warning The Vault policy is not applied by merging
+
+`secret/crea` carries **read** capability as well as write, because unlike every
+other intake path Switchyard reads it back on every registrar operation. CI's
+intake/policy parity gate proves the block exists in git; it cannot prove the
+policy was applied to the running Vault. Until an operator re-applies it, the
+first `--tenant crea` call 403s and surfaces as "credentials missing" —
+indistinguishable from never having run the intake.
+
+```bash
+VAULT_TOKEN=<admin> POLICY_ONLY=1 bash scripts/provision-switchyard-vault-writer.sh
+```
+
+:::
 
 The binding for CTM:
 
@@ -197,7 +213,11 @@ missing record and refuses to overwrite a conflicting one.
    same property names, and **no** `external_secret`.
 3. Update the target-count assertions in
    `apps/switchyard-api/internal/secretsintake/registry_test.go`.
-4. Deploy switchyard-api, then run the one-shot with `ENCLII_TENANT=<id>`.
+4. Add `secret/data/<path>` **and** `secret/data/<path>/*` blocks with
+   `read` capability to `scripts/provision-switchyard-vault-writer.sh`. CI's
+   intake/policy parity gate fails without this.
+5. Deploy switchyard-api, re-apply the Vault policy (`POLICY_ONLY=1`), then run
+   the one-shot with `ENCLII_TENANT=<id>`.
 
 ## Related
 

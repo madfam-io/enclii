@@ -158,6 +158,21 @@ path "secret/data/symbiosis-hcm" {
 path "secret/data/symbiosis-hcm/*" {
   capabilities = ["create", "update", "patch", "read"]
 }
+# crea (the TENANT, distinct from the crea-map app above) — holds Crea Tu
+# Mundo's own Porkbun registrar API credentials, intake target
+# crea/porkbun-registrar. READ matters as much as write here: unlike every
+# other path in this policy, Switchyard reads these back on every registrar
+# operation to build a per-tenant Porkbun client (the global ENCLII_PORKBUN_*
+# key belongs to MADFAM's account and cannot see a client-owned domain at all).
+# Without this block the first `providers porkbun --tenant crea` call 403s and
+# surfaces as "credentials missing", indistinguishable from never having run
+# the intake.
+path "secret/data/crea" {
+  capabilities = ["create", "update", "patch", "read"]
+}
+path "secret/data/crea/*" {
+  capabilities = ["create", "update", "patch", "read"]
+}
 path "secret/data/phynd-crm-staging" {
   capabilities = ["create", "update", "patch", "read"]
 }

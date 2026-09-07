@@ -37,7 +37,14 @@
 #   1. `enclii` on PATH and logged in (`enclii auth login`) — this is the ONE
 #      token you supply. Switchyard writes Vault on your behalf; you never
 #      handle a Vault token.
-#   2. HUMAN STEP, in the CLIENT's Porkbun dashboard, once per domain:
+#   2. The switchyard-secret-writer Vault policy must have been RE-APPLIED
+#      since this tenant's path was added to
+#      scripts/provision-switchyard-vault-writer.sh. CI proves the block is in
+#      git; it cannot prove the running Vault has it. Symptom if it was not:
+#      step 3 or 4 fails with a permission error or "credentials missing".
+#        VAULT_TOKEN=<admin> POLICY_ONLY=1 \
+#          bash scripts/provision-switchyard-vault-writer.sh
+#   3. HUMAN STEP, in the CLIENT's Porkbun dashboard, once per domain:
 #      Domain Management → the domain → Details → enable "API Access".
 #      Porkbun refuses every API call for a domain that has not been opted in,
 #      and reports it identically to a bad key. Step 4 below tells the two
