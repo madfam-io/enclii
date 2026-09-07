@@ -85,10 +85,11 @@ enclii providers github rerun 25430873929 --apply --reason "re-run after GHCR to
 - Cloudflare `dns-apply` creates, updates, or no-ops DNS records when the target
   zone is visible to the configured Enclii Cloudflare account. It blocks with
   `blocked_by_dns_authority` when the apex zone still needs registrar
-  delegation/import. **A record is keyed by name + type only**, so it cannot
-  hold two records of the same type at one name — a second TXT or MX at that
-  name is applied as a destructive `update` of the first
-  ([#530](https://github.com/madfam-org/enclii/issues/530)). See
+  delegation/import. For `TXT`/`MX`/`NS`/`SRV`, a record's identity **includes
+  its content**, so several records can coexist at one name: an apply whose
+  content differs from what is already there ADDS a record rather than
+  overwriting one ([#530](https://github.com/madfam-org/enclii/issues/530),
+  fixed in [#536](https://github.com/madfam-org/enclii/pull/536)). See
   [Cloudflare DNS apply](#cloudflare-dns-apply).
 - Cloudflare `tunnels-apply` reconciles junction hostnames to the correct in-cluster service URL using `resolveServiceNamespace`; use instead of `junctions add` when live tunnel routes drift.
 - Cloudflare `access` and `r2` remain contract-only.
@@ -120,30 +121,95 @@ enclii providers cloudflare dns-apply app.example.com --type CNAME --proxied tru
 
 Without `--apply`, the command requests a dry-run plan. With `--apply`, `--reason` is required.
 
-### Known gaps (issue #530, observed 2026-09-07)
+### Several records of one type at one name
 
-**A second record of the same type at one name REPLACES the first.** The live
-record is read as `(zone, name, type)`, so `dns-apply` plans `create` when no
-record of that type exists at that name and `update` when one does — regardless
-of content. Adding an SPF TXT to an apex that already holds a provider
-verification TXT destroys the verification TXT, and the dry-run says `create`
-while the apply says `updated`. The standard MX pair (priority 10 + 20) cannot
-be expressed at all.
+A name can hold more than one `TXT`, `MX`, `NS`, or `SRV` record, and usually
+should: an apex `TXT` name carries an SPF record *plus* every provider's
+verification token, and mail providers ship an `MX` pair. For those four types
+a record's identity is **name + type + content**, so:
 
-Until this is fixed, **multiple same-type records at one name must be added in
-the Cloudflare dashboard as break-glass**. A single record of a type at a name —
-including every `CNAME` — is safe through `dns-apply`.
+| Live state at that name+type | Plan |
+| --- | --- |
+| nothing | `create` |
+| same content, same proxied/priority | `noop` |
+| different content | `create` — the existing records are untouched |
+| different content, with `--replace` | `update` — overwrites one existing record |
 
-**`--type MX --apply` can answer `502 origin_bad_gateway`** from the edge while
-the dry-run for the same operation plans cleanly; the same call succeeded ~60 s
-later. A 502 does not say whether the origin committed the write — re-read the
-zone before retrying.
+The dry-run plan is what the apply executes; both read the live set once and
+decide from the same function. The response names every record already at that
+name (`existingRecordsAtName`) so an add shows what it is joining and a
+`--replace` shows what it is choosing between.
 
-**MX priority rides inside `--content`.** There is no `--priority` flag:
+`CNAME` (and `A`/`AAAA`) keep single-record semantics: a `dns-apply` against a
+name that already has one is an `update` of that record, which is what
+repointing a host means.
 
 ```bash
-enclii providers cloudflare dns-apply example.com --type MX --content '10 mail.protonmail.ch' --apply --reason "primary MX"
+# Proton verification TXT and SPF TXT coexist at the apex — no --replace, no dashboard.
+enclii providers cloudflare dns-apply example.com --type TXT \
+  --content 'protonmail-verification=<token>' --apply --reason "Proton domain ownership"
+enclii providers cloudflare dns-apply example.com --type TXT \
+  --content 'v=spf1 include:_spf.protonmail.ch ~all' --apply --reason "Proton SPF"
 ```
+
+`--replace` is the deliberate, auditable way to overwrite a record's value — a
+rotated verification token, say. It overwrites exactly one record and warns
+about both the value it destroys and the records at that name it leaves alone.
+Like `--allow-pending-zone`, it accepts only a literal `true`.
+
+:::warning Fixed in #536 — read this if you are following an older runbook
+
+Before [#536](https://github.com/madfam-org/enclii/pull/536), a record was keyed
+by name + type only, so a second `TXT` or `MX` at one name was applied as a
+destructive `update` of the first: the dry-run said `create`, the apply said
+`updated`, and the earlier record was gone
+([#530](https://github.com/madfam-org/enclii/issues/530) — on 2026-09-07 an SPF
+TXT destroyed a live Proton ownership TXT). Any runbook step that says "add the
+second TXT/MX in the Cloudflare dashboard as break-glass" is obsolete; use
+`dns-apply`.
+
+:::
+
+### MX priority
+
+`--priority` is a first-class flag. The pre-#536 form — the preference typed
+into `--content` as `"10 host"` — still works and is split back out server-side,
+so existing runbooks keep working; `--priority` wins when both are given. The
+response reports which was used (`priority_source: argument | content`).
+
+```bash
+# The standard provider MX pair, both through Enclii.
+enclii providers cloudflare dns-apply example.com --type MX --priority 10 \
+  --content mail.protonmail.ch --apply --reason "primary MX"
+enclii providers cloudflare dns-apply example.com --type MX --priority 20 \
+  --content mailsec.protonmail.ch --apply --reason "backup MX"
+
+# Equivalent, back-compat form.
+enclii providers cloudflare dns-apply example.com --type MX \
+  --content '10 mail.protonmail.ch' --apply --reason "primary MX"
+```
+
+An `MX`/`SRV` create with no priority at all defaults to `10` and says so
+(`priority_defaulted: true`). A priority that is not a number in `0..65535` is
+refused as `invalid_request` rather than silently defaulted. Priority `0` is a
+legal preference and is preserved.
+
+Before #536, an MX apply reached Cloudflare with no `priority` field at all —
+Cloudflare rejects that with HTTP 400, and every provider error below the
+handler was rendered as `502`, so the apply failed deterministically with no
+message. That is fixed; see below for how errors read now.
+
+### Reading a failure
+
+`dns-apply` no longer answers `502` for a record Cloudflare refused:
+
+| Status | Meaning |
+| --- | --- |
+| `400 invalid_request` | an argument was malformed (e.g. a non-numeric `--priority`) |
+| `422 provider_apply_failed` | Cloudflare rejected the record; the summary and warnings carry Cloudflare's own message |
+| `409 provider_apply_failed` | a record with that content already exists at that name |
+| `424 blocked_by_dns_authority` | the zone is not delegated/visible, or the token cannot see it |
+| `502 provider_read_failed` / `provider_apply_failed` | the provider was genuinely unreachable or answered something unparseable — a `502` still does not say whether the write landed, so re-read the zone before retrying |
 
 Worked example (Proton Mail, plus coexistence with Resend), the verified brand-host
 onboarding sequence, and the post-NS-switch resolver caveat:
