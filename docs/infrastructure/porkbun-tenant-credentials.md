@@ -99,6 +99,19 @@ policy was applied to the running Vault. Until an operator re-applies it, the
 first `--tenant crea` call 403s and surfaces as "credentials missing" —
 indistinguishable from never having run the intake.
 
+The helper below takes the admin token **on stdin, never in argv**, so it never
+reaches `ps`, shell history, or a log:
+
+```bash
+bash scripts/apply-switchyard-vault-policy-remote.sh   # prompts silently
+```
+
+It re-reads the live policy afterwards and prints
+`APPLIED_OK_asserted_path_present` when `secret/data/crea` is really there. Set
+`ASSERT_PATH=<path>` to prove a different one.
+
+Directly, if you already have a shell with Vault reachable:
+
 ```bash
 VAULT_TOKEN=<admin> POLICY_ONLY=1 bash scripts/provision-switchyard-vault-writer.sh
 ```
@@ -200,6 +213,53 @@ enclii providers porkbun auto-renew-apply creatumundo.mx --tenant crea --auto-re
 Every response carries a `credentialScope` block naming the tenant, the account,
 how the scope was decided, and the Vault path consulted — never a value.
 
+## Verified end-to-end recipe (tenant `crea`, 2026-09-07)
+
+This ran green against the live estate. Run the three steps in order — each one
+fails in a way that looks like the previous step's problem if it is skipped.
+
+```bash
+# 1. Apply the Vault writer policy to the RUNNING Vault. Merging #527 did not
+#    do this. Prompts silently for the admin token; nothing reaches argv.
+bash scripts/apply-switchyard-vault-policy-remote.sh
+#    → expect: APPLIED_OK_asserted_path_present
+
+# 2. Load the tenant's Porkbun key pair into secret/crea, then verify it live.
+ENCLII_TENANT=crea VERIFY_DOMAIN=creatumundo.mx \
+  bash scripts/operator/porkbun-tenant-credentials.sh
+
+# 3. Confirm through the CLI.
+enclii providers porkbun credentials --tenant crea   # which account, is it usable
+enclii providers porkbun ping        --tenant crea   # validate the key pair live
+enclii providers porkbun domains creatumundo.mx --tenant crea
+```
+
+### CLI gotchas that cost time on the first run
+
+**The released CLI predates this feature.** `--tenant` and `providers porkbun
+ping` landed in [#527](https://github.com/madfam-org/enclii/pull/527), which is
+**not** in `v1.0.0-alpha.8` — that tag was cut from the commit immediately
+before it. On alpha.8 the flag is rejected as unknown and `ping` does not exist,
+which reads like a broken install. Build from `main`, or cut the release that
+carries these verbs (**`v1.0.0-alpha.9`**):
+
+```bash
+go build -o ~/bin/enclii ./packages/cli/cmd/enclii
+```
+
+**`enclii whoami` prints on stderr.** `whoami`, `login`, and `logout` report
+through cobra's `cmd.Println`, which writes to `OutOrStderr()`; the CLI never
+calls `SetOut`. `enclii whoami > /tmp/who` therefore captures an empty file and
+reads as "not logged in". Use `enclii whoami 2>&1`, or `-o json`.
+
+**`enclii login` follows whichever Janua identity the browser session holds.**
+The PKCE flow completes against the existing `auth.madfam.io` session, and
+estate cookie precedence (janua J9) means a browser logged into a *client*
+application resolves that identity — the CLI silently receives the wrong one and
+every `--tenant` call afterwards fails on authorization rather than on anything
+to do with the tenant. **Log out of the client app in the browser first**, then
+`enclii login`, then confirm with `enclii whoami 2>&1`.
+
 ## What is deliberately not wired
 
 **Domain renewal.** Porkbun's `/domain/renew` spends account credit and requires
@@ -229,3 +289,4 @@ missing record and refuses to overwrite a conflicting one.
 
 - [DNS Setup (Porkbun)](/infrastructure/dns-setup-porkbun)
 - [Cloudflare Integration](/infrastructure/CLOUDFLARE)
+- [Domain and email DNS onboarding](/runbooks/DOMAIN_AND_EMAIL_DNS_ONBOARDING)

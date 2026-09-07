@@ -45,6 +45,15 @@ enclii login --no-browser
 # Copy URL to browser on another machine
 ```
 
+> **`login` follows whichever Janua identity the browser session already
+> holds.** The PKCE flow completes against the existing `auth.madfam.io`
+> session; estate cookie precedence (janua J9) means a browser logged into a
+> *client* application resolves that identity, and the CLI silently receives the
+> wrong one. Subsequent scoped calls (for example `providers porkbun --tenant
+> <id>`) then fail on authorization rather than on anything to do with the
+> scope. **Log out of the client app in the browser first**, then `enclii
+> login`, then confirm with `enclii whoami 2>&1` (whoami prints on stderr).
+
 ## Authentication Flow
 
 1. CLI initiates OAuth 2.0 PKCE flow

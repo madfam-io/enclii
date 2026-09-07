@@ -16,6 +16,15 @@ The `domains` command manages custom domains for your services. Each domain requ
 
 The command reads service context from `service.yaml` in the current directory. You can override this with the `--service` and `--file` flags.
 
+> **`-f`/`--file` does not change the working directory.** The manifest parser
+> resolves manifest-relative paths — `spec.build.dockerfile` above all — against
+> `os.Getwd()`, not against the directory the `-f` file lives in
+> (`packages/cli/internal/spec/parser.go`). Running
+> `enclii domains add <host> --service <svc> -f enclii.yaml` from a
+> subdirectory fails validation with
+> `spec.build.dockerfile: file does not exist: <path>` for a Dockerfile that is
+> plainly there. **Run it from the repo root.**
+
 ## Subcommands
 
 ### `domains list`
@@ -239,6 +248,7 @@ Use this when a hostname was added to `enclii.yaml` and never became live.
 
 ## See Also
 
+- [Domain and email DNS onboarding](../../runbooks/DOMAIN_AND_EMAIL_DNS_ONBOARDING.md) - Verified brand-host sequence, mail records, resolver caveats
 - [`enclii deploy`](./deploy.md) - Deploy a service (auto-provisions domains from `enclii.yaml`)
 - [`enclii ps`](./ps.md) - Check service status
 - [`enclii logs`](./logs.md) - View service logs

@@ -11,6 +11,16 @@ Cloudflare, Porkbun, and Hetzner tooling in MADFAM operations.
 Mutating commands are dry-run by default. Use `--apply --reason "..."` only
 when the corresponding provider adapter is wired and the audit reason is clear.
 
+:::note `--tenant` needs a CLI built from `main`
+
+`--tenant` and `providers porkbun ping` landed in
+[#527](https://github.com/madfam-org/enclii/pull/527), which is **not** in
+`v1.0.0-alpha.8`. On that release the flag is rejected as unknown and `ping`
+does not exist. Build from `main` (`go build -o ~/bin/enclii
+./packages/cli/cmd/enclii`) until **`v1.0.0-alpha.9`** carries them.
+
+:::
+
 Read-only commands call live Switchyard adapters when configured. Current first
 coverage includes GitHub workflow runs, repository Actions secrets, GHCR package
 metadata/versions, branch protection, Cloudflare DNS, Cloudflare tunnel status,
@@ -75,7 +85,11 @@ enclii providers github rerun 25430873929 --apply --reason "re-run after GHCR to
 - Cloudflare `dns-apply` creates, updates, or no-ops DNS records when the target
   zone is visible to the configured Enclii Cloudflare account. It blocks with
   `blocked_by_dns_authority` when the apex zone still needs registrar
-  delegation/import.
+  delegation/import. **A record is keyed by name + type only**, so it cannot
+  hold two records of the same type at one name — a second TXT or MX at that
+  name is applied as a destructive `update` of the first
+  ([#530](https://github.com/madfam-org/enclii/issues/530)). See
+  [Cloudflare DNS apply](#cloudflare-dns-apply).
 - Cloudflare `tunnels-apply` reconciles junction hostnames to the correct in-cluster service URL using `resolveServiceNamespace`; use instead of `junctions add` when live tunnel routes drift.
 - Cloudflare `access` and `r2` remain contract-only.
 - Cloudflare `hostnames` currently reads DNS-shaped state; full SaaS custom
@@ -105,6 +119,51 @@ enclii providers cloudflare dns-apply app.example.com --type CNAME --proxied tru
 ```
 
 Without `--apply`, the command requests a dry-run plan. With `--apply`, `--reason` is required.
+
+### Known gaps (issue #530, observed 2026-09-07)
+
+**A second record of the same type at one name REPLACES the first.** The live
+record is read as `(zone, name, type)`, so `dns-apply` plans `create` when no
+record of that type exists at that name and `update` when one does — regardless
+of content. Adding an SPF TXT to an apex that already holds a provider
+verification TXT destroys the verification TXT, and the dry-run says `create`
+while the apply says `updated`. The standard MX pair (priority 10 + 20) cannot
+be expressed at all.
+
+Until this is fixed, **multiple same-type records at one name must be added in
+the Cloudflare dashboard as break-glass**. A single record of a type at a name —
+including every `CNAME` — is safe through `dns-apply`.
+
+**`--type MX --apply` can answer `502 origin_bad_gateway`** from the edge while
+the dry-run for the same operation plans cleanly; the same call succeeded ~60 s
+later. A 502 does not say whether the origin committed the write — re-read the
+zone before retrying.
+
+**MX priority rides inside `--content`.** There is no `--priority` flag:
+
+```bash
+enclii providers cloudflare dns-apply example.com --type MX --content '10 mail.protonmail.ch' --apply --reason "primary MX"
+```
+
+Worked example (Proton Mail, plus coexistence with Resend), the verified brand-host
+onboarding sequence, and the post-NS-switch resolver caveat:
+[Domain and email DNS onboarding](/runbooks/DOMAIN_AND_EMAIL_DNS_ONBOARDING).
+
+## Cloudflare zone settings apply
+
+Run after the zone goes **active** (a `pending` zone has no settings to read).
+Applies Enclii's HTTPS posture as a set — `always_use_https=on`,
+`automatic_https_rewrites=on`, `min_tls_version=1.2` — because they are only
+meaningful together.
+
+```bash
+enclii providers cloudflare zone-settings-apply example.com --apply --reason "apply Enclii HTTPS posture"
+curl -sSI http://example.com/ | head -1   # expect: HTTP/1.1 301 Moved Permanently
+```
+
+`zone_absent` in the dry-run means the zone was never created — run
+`zone-add-apply` first. A setting reported `not-editable` is a zone-plan
+limitation, not a failure.
 
 ## Cloudflare credential readiness
 
