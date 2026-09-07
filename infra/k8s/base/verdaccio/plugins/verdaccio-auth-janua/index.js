@@ -1,202 +1,163 @@
 'use strict';
 
+const http = require('http');
 const https = require('https');
 
 /**
  * verdaccio-auth-janua
  *
- * Verdaccio v5 auth plugin that validates Bearer tokens against Janua's
- * API key verification endpoint. Falls through to htpasswd on failure
- * so the two auth backends can coexist during migration.
+ * Verdaccio v5 auth plugin that turns a Janua API key into a registry
+ * credential. Janua remains the sole identity authority; htpasswd is kept
+ * as a fallback for CI service users.
  *
- * Config (verdaccio config.yaml):
+ * Config (verdaccio config.yaml) -- list BEFORE htpasswd so a Janua key is
+ * tried first and any non-key password falls through:
+ *
  *   auth:
- *     janua-keys:
- *       janua_url: https://api.janua.dev   # base URL, no trailing slash
- *       cache_ttl_ms: 300000               # 5 min default
+ *     auth-janua:
+ *       janua_url: https://auth.madfam.io
+ *       cache_ttl_ms: 300000
+ *       key_prefix: jnk_
+ *     htpasswd:
+ *       file: /verdaccio/conf/htpasswd
+ *
+ * Consumers configure the key as Basic credentials:
+ *   //npm.madfam.io/:_auth=$(printf 'janua:%s' "$JANUA_KEY" | base64)
+ *   //npm.madfam.io/:always-auth=true
+ *
+ * The config key is `auth-janua`: Verdaccio's plugin loader resolves a
+ * non-scoped id against `<plugins_dir>/<id>` and then
+ * `<plugins_dir>/verdaccio-<id>`, so `auth-janua` finds the
+ * `verdaccio-auth-janua` directory and logs
+ * `plugin successfully loaded: verdaccio-auth-janua`.
+ *
+ * ---------------------------------------------------------------------------
+ * Why the key goes in `_auth` (Basic), NOT `_authToken` (Bearer)
+ * ---------------------------------------------------------------------------
+ * With `security.api.jwt` configured (our case since 2026-05-04, when
+ * `legacy: true` was removed), Verdaccio's API middleware handles
+ * `Authorization: Bearer <token>` by verifying it as a VERDACCIO-SIGNED JWT.
+ * A raw Janua key (`jnk_...`) is not a JWT: `verifyJWTPayload` throws
+ * `JsonWebTokenError`, which Verdaccio converts into an ANONYMOUS remote user.
+ * The request proceeds unauthenticated and `authenticate()` is NEVER called,
+ * so no auth plugin can ever see an `_authToken` value.
+ *
+ * `Authorization: Basic <base64(user:pass)>` takes the other branch and calls
+ * `authenticate(user, password)` -- which is where this plugin runs. npm emits
+ * Basic when the registry is configured with `_auth`.
+ *
+ * Verified against production on 2026-09-07 (read-only):
+ *   Bearer <opaque>       /@dhanam%2fshared -> 401, NO  "authenticating for user" log line
+ *   Basic  <u:p>          /@dhanam%2fshared -> 401, YES "authenticating for user someuser failed"
+ *   npm + _auth (Basic)   /@dhanam%2fshared -> 401, YES "authenticating for user testuser failed"
+ *
+ * The alternative -- implementing the `apiJWTmiddleware` hook, which runs
+ * before JWT verification -- was deliberately REJECTED: Verdaccio replaces its
+ * entire API middleware with the first plugin that defines that hook, and
+ * plugins receive only `{ config, logger }`, so the stock middleware cannot be
+ * delegated to. Overriding it would mean reimplementing Verdaccio's JWT and
+ * Basic handling (including signature verification with the server secret)
+ * inside this plugin; any mistake there silently un-authenticates every
+ * existing CI token on a singleton registry the whole ecosystem builds
+ * against. Basic auth achieves the same outcome with zero blast radius.
  */
 
-const DEFAULT_JANUA_URL = 'https://api.janua.dev';
+const DEFAULT_JANUA_URL = 'https://auth.madfam.io';
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const DEFAULT_KEY_PREFIX = 'jnk_';
+const DEFAULT_TIMEOUT_MS = 5000;
+const MAX_CACHE_ENTRIES = 500;
+
+const SCOPE_INSTALL = 'npm:install';
+const SCOPE_PUBLISH = 'npm:publish';
+const GROUP_AUTHENTICATED = '$authenticated';
 
 class JanuaAuthPlugin {
   constructor(config, options) {
-    this.januaUrl = (config && config.janua_url) || DEFAULT_JANUA_URL;
-    this.cacheTtlMs = (config && config.cache_ttl_ms) || DEFAULT_CACHE_TTL_MS;
-    this.logger = options.logger;
+    config = config || {};
+    options = options || {};
 
-    // In-memory cache: key -> { scopes, user, expiresAt }
+    this.januaUrl = config.janua_url || DEFAULT_JANUA_URL;
+    this.cacheTtlMs = config.cache_ttl_ms || DEFAULT_CACHE_TTL_MS;
+    this.keyPrefix = config.key_prefix || DEFAULT_KEY_PREFIX;
+    this.timeoutMs = config.timeout_ms || DEFAULT_TIMEOUT_MS;
+    this.logger = options.logger || {
+      info() {}, warn() {}, error() {}, debug() {}, trace() {},
+    };
+
+    // Injected in tests; defaults to node's http/https.
+    this._transport = options.transport || null;
+
+    // key -> { user, scopes, orgId, keyId, expiresAt }
     this._cache = new Map();
 
     this.logger.info(
-      { janua_url: this.januaUrl, cache_ttl_ms: this.cacheTtlMs },
-      'janua-keys auth plugin loaded'
+      {
+        janua_url: this.januaUrl,
+        cache_ttl_ms: this.cacheTtlMs,
+        key_prefix: this.keyPrefix,
+      },
+      'verdaccio-auth-janua: plugin loaded'
     );
   }
 
-  // ---------------------------------------------------------------
-  // authenticate(user, password, callback)
-  //   password = Bearer token sent by npm CLI via _authToken
-  //   On success: callback(null, [user])
-  //   On fall-through: callback(null, false)
-  // ---------------------------------------------------------------
-  authenticate(user, password, callback) {
-    if (!password) {
-      return callback(null, false); // fall through to htpasswd
-    }
+  // -----------------------------------------------------------------
+  // Helpers
+  // -----------------------------------------------------------------
 
-    // Check cache first
-    const cached = this._cache.get(password);
-    if (cached && Date.now() < cached.expiresAt) {
-      this.logger.debug({ user: cached.user }, 'janua-keys: cache hit');
-      // Attach scopes to the callback groups array so allow_access can read them
-      const groups = (cached.scopes || []).concat([cached.user, '$authenticated']);
-      return callback(null, groups);
-    }
-
-    // Call Janua API key verification
-    const payload = JSON.stringify({ key: password });
-    const url = new URL('/api/v1/api-keys/verify', this.januaUrl);
-
-    const reqOptions = {
-      hostname: url.hostname,
-      port: url.port || 443,
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload),
-      },
-      timeout: 5000,
-    };
-
-    const req = https.request(reqOptions, (res) => {
-      let body = '';
-      res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-
-          if (res.statusCode === 200 && data.valid === true) {
-            const resolvedUser = data.owner || data.name || user;
-            const scopes = Array.isArray(data.scopes) ? data.scopes : [];
-
-            // Populate cache
-            this._cache.set(password, {
-              user: resolvedUser,
-              scopes,
-              expiresAt: Date.now() + this.cacheTtlMs,
-            });
-
-            // Evict expired entries lazily (keep map from growing unbounded)
-            if (this._cache.size > 500) {
-              this._evictExpired();
-            }
-
-            this.logger.info(
-              { user: resolvedUser, scopes },
-              'janua-keys: auth success'
-            );
-
-            const groups = scopes.concat([resolvedUser, '$authenticated']);
-            return callback(null, groups);
-          }
-
-          // Invalid key or unexpected response -- fall through
-          this.logger.warn(
-            { status: res.statusCode, valid: data.valid, user },
-            'janua-keys: auth rejected'
-          );
-          return callback(null, false);
-        } catch (parseErr) {
-          this.logger.error(
-            { err: parseErr.message },
-            'janua-keys: failed to parse response'
-          );
-          return callback(null, false);
-        }
-      });
-    });
-
-    req.on('error', (err) => {
-      this.logger.error(
-        { err: err.message },
-        'janua-keys: request failed, falling through'
-      );
-      return callback(null, false); // network error -> fall through
-    });
-
-    req.on('timeout', () => {
-      req.destroy();
-      this.logger.error('janua-keys: request timed out, falling through');
-      return callback(null, false);
-    });
-
-    req.write(payload);
-    req.end();
+  _looksLikeJanuaKey(value) {
+    return typeof value === 'string' && value.indexOf(this.keyPrefix) === 0;
   }
 
-  // ---------------------------------------------------------------
-  // allow_access -- checks for npm:install scope
-  // ---------------------------------------------------------------
-  allow_access(user, pkg, callback) {
-    // $all packages are always accessible
-    if (pkg.access && pkg.access.includes('$all')) {
-      return callback(null, true);
-    }
-
-    // Authenticated users with the right groups
-    if (user && user.name) {
-      const groups = user.groups || [];
-      // If user was authenticated via htpasswd, groups won't contain scopes.
-      // In that case $authenticated is enough (htpasswd users get full access).
-      if (groups.includes('$authenticated')) {
-        // If groups contain Janua scopes, enforce npm:install
-        const hasJanuaScopes = groups.some((g) => g.startsWith('npm:'));
-        if (hasJanuaScopes && !groups.includes('npm:install')) {
-          this.logger.warn(
-            { user: user.name, pkg: pkg.name },
-            'janua-keys: access denied, missing npm:install scope'
-          );
-          return callback(
-            new Error('npm:install scope required for package access')
-          );
-        }
-        return callback(null, true);
+  /**
+   * Groups granted to a verified key.
+   *
+   * Verdaccio builds the remote user as createRemoteUser(username, groups) --
+   * it uses the username IT already has, never one returned by the plugin. So
+   * groups must carry only real group strings; pushing a resolved username (or
+   * `undefined`, as an earlier draft did when Janua's response had no `owner`
+   * field) corrupts package-access matching.
+   */
+  _groupsFor(scopes) {
+    const groups = [];
+    for (const scope of scopes) {
+      if (typeof scope === 'string' && scope.indexOf('npm:') === 0) {
+        groups.push(scope);
       }
     }
-
-    // Fall through -- let Verdaccio decide
-    return callback(null, false);
+    groups.push(GROUP_AUTHENTICATED);
+    return groups;
   }
 
-  // ---------------------------------------------------------------
-  // allow_publish -- checks for npm:publish scope
-  // ---------------------------------------------------------------
-  allow_publish(user, pkg, callback) {
-    if (user && user.name) {
-      const groups = user.groups || [];
-      if (groups.includes('$authenticated')) {
-        const hasJanuaScopes = groups.some((g) => g.startsWith('npm:'));
-        if (hasJanuaScopes && !groups.includes('npm:publish')) {
-          this.logger.warn(
-            { user: user.name, pkg: pkg.name },
-            'janua-keys: publish denied, missing npm:publish scope'
-          );
-          return callback(
-            new Error('npm:publish scope required for package publishing')
-          );
-        }
-        return callback(null, true);
-      }
+  /**
+   * Username for a verified key. Janua's verify response is
+   * { valid, org_id, scopes, key_id } -- there is NO owner/name field, so a
+   * stable synthetic identity is derived from the key id. This keeps registry
+   * logs attributable to a specific Janua key without inventing a person.
+   */
+  _usernameFor(data) {
+    return data.key_id ? `janua-key:${data.key_id}` : 'janua-key';
+  }
+
+  _cacheGet(key) {
+    const entry = this._cache.get(key);
+    if (!entry) {
+      return null;
     }
-
-    return callback(null, false);
+    if (Date.now() >= entry.expiresAt) {
+      this._cache.delete(key);
+      return null;
+    }
+    return entry;
   }
 
-  // ---------------------------------------------------------------
-  // Internal: evict expired cache entries
-  // ---------------------------------------------------------------
+  _cacheSet(key, entry) {
+    if (this._cache.size >= MAX_CACHE_ENTRIES) {
+      this._evictExpired();
+    }
+    this._cache.set(key, entry);
+  }
+
   _evictExpired() {
     const now = Date.now();
     for (const [key, entry] of this._cache) {
@@ -205,6 +166,212 @@ class JanuaAuthPlugin {
       }
     }
   }
+
+  /**
+   * POST {janua_url}/api/v1/api-keys/verify  { "key": "<key>" }
+   * -> 200 { valid, org_id, scopes, key_id }
+   *
+   * callback(null, null)  => not a valid key (or Janua unreachable): caller
+   *                          must fall through to the next auth backend.
+   * callback(null, entry) => verified.
+   */
+  _verifyKey(key, callback) {
+    const cached = this._cacheGet(key);
+    if (cached) {
+      this.logger.debug(
+        { user: cached.user },
+        'verdaccio-auth-janua: cache hit'
+      );
+      return callback(null, cached);
+    }
+
+    let url;
+    try {
+      url = new URL('/api/v1/api-keys/verify', this.januaUrl);
+    } catch (err) {
+      this.logger.error(
+        { err: err.message, janua_url: this.januaUrl },
+        'verdaccio-auth-janua: invalid janua_url'
+      );
+      return callback(null, null);
+    }
+
+    const payload = JSON.stringify({ key });
+    const transport =
+      this._transport || (url.protocol === 'http:' ? http : https);
+
+    const reqOptions = {
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'http:' ? 80 : 443),
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+      timeout: this.timeoutMs,
+    };
+
+    let settled = false;
+    const settle = (entry) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      callback(null, entry);
+    };
+
+    const req = transport.request(reqOptions, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        body += chunk;
+      });
+      res.on('end', () => {
+        let data;
+        try {
+          data = JSON.parse(body);
+        } catch (parseErr) {
+          this.logger.error(
+            { err: parseErr.message, status: res.statusCode },
+            'verdaccio-auth-janua: failed to parse verify response'
+          );
+          return settle(null);
+        }
+
+        if (res.statusCode !== 200 || data.valid !== true) {
+          this.logger.warn(
+            { status: res.statusCode, valid: data.valid },
+            'verdaccio-auth-janua: key rejected'
+          );
+          return settle(null);
+        }
+
+        const scopes = Array.isArray(data.scopes) ? data.scopes : [];
+        const entry = {
+          user: this._usernameFor(data),
+          scopes,
+          groups: this._groupsFor(scopes),
+          orgId: data.org_id || null,
+          keyId: data.key_id || null,
+          expiresAt: Date.now() + this.cacheTtlMs,
+        };
+
+        this._cacheSet(key, entry);
+        this.logger.info(
+          { user: entry.user, org_id: entry.orgId, scopes: entry.scopes },
+          'verdaccio-auth-janua: key verified'
+        );
+        return settle(entry);
+      });
+    });
+
+    req.on('error', (err) => {
+      this.logger.error(
+        { err: err.message },
+        'verdaccio-auth-janua: verify request failed, falling through'
+      );
+      settle(null);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      this.logger.error(
+        'verdaccio-auth-janua: verify request timed out, falling through'
+      );
+      settle(null);
+    });
+
+    req.write(payload);
+    req.end();
+  }
+
+  // -----------------------------------------------------------------
+  // authenticate(user, password, callback)
+  //
+  // Reached for Basic credentials and the web login form. A Janua key may be
+  // supplied as the PASSWORD (any username), which is what
+  //   npm login --registry https://npm.madfam.io
+  // and `_auth`-style Basic credentials produce.
+  //
+  // callback(null, groups) on success; callback(null, false) to fall through
+  // to the next plugin (htpasswd).
+  // -----------------------------------------------------------------
+  authenticate(user, password, callback) {
+    if (!password || !this._looksLikeJanuaKey(password)) {
+      return callback(null, false); // fall through to htpasswd
+    }
+
+    this._verifyKey(password, (_err, entry) => {
+      if (!entry) {
+        return callback(null, false); // fall through to htpasswd
+      }
+      return callback(null, entry.groups);
+    });
+  }
+
+  // -----------------------------------------------------------------
+  // allow_access -- requires npm:install on Janua-authenticated users
+  // -----------------------------------------------------------------
+  allow_access(user, pkg, callback) {
+    // Public packages stay public.
+    if (pkg && Array.isArray(pkg.access) && pkg.access.indexOf('$all') !== -1) {
+      return callback(null, true);
+    }
+
+    const groups = (user && user.groups) || [];
+
+    // Not a Janua-authenticated request: let the next plugin / Verdaccio's
+    // default group matching decide (this is how htpasswd users keep working).
+    if (!this._hasJanuaScopes(groups)) {
+      return callback(null, false);
+    }
+
+    if (groups.indexOf(SCOPE_INSTALL) === -1) {
+      this.logger.warn(
+        { user: user && user.name, pkg: pkg && pkg.name },
+        'verdaccio-auth-janua: access denied, missing npm:install scope'
+      );
+      return callback(
+        new Error('npm:install scope required for package access')
+      );
+    }
+
+    return callback(null, true);
+  }
+
+  // -----------------------------------------------------------------
+  // allow_publish -- requires npm:publish on Janua-authenticated users
+  // -----------------------------------------------------------------
+  allow_publish(user, pkg, callback) {
+    const groups = (user && user.groups) || [];
+
+    if (!this._hasJanuaScopes(groups)) {
+      return callback(null, false);
+    }
+
+    if (groups.indexOf(SCOPE_PUBLISH) === -1) {
+      this.logger.warn(
+        { user: user && user.name, pkg: pkg && pkg.name },
+        'verdaccio-auth-janua: publish denied, missing npm:publish scope'
+      );
+      return callback(
+        new Error('npm:publish scope required for package publishing')
+      );
+    }
+
+    return callback(null, true);
+  }
+
+  _hasJanuaScopes(groups) {
+    for (const group of groups) {
+      if (typeof group === 'string' && group.indexOf('npm:') === 0) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 module.exports = (config, options) => new JanuaAuthPlugin(config, options);
+module.exports.JanuaAuthPlugin = JanuaAuthPlugin;

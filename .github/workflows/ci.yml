@@ -184,6 +184,40 @@ jobs:
           fi
           echo "✅ Manifest audit passed (including port consistency)!"
 
+  verdaccio-janua-plugin:
+    name: Verdaccio Janua auth plugin
+    runs-on: ubuntu-latest
+    # The plugin exists twice: a reviewable source tree under
+    # infra/k8s/base/verdaccio/plugins/, and plugin-configmap.yaml, which is
+    # what actually reaches the Verdaccio pod. This job is the only thing
+    # keeping the code that runs in production identical to the code humans
+    # review, and it exercises the scope logic offline against a mock of
+    # Janua's /api/v1/api-keys/verify contract.
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install --quiet pyyaml pytest
+
+      - name: Run plugin unit tests (mock Janua, no network)
+        run: node infra/k8s/base/verdaccio/plugins/verdaccio-auth-janua/test/plugin.test.js
+
+      - name: Check ConfigMap matches plugin source
+        run: python3 scripts/sync-verdaccio-janua-plugin.py
+
+      - name: Run ConfigMap sync self-tests
+        run: pytest tests/scripts/test_sync_verdaccio_janua_plugin.py -v
+
   networkpolicy-port-lint:
     name: NetworkPolicy port consistency
     runs-on: ubuntu-latest

@@ -106,11 +106,13 @@ Files to create in `infra/k8s/base/`:
 
 Create `enclii.yaml` service definition following Enclii patterns.
 
-### Phase 4: Janua OAuth Integration (Optional Enhancement)
-**Timeline: Day 3-4**
-**Owner: Backend**
+### Phase 4: Janua API-key authentication
 
-Replace htpasswd with Janua OAuth using `verdaccio-auth-oauth2` plugin.
+Delivered by the `verdaccio-auth-janua` plugin, with htpasswd retained as a
+fallback for CI service users. See
+[Authentication](#authentication-janua-api-keys-htpasswd-fallback) below for
+how to get a registry token — this supersedes the earlier
+`verdaccio-auth-oauth2` sketch, which was never implemented.
 
 ### Phase 5: CI/CD Integration
 **Timeline: Day 4-5**
@@ -169,7 +171,14 @@ data:
       title: MADFAM Package Registry
       primary_color: "#6366f1"
 
+    # Order matters: the Janua plugin claims only jnk_* passwords and falls
+    # through for everything else, so htpasswd keeps working for CI users.
     auth:
+      auth-janua:
+        janua_url: https://auth.madfam.io
+        cache_ttl_ms: 300000
+        key_prefix: jnk_
+        timeout_ms: 5000
       htpasswd:
         file: /verdaccio/conf/htpasswd
         max_users: 100
@@ -507,9 +516,235 @@ git push origin shared-lib-v0.2.0
 @forj:registry=https://npm.madfam.io
 @enclii:registry=https://npm.madfam.io
 
-# Auth token for CI (locally: set NPM_MADFAM_TOKEN env var or run `npm login --registry https://npm.madfam.io`)
+# CI service token (a Verdaccio-issued JWT, rotated by the npm-token-rotation CronJob)
 //npm.madfam.io/:_authToken=${NPM_MADFAM_TOKEN}
 ```
+
+For a **person**, use a Janua API key instead of `_authToken` — it goes in
+`_auth`, not `_authToken`. See
+[Authentication](#authentication-janua-api-keys-htpasswd-fallback).
+
+---
+
+## Authentication (Janua API keys, htpasswd fallback)
+
+The registry has two auth backends, tried in this order (see `auth:` in
+`infra/k8s/base/verdaccio/configmap.yaml`):
+
+| Order | Backend | Who it is for | Credential |
+|-------|---------|---------------|------------|
+| 1 | `auth-janua` (`verdaccio-auth-janua` plugin) | People | A Janua API key (`jnk_…`) in `_auth` |
+| 2 | `htpasswd` | CI service users | The `NPM_MADFAM_TOKEN` JWT in `_authToken`, or a bcrypt username/password |
+
+The plugin claims **only** passwords that start with `jnk_`. Anything else
+returns `callback(null, false)`, so htpasswd sees it unchanged. Existing CI
+credentials are unaffected.
+
+### Getting a registry token (people)
+
+1. Mint a key in the Janua dashboard: **Settings → API keys**
+   (`apps/dashboard/app/settings/api-keys`).
+2. Give it the scopes you need:
+   - `npm:install` — required to install from private scopes.
+   - `npm:publish` — additionally required to publish. Publishers need **both**.
+3. Copy the key (`jnk_…`); Janua shows it exactly once.
+4. Configure npm with the key as **Basic** credentials:
+
+```bash
+npm config set //npm.madfam.io/:_auth "$(printf 'janua:%s' "$JANUA_API_KEY" | base64)"
+npm config set //npm.madfam.io/:always-auth true
+```
+
+### Do NOT use `_authToken`, and do NOT `npm login`
+
+> [!IMPORTANT]
+> A Janua API key in `_authToken` **silently does nothing**. `security.api.jwt`
+> is configured on this registry, so Verdaccio treats an
+> `Authorization: Bearer <token>` header as a **Verdaccio-signed JWT** and
+> verifies its signature *before* any auth plugin runs. A `jnk_…` key fails
+> that check, and Verdaccio's error handling converts the failure into an
+> **anonymous** user rather than a 401 — so the request proceeds
+> unauthenticated and you get a confusing "authorization required" on a private
+> package, with no sign that your key was ever seen.
+>
+> `Authorization: Basic …` takes the other branch and calls the auth plugins,
+> which is why the key belongs in `_auth`.
+
+> [!IMPORTANT]
+> `npm login --registry https://npm.madfam.io` sends your password to
+> **htpasswd**, not Janua. Janua dashboard credentials are not htpasswd
+> credentials, so login fails with `bad username/password, access denied`
+> even when the account is perfectly valid. This is the single most common
+> confusion with this registry. Mint an API key instead.
+
+Verified against production on 2026-09-07:
+
+| Credential | Result | Verdaccio log |
+|---|---|---|
+| `Bearer <opaque non-JWT>` | 401 | no `authenticating for user` line — plugins never ran |
+| `Basic <user:pass>` | 401 | `authenticating for user someuser failed` — plugins ran |
+| npm with `_auth` (Basic) | 401 | `authenticating for user testuser failed` — plugins ran |
+
+### Scope enforcement
+
+Once a key is verified, its Janua scopes become Verdaccio groups:
+
+- `npm:install` missing → package access denied.
+- `npm:publish` missing → publish denied (install still works).
+- A key with neither is authenticated but has `$authenticated` only.
+
+htpasswd users carry no `npm:*` groups, so the plugin falls through for them
+and Verdaccio's own package rules apply — unchanged from before.
+
+### CI service users (htpasswd, unchanged)
+
+CI keeps using `NPM_MADFAM_TOKEN` in `_authToken`. That token is a
+Verdaccio-issued JWT, so it passes JWT verification normally. It is
+distributed to org repos by the `npm-token-rotation` CronJob (below).
+
+### The plugin
+
+Source of truth: `infra/k8s/base/verdaccio/plugins/verdaccio-auth-janua/`.
+It is shipped to the pod as the `verdaccio-janua-plugin` ConfigMap
+(`plugin-configmap.yaml`), which is **generated** — run
+`python3 scripts/sync-verdaccio-janua-plugin.py --write` after editing the
+source; CI fails on drift.
+
+It calls `POST {janua_url}/api/v1/api-keys/verify` with `{"key": "<key>"}` and
+reads `{valid, org_id, scopes, key_id}`. Results are cached in memory for
+`cache_ttl_ms` (5 min). If Janua is unreachable the plugin falls through to
+htpasswd rather than failing the request.
+
+Janua's verify response has **no** `owner`/`name` field, so the registry
+username is derived from the key id (`janua-key:<key_id>`) — registry logs stay
+attributable to a specific key.
+
+---
+
+## Token rotation CronJob
+
+`npm-token-rotation` (Sundays 02:00 UTC) validates `NPM_MADFAM_TOKEN`, and if
+it is failing or within 30 days of expiry, renews it and propagates it to the
+org repos in `NPM_ROTATION_REPO_ALLOWLIST`. It also pushes
+`npm_token_expiry_days` to the Pushgateway for the alerts in
+`npm-token-alert.yaml`.
+
+### 2026-09-07: three consecutive failures, healthy token
+
+The runs on **2026-08-23, 08-30 and 09-06** all failed
+(`BackoffLimitExceeded`), while the token itself was fine — `/-/whoami`
+returned 200 and it does not expire until 2027-04-25.
+
+Root cause, in two parts, both introduced by
+`bc573cdc` *fix(verdaccio): add publish smoke and safer npm token rotation (#249)*
+on 2026-05-22:
+
+1. That PR added an `npm publish --dry-run` smoke test to
+   `verify_token_works()`, but the rotation image
+   (`infra/docker/alpine-gh`: `ca-certificates curl github-cli jq`) has **no
+   Node and no npm**. Under `set -euo pipefail` the missing binary failed the
+   smoke on every run, so a healthy token was always judged invalid.
+2. Having judged the token invalid, the script called `login_for_token()`,
+   which requires `NPM_REGISTRY_PASSWORD`. The same PR documented a `password`
+   key on `npm-token-rotation-creds` but never shipped an ExternalSecret for
+   it. The live Secret carries only `token`, `gh_token` and `username`, so the
+   script hit its guard and exited 1.
+
+Evidence: job `npm-token-rotation-29811000` started 02:00:00Z and failed
+02:00:30Z; Verdaccio logged three `GET /-/whoami` and **zero** publish or
+`sec/login` requests — consistent with npm never executing.
+
+**Fix (this change):** the publish check is now a `curl` PUT to
+`/@madfam%2fnpm-publish-smoke` with an empty JSON body. Verdaccio authorizes
+before parsing the payload, so an authorized token gets `422 bad incoming
+package data` and an unauthorized one gets `401`/`403`. No npm binary, and
+nothing is published — verified in production: the response was 422 and
+`/verdaccio/storage/@madfam/npm-publish-smoke` was not created.
+
+**Still open:** there is no `password` ExternalSecret, so unattended *renewal*
+remains impossible; the job now fails with an explicit message saying so rather
+than a bare exit. Renewal is not urgent (the token is valid until 2027-04-25),
+but before then either add a password ExternalSecret or rotate by hand.
+
+### Kyverno noise
+
+Every rotation Job and the CronJob raised a `require-probes` PolicyViolation.
+That policy is `validationFailureAction: Audit`, so it never blocked anything —
+it was **not** the cause of the failures, only noise on the events an operator
+reads when rotation breaks. Readiness probes are meaningless for a
+run-to-completion batch Job, so
+`infra/k8s/base/verdaccio/token-rotation-policy-exception.yaml` adds a
+`PolicyException`, matching the existing `ceq-batch-job-probe-exceptions`
+pattern.
+
+---
+
+## Canary procedure (enabling the plugin)
+
+There is **no staging Verdaccio** — `npm-registry` runs a single production
+instance on an RWO Longhorn PVC. The plugin is therefore validated offline
+first, then rolled to production behind ArgoCD as a canary.
+
+Offline (runs in CI, and locally with no cluster and no network):
+
+```bash
+node infra/k8s/base/verdaccio/plugins/verdaccio-auth-janua/test/plugin.test.js
+python3 scripts/sync-verdaccio-janua-plugin.py
+pytest tests/scripts/test_sync_verdaccio_janua_plugin.py -v
+```
+
+In the cluster, after ArgoCD syncs `npm-registry-services`:
+
+1. **Confirm the plugin loaded.** The deployment is `strategy: Recreate` with a
+   Reloader annotation, so the ConfigMap change restarts the pod (~30s):
+
+   ```bash
+   kubectl -n npm-registry logs deploy/verdaccio | grep 'plugin successfully loaded'
+   ```
+
+   Expect **three** lines — `verdaccio-auth-janua`, `verdaccio-htpasswd`,
+   `verdaccio-audit`. Before this change only the last two appeared. If
+   `verdaccio-auth-janua` is missing, the pod logs `plugin not found` and
+   Verdaccio refuses to start; ArgoCD rollback restores the previous ConfigMap.
+
+2. **Confirm htpasswd still works** (the regression that matters most) — an
+   existing CI token must be unaffected:
+
+   ```bash
+   curl -s -o /dev/null -w '%{http_code}\n' \
+     -H "Authorization: Bearer $NPM_MADFAM_TOKEN" \
+     https://npm.madfam.io/@madfam%2fecosystem-banner
+   ```
+
+   Expect `200`.
+
+3. **Install with a Janua key** carrying `npm:install`:
+
+   ```bash
+   npm config set //npm.madfam.io/:_auth "$(printf 'janua:%s' "$JANUA_API_KEY" | base64)"
+   npm config set //npm.madfam.io/:always-auth true
+   npm view @madfam/ecosystem-banner version --registry https://npm.madfam.io
+   ```
+
+   The pod should log `verdaccio-auth-janua: key verified`.
+
+   > `npm whoami` is not a useful check here: it reports the username Verdaccio
+   > derived, and `/-/whoami` is not access-gated on this registry (it returns
+   > 200 even anonymously). Fetch a private package instead.
+
+4. **Publish dry-run with a key carrying `npm:publish`:**
+
+   ```bash
+   npm publish --dry-run --registry https://npm.madfam.io
+   ```
+
+5. **Negative check** — a key with `npm:install` but not `npm:publish` must be
+   denied publish while install still works. The pod logs
+   `publish denied, missing npm:publish scope`.
+
+Rollback is a git revert of the `auth:` block: htpasswd is listed second and is
+untouched, so removing the `auth-janua` entry restores the previous behaviour
+on the next sync.
 
 ---
 
@@ -682,7 +917,9 @@ which this registry does not serve.
 
 ## Security Considerations
 
-1. **Authentication**: htpasswd with bcrypt (upgrade to Janua OAuth later)
+1. **Authentication**: Janua API keys (scoped `npm:install` / `npm:publish`)
+   with htpasswd + bcrypt as the fallback for CI service users. See
+   [Authentication](#authentication-janua-api-keys-htpasswd-fallback).
 2. **TLS**: Enforced via Cloudflare (Full strict)
 3. **Network Policy**: Only allow ingress from Cloudflare IPs
 4. **Rate Limiting**: Cloudflare rate limiting rules
@@ -711,8 +948,11 @@ vs npmjs.com private packages: $7/user/month × 5 users = $35/month
 
 ## Future Enhancements
 
-1. **Janua OAuth Integration** - Replace htpasswd with SSO
-2. **Package Signing** - Cosign for supply chain security
-3. **Vulnerability Scanning** - Integrate with Snyk/Trivy
-4. **Web UI Customization** - MADFAM branding
-5. **Metrics Export** - Prometheus metrics for package downloads
+1. **Janua browser SSO** - the web UI still uses htpasswd; API-key auth
+   (delivered) covers the CLI, not an interactive login
+2. **Password ExternalSecret for rotation** - unattended token *renewal* is
+   still impossible; see [Token rotation CronJob](#token-rotation-cronjob)
+3. **Package Signing** - Cosign for supply chain security
+4. **Vulnerability Scanning** - Integrate with Snyk/Trivy
+5. **Web UI Customization** - MADFAM branding
+6. **Metrics Export** - Prometheus metrics for package downloads

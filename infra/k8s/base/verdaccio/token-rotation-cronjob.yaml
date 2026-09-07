@@ -9,6 +9,12 @@
 #
 # npm-token-rotation-creds must include token and gh_token. username/password are
 # optional break-glass inputs for re-login when the provider secret includes them.
+#
+# NOTE: only `token` and `gh_token` are delivered by ExternalSecrets today, and
+# `username` comes from the Secret template below. There is NO `password`, so
+# login_for_token cannot run unattended -- the job exits with an explicit error
+# rather than silently doing nothing. Validation must therefore keep the
+# provisioned token healthy; see the publish probe in verify_token_works.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -41,31 +47,53 @@ data:
       fi
       log "INFO  Token whoami OK (user=${USERNAME})"
 
+      # 2026-09-07: this used to run `npm publish --dry-run`, but the rotation
+      # image (infra/docker/alpine-gh: ca-certificates curl github-cli jq) has
+      # NO node and NO npm. Under `set -e` the missing binary failed the smoke
+      # on every run since 2026-05-22, which drove the script into
+      # login_for_token, which then exited 1 because no `password` key exists in
+      # npm-token-rotation-creds. Three consecutive Sunday failures (08-23,
+      # 08-30, 09-06) with a token that was in fact healthy.
+      #
+      # The publish permission is now probed with curl against the registry
+      # itself: a PUT to a package path with an empty JSON body. Verdaccio
+      # checks authorization BEFORE it parses the payload, so the status code
+      # separates the two cases cleanly. Verified against prod 2026-09-07:
+      #   no credential / bad credential -> 401
+      #   authorized rotation token      -> 422 {"error":"bad incoming package data"}
+      # and /verdaccio/storage/@madfam/npm-publish-smoke was NOT created, so the
+      # probe publishes nothing. Needs no npm binary.
       if [ "${VERIFY_PUBLISH:-true}" = "true" ]; then
-        SMOKE_DIR=$(mktemp -d)
-        printf '%s\n' \
-          '{' \
-          '  "name": "@madfam/npm-publish-smoke",' \
-          '  "version": "0.0.0-smoke",' \
-          '  "private": true' \
-          '}' > "${SMOKE_DIR}/package.json"
-        if (cd "${SMOKE_DIR}" && \
-          NPM_CONFIG_REGISTRY="${VERDACCIO_URL}" \
-          npm publish --dry-run --access restricted >/dev/null 2>&1); then
-          log "INFO  Token publish dry-run OK"
-        else
-          log "WARN  Token publish dry-run failed"
-          rm -rf "${SMOKE_DIR}"
-          return 1
-        fi
-        rm -rf "${SMOKE_DIR}"
+        PUBLISH_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X PUT \
+          -H "Authorization: Bearer ${TOKEN}" \
+          -H 'Content-Type: application/json' \
+          --data '{}' \
+          "${VERDACCIO_URL}/@madfam%2fnpm-publish-smoke" 2>/dev/null || echo 000)
+        case "${PUBLISH_CODE}" in
+          401|403)
+            log "WARN  Token publish probe denied (HTTP ${PUBLISH_CODE})"
+            return 1
+            ;;
+          000|5??)
+            log "WARN  Token publish probe inconclusive (HTTP ${PUBLISH_CODE})"
+            return 1
+            ;;
+          *)
+            # 422 is the expected healthy answer.
+            log "INFO  Token publish probe OK (HTTP ${PUBLISH_CODE})"
+            ;;
+        esac
       fi
       return 0
     }
 
     login_for_token() {
       if [ -z "${NPM_REGISTRY_USER:-}" ] || [ -z "${NPM_REGISTRY_PASSWORD:-}" ]; then
-        log "ERROR Registry username/password are required when the current token needs renewal"
+        log "ERROR Cannot renew: npm-token-rotation-creds has no 'password' key."
+        log "ERROR PR #249 documented that key but never shipped an ExternalSecret"
+        log "ERROR for it, so automated re-login has never been possible."
+        log "ERROR Break-glass: rotate the token by hand, or add a password"
+        log "ERROR ExternalSecret alongside token-rotation-externalsecrets.yaml."
         exit 1
       fi
 

@@ -1,0 +1,57 @@
+---
+# Kyverno PolicyException for the npm token rotation CronJob.
+#
+# `require-probes` (infra/k8s/base/kyverno/policies/best-practices.yaml) is
+# validationFailureAction: Audit, so it never blocked anything -- the three
+# failed rotation jobs (2026-08-23, 08-30, 09-06) were caused by the missing
+# npm binary in the rotation image, not by this policy. What the policy DID
+# produce was a PolicyViolation warning event on every Job and on the CronJob
+# itself, which is noise on the one signal an operator reads when rotation
+# breaks.
+#
+# Readiness/liveness probes are meaningless for a batch Job: the pod runs
+# rotate.sh to completion and exits. Kubernetes restarts it via
+# restartPolicy: OnFailure and bounds it with activeDeadlineSeconds, which is
+# the correct health model here. So this is an exception, not a probe to add.
+apiVersion: kyverno.io/v2beta1
+kind: PolicyException
+metadata:
+  name: npm-token-rotation-probe-exception
+  namespace: npm-registry
+  labels:
+    app.kubernetes.io/name: verdaccio
+    app.kubernetes.io/component: token-rotation
+  annotations:
+    policies.kyverno.io/description: >-
+      The npm-token-rotation CronJob is a run-to-completion batch workload.
+      Readiness and liveness probes do not apply: health is expressed by the
+      exit code, restartPolicy OnFailure, and activeDeadlineSeconds. This
+      exception silences require-probes warning events so that a genuine
+      rotation failure is not buried in recurring policy noise.
+    policies.kyverno.io/severity: low
+spec:
+  exceptions:
+    - policyName: require-probes
+      # Exactly the rules require-probes actually declares. Verified against
+      # the live ClusterPolicy 2026-09-07:
+      #   .spec.rules[*].name          -> require-readiness-probe
+      #   .status.autogen.rules[*].name -> autogen-require-readiness-probe
+      #                                    autogen-cronjob-require-readiness-probe
+      # The policy declares NO liveness rule; naming one here would make
+      # Kyverno reject this exception.
+      ruleNames:
+        - require-readiness-probe
+        - autogen-require-readiness-probe
+        - autogen-cronjob-require-readiness-probe
+  match:
+    any:
+      - resources:
+          kinds:
+            - Pod
+            - Job
+            - CronJob
+          namespaces:
+            - npm-registry
+          names:
+            - npm-token-rotation
+            - npm-token-rotation-*

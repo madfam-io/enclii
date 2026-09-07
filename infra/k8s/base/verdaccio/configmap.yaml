@@ -24,11 +24,34 @@ data:
       sort_packages: asc
       darkMode: true
 
-    # Authentication - htpasswd service users.
-    # Janua API-key auth remains staged in verdaccio-janua-plugin, but it is
-    # not enabled here until the plugin is packaged into Verdaccio's plugin
-    # resolution path and validated in staging.
+    # Authentication - Janua API keys first, htpasswd as fallback.
+    #
+    # Verdaccio tries auth plugins IN ORDER. `auth-janua` claims only passwords
+    # that carry the Janua key prefix (jnk_) and calls callback(null, false) for
+    # everything else, so CI service users continue to authenticate against
+    # htpasswd unchanged.
+    #
+    # Plugin resolution: the loader resolves a non-scoped id against
+    # <plugins_dir>/<id> and then <plugins_dir>/verdaccio-<id>. With
+    # `plugins: /verdaccio/plugins` (above) and the verdaccio-janua-plugin
+    # ConfigMap mounted at /verdaccio/plugins/verdaccio-auth-janua, the id
+    # `auth-janua` resolves and logs
+    #   plugin successfully loaded: verdaccio-auth-janua
+    #
+    # IMPORTANT -- how a Janua key must be presented:
+    # `security.api.jwt` is set below, so an Authorization: Bearer <token> is
+    # verified as a VERDACCIO-SIGNED JWT before any plugin runs; a raw Janua key
+    # fails that check and the request silently becomes anonymous. A Janua key
+    # therefore goes in `_auth` (HTTP Basic), NOT `_authToken`:
+    #   //npm.madfam.io/:_auth=$(printf 'janua:%s' "$JANUA_KEY" | base64)
+    #   //npm.madfam.io/:always-auth=true
+    # See docs/infrastructure/npm-registry.md.
     auth:
+      auth-janua:
+        janua_url: https://auth.madfam.io
+        cache_ttl_ms: 300000
+        key_prefix: jnk_
+        timeout_ms: 5000
       htpasswd:
         file: /verdaccio/conf/htpasswd
         max_users: 100
