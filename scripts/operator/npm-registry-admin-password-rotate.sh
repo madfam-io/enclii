@@ -251,6 +251,20 @@ step "5/6 Wait for the verdaccio pod to come back"
 # strategy: Recreate on an RWO Longhorn PVC — the old pod terminates fully
 # before the new one attaches. There is a window with NO pod, so poll for a
 # Running+Ready one rather than assuming a rollout is in flight.
+# Reloader restarts the pod when the Secret changes — but only if the
+# Deployment carries the annotation (it did not until 2026-09-07, and a pod
+# that predates the Secret keeps serving the kubelet's stale projection while
+# reporting Ready). So: compare the pod's creation time with the Secret's and
+# restart explicitly when the pod is older. Recreate ⇒ ~30 s without a pod.
+POD_TS="$(ssh "$BASTION" "$KX -n $NS get pod -l app.kubernetes.io/name=verdaccio -o jsonpath='{.items[0].metadata.creationTimestamp}'" 2>/dev/null || echo "")"
+SEC_TS="$(ssh "$BASTION" "$KX -n $NS get secret verdaccio-auth -o jsonpath='{.metadata.creationTimestamp}'" 2>/dev/null || echo "")"
+if [[ -n "$POD_TS" && -n "$SEC_TS" && "$POD_TS" < "$SEC_TS" ]]; then
+  warn "pod (${POD_TS}) predates the Secret (${SEC_TS}) — Reloader did not fire; restarting explicitly"
+  ssh "$BASTION" "$KX -n $NS rollout restart deploy/verdaccio" >/dev/null \
+    || die "rollout restart failed — run it by hand:
+       ssh ${BASTION} '${KX} -n ${NS} rollout restart deploy/verdaccio'"
+  sleep 10
+fi
 READY=false
 for _ in $(seq 1 60); do
   sleep 5
