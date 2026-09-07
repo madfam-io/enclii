@@ -7,6 +7,15 @@ metadata:
     app.kubernetes.io/name: verdaccio
     app.kubernetes.io/component: server
     app.kubernetes.io/part-of: enclii-platform
+  annotations:
+    # Reloader reads its annotations HERE, on the Deployment, not on the pod
+    # template (where an identical `reloader.stakater.com/auto` sat since
+    # 2026-05 and never fired). Proven 2026-09-07: the first htpasswd rotation
+    # re-created Secret/verdaccio-auth and the pod kept serving the old file
+    # until a manual `rollout restart`. `auto` covers every ConfigMap and
+    # Secret this Deployment mounts (verdaccio-config, verdaccio-janua-plugin,
+    # verdaccio-auth); Recreate keeps the RWO PVC cutover clean.
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
   # Strategy: Recreate, NOT RollingUpdate.
@@ -35,10 +44,9 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "4873"
         prometheus.io/path: "/-/metrics"
-        # Auto-restart pod when ConfigMap or Secret it consumes changes.
-        # Pairs with strategy:Recreate above so config rolls cleanly without
-        # operator intervention. Reloader watches volumes (configMap/secret).
-        reloader.stakater.com/auto: "true"
+        # (The Reloader annotation lives on the Deployment's own metadata —
+        # see above. It used to be here, on the pod template, where Reloader
+        # never reads it; kept out of the template on purpose.)
     spec:
       securityContext:
         runAsNonRoot: true

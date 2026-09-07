@@ -192,11 +192,15 @@ step "3/6 Write ${VAULT_PATH} #htpasswd (token and value both over stdin)"
 # token with `read -r`, exports it for one command, and feeds the REMAINDER of
 # stdin to `vault kv patch … htpasswd=-`. Neither value is ever an argument, so
 # neither appears in `ps` output or in any shell history, here or there.
-# `kv patch` (not `put`) preserves any other keys already at this path.
+# `kv patch` (not `put`) preserves any other keys already at this path — but
+# KV v2 answers 404 to a patch on a path that does not exist yet (the first
+# rotation after #529 hit exactly that: the path was never seeded). So: patch
+# when the path exists, `put` (create) when it does not. The value still
+# travels on stdin either way.
 if ! printf '%s\n%s\n' "$VT" "$HTLINE" \
-  | ssh "$BASTION" "$KX -n $VAULT_NS exec -i $VPOD -- sh -c 'read -r T; VAULT_TOKEN=\"\$T\" vault kv patch $VAULT_PATH htpasswd=- >/dev/null'"
+  | ssh "$BASTION" "$KX -n $VAULT_NS exec -i $VPOD -- sh -c 'read -r T; export VAULT_TOKEN=\"\$T\"; if vault kv get $VAULT_PATH >/dev/null 2>&1; then vault kv patch $VAULT_PATH htpasswd=- >/dev/null; else vault kv put $VAULT_PATH htpasswd=- >/dev/null; fi'"
 then
-  die "vault kv patch failed (token lacks write on ${VAULT_PATH}?). Nothing changed:
+  die "vault kv write failed (token lacks write on ${VAULT_PATH}?). Nothing changed:
        the registry still accepts the OLD password. Safe to re-run."
 fi
 ok "Vault updated"
@@ -247,6 +251,20 @@ step "5/6 Wait for the verdaccio pod to come back"
 # strategy: Recreate on an RWO Longhorn PVC — the old pod terminates fully
 # before the new one attaches. There is a window with NO pod, so poll for a
 # Running+Ready one rather than assuming a rollout is in flight.
+# Reloader restarts the pod when the Secret changes — but only if the
+# Deployment carries the annotation (it did not until 2026-09-07, and a pod
+# that predates the Secret keeps serving the kubelet's stale projection while
+# reporting Ready). So: compare the pod's creation time with the Secret's and
+# restart explicitly when the pod is older. Recreate ⇒ ~30 s without a pod.
+POD_TS="$(ssh "$BASTION" "$KX -n $NS get pod -l app.kubernetes.io/name=verdaccio -o jsonpath='{.items[0].metadata.creationTimestamp}'" 2>/dev/null || echo "")"
+SEC_TS="$(ssh "$BASTION" "$KX -n $NS get secret verdaccio-auth -o jsonpath='{.metadata.creationTimestamp}'" 2>/dev/null || echo "")"
+if [[ -n "$POD_TS" && -n "$SEC_TS" && "$POD_TS" < "$SEC_TS" ]]; then
+  warn "pod (${POD_TS}) predates the Secret (${SEC_TS}) — Reloader did not fire; restarting explicitly"
+  ssh "$BASTION" "$KX -n $NS rollout restart deploy/verdaccio" >/dev/null \
+    || die "rollout restart failed — run it by hand:
+       ssh ${BASTION} '${KX} -n ${NS} rollout restart deploy/verdaccio'"
+  sleep 10
+fi
 READY=false
 for _ in $(seq 1 60); do
   sleep 5
