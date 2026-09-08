@@ -145,14 +145,38 @@ func BuildApplication(desired DesiredApplication, namespace string) (*unstructur
 				"enclii.dev/registration-mode": RegistrationModeRuntime,
 			},
 			"annotations": map[string]any{
+				// Client-side diff ONLY -- ServerSideDiff is deliberately absent.
+				//
 				// ServerSideDiff=true makes the controller compute the diff from a
-				// server-side apply dry-run, so apiserver-defaulted CRD fields (for
-				// example the ESO ExternalSecret spec.data[].remoteRef
-				// conversionStrategy/decodingStrategy/metadataPolicy defaults) stop
-				// showing as drift without an ignoreDifferences rule. In ArgoCD v3.2.5
-				// this option is only read from this annotation or the controller-wide
-				// env var -- it is NOT honoured inside spec.syncPolicy.syncOptions.
-				"argocd.argoproj.io/compare-options": "IgnoreExtraneous=true,ServerSideDiff=true",
+				// server-side-apply dry-run. That dry-run is a real admission request,
+				// so every mutating/validating webhook runs against the raw git target.
+				// On any namespace labelled enclii.dev/verify-signatures=true, Kyverno's
+				// verify-image-signatures stamps a kyverno.io/verify-images annotation
+				// keyed by the live image digest and its autogen-check-signature rule
+				// DENIES any request that changes that annotation. A CI digest bump
+				// makes the git target carry a new digest and no annotation, so the SSD
+				// dry-run is denied at admission -> ComparisonError -> the WHOLE app
+				// sync wedges. ignoreDifferences does NOT help: it normalises the diff
+				// result, not the dry-run *submission*, so the webhook still fires and
+				// denies before any result exists to normalise (confirmed live on
+				// nauta-services 2026-09-08; copying the live annotation into the
+				// submitted object clears the denial, but ArgoCD does not do that for
+				// the SSD submit). In ArgoCD v3.2.5 ServerSideDiff is read only here or
+				// from ARGOCD_APPLICATION_CONTROLLER_SERVER_SIDE_DIFF -- NOT per-resource
+				// and NOT from spec.syncPolicy.syncOptions -- so it cannot be turned off
+				// for the Kyverno-guarded Deployments alone; it is off for the app.
+				//
+				// The one thing SSD bought us -- hiding apiserver-defaulted ESO CRD
+				// fields (spec.data[].remoteRef conversionStrategy/decodingStrategy/
+				// metadataPolicy) so they don't read as drift -- is instead handled by
+				// spelling those defaults out explicitly in the ExternalSecret manifest
+				// in git, so client-side diff sees identical values on both sides. Do
+				// NOT reintroduce SSD to suppress that noise; do NOT add a list-path
+				// ignoreDifferences rule for ExternalSecret (it silently drops writes --
+				// see ARGOCD_KNOWN_ISSUES.md). Client-side apply on sync is a normal
+				// three-way merge that does not contend with Kyverno's field manager,
+				// and signature enforcement stays fully in force (no PolicyException).
+				"argocd.argoproj.io/compare-options": "IgnoreExtraneous=true",
 				"enclii.dev/source-repo":             repoURL,
 				"enclii.dev/source-branch":           branch,
 				"enclii.dev/manifest-path":           manifestPath,
