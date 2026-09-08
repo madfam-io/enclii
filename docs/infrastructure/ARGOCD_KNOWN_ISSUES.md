@@ -535,6 +535,90 @@ converges one cycle later.
 
 ---
 
+## Server-Side Diff Denied by Kyverno on Signature-Verified Deployments (Runtime-Registered Apps)
+
+**Status:** Fixed and **verified in production 2026-09-08** — runtime reconciler stops emitting
+`ServerSideDiff=true`; the app diffs client-side and the ERP promotion synced (`Healthy`, `Succeeded`,
+pods rolled to the git-pinned digests). See [Fix](#fix-3) and [How it reaches already-registered apps](#how-the-change-reaches-already-registered-apps-1).
+**Affected Apps:** every runtime-registered Application (`enclii.dev/registration-mode: runtime`) whose
+manifests include an image-signature-verified `Deployment`/`StatefulSet` in a namespace labelled
+`enclii.dev/verify-signatures: "true"` — observed on `nauta-services`.
+**Impact:** every CI image-digest bump wedged the WHOLE app on a `ComparisonError`; no wave-2 workload
+could roll. The ERP hex-grid panel (`nauta` #262) and the `/cumplimiento` fix (#263) sat unshipped for days.
+
+### Symptom
+
+```
+ComparisonError: Failed to compare desired state to live state: failed to calculate diff:
+error calculating server side diff: serverSideDiff error:
+error running server side apply in dryrun mode for resource Deployment/nauta-web:
+admission webhook "mutate.kyverno.svc-fail" denied the request:
+resource Deployment/nauta/nauta-web was blocked due to the following policies
+verify-image-signatures:
+  autogen-check-signature: kyverno.io/verify-images annotation cannot be changed
+```
+
+### Root Cause
+
+The runtime reconciler set `argocd.argoproj.io/compare-options: IgnoreExtraneous=true,ServerSideDiff=true`
+(added to cancel apiserver-defaulted ESO CRD fields out of the diff — see the ExternalSecret issue above).
+Server-Side Diff runs a real `kubectl apply --server-side --dry-run=server` **through admission** for each
+resource. Kyverno's `verify-image-signatures` stamps every admitted signature-verified workload with a
+`kyverno.io/verify-images` annotation **keyed by the resolved image digest**, and its autogen rule
+`autogen-check-signature` DENIES any admission request that changes that annotation. A CI digest bump makes
+the git target carry a new digest and no annotation, so the SSD dry-run is denied → `ComparisonError` → the
+whole app comparison fails → sync never proceeds.
+
+`ignoreDifferences` cannot fix this. It normalises the *diff result*, not the dry-run *submission*: the
+webhook fires and denies before any predicted-live state exists to normalise. Confirmed live on
+`nauta-services` 2026-09-08 — the app already listed `/metadata/annotations/kyverno.io~1verify-images` (both
+metadata and pod-template paths) in `ignoreDifferences` and still hit the `ComparisonError`. A break-glass
+SSA dry-run with the **live** annotation copied into the submitted object cleared the signature denial
+(advancing to an unrelated policy), proving the denial is purely the annotation-change check on the
+raw-target submission.
+
+Per-resource `argocd.argoproj.io/compare-options: ServerSideDiff=false` does not opt a resource out either:
+in ArgoCD v3.2.5 `ServerSideDiff` is read only at the Application level (from the compare-options annotation
+or `ARGOCD_APPLICATION_CONTROLLER_SERVER_SIDE_DIFF`), never per-resource — so SSD is all-or-nothing per app.
+
+### Fix
+
+In `apps/switchyard-api/internal/argocd/application_reconciler.go`, the runtime Application's compare-options
+annotation drops `ServerSideDiff=true` (→ `IgnoreExtraneous=true` only). The app now diffs **client-side**,
+which never invokes admission, so the Kyverno webhook cannot deny the comparison of any Deployment.
+
+The ESO defaulting noise that SSD used to hide is handled the other, safe way: the ExternalSecret manifests
+in git **spell out** the apiserver defaults (`remoteRef.conversionStrategy: Default`, `decodingStrategy: None`,
+`metadataPolicy: None`) on every `spec.data[]` entry, so client-side diff sees identical values on both sides
+with no ignore rule and no SSD. Do **not** reintroduce SSD to suppress that noise, and do **not** add a
+list-path `ignoreDifferences` rule for `ExternalSecret` (it silently drops writes — see the ExternalSecret
+issue above). Signature verification is untouched: no PolicyException, the images stay cosign-verified.
+
+A unit test in `application_reconciler_test.go` now asserts the compare-options annotation carries
+`IgnoreExtraneous=true` and **must not** carry `ServerSideDiff=true`.
+
+### How the change reaches already-registered apps
+
+Same mechanism as the ExternalSecret fix: `ReconcileApplication` re-applies the full desired spec on every
+call, so an existing Application picks the new compare-options up on the next `POST /v1/admin/onboard/ensure`
+for that repo (deploying the new switchyard-api alone does not rewrite live Applications). Until that reconcile
+runs, the live Application keeps whatever it has; the 2026-09-08 production unblock was done by a documented
+break-glass `kubectl annotate` on the live Application (`compare-options=IgnoreExtraneous=true`) plus a hard
+refresh, which the reconciler will converge to once redeployed.
+
+### Smoke Test
+
+```bash
+kubectl -n argocd get application <app> \
+  -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/compare-options}{"\n"}'
+# want: IgnoreExtraneous=true   (NO ServerSideDiff=true)
+
+kubectl -n argocd get application <app> -o jsonpath='{.status.sync.status} {.status.health.status}{"\n"}'
+# want: Synced Healthy, and no ComparisonError condition on a digest bump
+```
+
+---
+
 ## Other Known Issues
 
 _No other known issues at this time._

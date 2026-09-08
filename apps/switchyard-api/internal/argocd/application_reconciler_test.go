@@ -48,13 +48,18 @@ func TestBuildApplicationMirrorsApplicationSetSemantics(t *testing.T) {
 		}
 	}
 
-	// ServerSideDiff is only honoured through the compare-options annotation in
-	// ArgoCD v3.2.5; it is deliberately NOT a syncOption.
+	// The diff must stay CLIENT-SIDE. ServerSideDiff runs a dry-run apply through
+	// admission, which Kyverno's verify-image-signatures denies whenever a CI
+	// digest bump changes the kyverno.io/verify-images annotation on a
+	// signature-verified Deployment -- wedging the whole app sync on a
+	// ComparisonError (confirmed live on nauta-services 2026-09-08). It must not
+	// be reintroduced, in the compare-options annotation or anywhere else.
 	compareOptions := app.GetAnnotations()["argocd.argoproj.io/compare-options"]
-	for _, want := range []string{"IgnoreExtraneous=true", "ServerSideDiff=true"} {
-		if !hasCompareOption(compareOptions, want) {
-			t.Fatalf("compare-options = %q, missing %q", compareOptions, want)
-		}
+	if !hasCompareOption(compareOptions, "IgnoreExtraneous=true") {
+		t.Fatalf("compare-options = %q, missing %q", compareOptions, "IgnoreExtraneous=true")
+	}
+	if hasCompareOption(compareOptions, "ServerSideDiff=true") {
+		t.Fatalf("compare-options = %q, must NOT carry ServerSideDiff (its admission dry-run is denied by Kyverno on signature-verified Deployments; ESO CRD defaults are spelled out in git instead)", compareOptions)
 	}
 	if hasString(syncOptions, "ServerSideDiff=true") {
 		t.Fatalf("syncOptions = %#v, must not carry ServerSideDiff (ArgoCD ignores it there)", syncOptions)
