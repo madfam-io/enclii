@@ -133,3 +133,48 @@ platforms:
       grant_types:
         - authorization_code
         - refresh_token
+
+  # ---------------------------------------------------------------------------
+  # Nauta → Symbiosis-HCM (service). The ecosystem's FIRST client_credentials
+  # machine edge — every entry above is an authorization_code LOGIN client.
+  #
+  # One edge, one client, one scope (the same rule the Nauta→Karafiel edge
+  # follows). A dedicated machine client, NOT the nauta-cockpit login client:
+  # granting `hcm:hr` to the credential every MADFAM staffer signs in with would
+  # hand payroll authority to that shared login. So this client exists only to
+  # let nauta's /recursos-humanos slice mint short-lived HCM tokens.
+  #
+  # No redirect_uris (client_credentials has no browser leg). It is org-bound to
+  # CTM/`crea` (organization_id below): Janua #595 — merged 2026-09-04, in prod
+  # 2026-09-07 — emits an org-bound client's app:role scopes verbatim into the
+  # roles claim, so a token minted for `hcm:hr` (colon) carries a role HCM's
+  # HR_ROLES accepts. Without the org binding that verbatim emission does not
+  # fire and HCM answers 403. audience `symbiosis-hcm` is HCM's own audience.
+  #
+  # NOT pinned with a client_id: this client does not exist yet, so the first
+  # provision run CREATES it (reconcile-by-name/key/audience on later runs). Once
+  # it is registered, pin its jnc_… id here to make every future run reconcile.
+  #
+  # intake_target writes the minted pair to Vault secret/nauta as a MERGE, so the
+  # two properties land alongside nauta's other keys without clobbering them. The
+  # lowercase intake_key_map matches nauta #264's `nauta-hcm-oauth` ExternalSecret
+  # (`property: symbiosis_hcm_oauth_client_id` / `_secret`); ESO is all-or-nothing
+  # per ExternalSecret, so the case must match exactly or that Secret syncs zero
+  # keys and the RH slice stays NOT_CONNECTED.
+  # ---------------------------------------------------------------------------
+  nauta-symbiosis-hcm:
+    intake_target: nauta/symbiosis-hcm-oauth
+    intake_key_map:
+      symbiosis_hcm_oauth_client_id: client_id
+      symbiosis_hcm_oauth_client_secret: client_secret
+    janua_client:
+      name: Nauta → Symbiosis-HCM (service)
+      client_key: nauta-symbiosis-hcm
+      audience: symbiosis-hcm
+      description: Machine edge (client_credentials) from nauta's /recursos-humanos slice to Symbiosis-HCM. Org-bound to CTM/crea, scope hcm:hr — one edge, one client, one scope. NOT the cockpit login client. Mints short-lived HCM tokens; never a browser login.
+      is_confidential: true
+      organization_id: e6cbd51d-8329-4c4e-8c74-aba643ab4575
+      allowed_scopes:
+        - hcm:hr
+      grant_types:
+        - client_credentials

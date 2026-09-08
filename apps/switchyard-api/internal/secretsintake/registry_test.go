@@ -1,6 +1,7 @@
 package secretsintake
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,7 +11,7 @@ import (
 func TestLoadRegistry(t *testing.T) {
 	reg, err := LoadRegistry()
 	require.NoError(t, err)
-	assert.Len(t, reg, 26)
+	assert.Len(t, reg, 27)
 	assert.Contains(t, reg, "ceq/vast-api-key")
 	assert.Contains(t, reg, "karafiel/web-oidc-janua")
 	tgt := reg["ceq/vast-api-key"]
@@ -31,7 +32,7 @@ func TestGetTarget(t *testing.T) {
 func TestListTargetsSorted(t *testing.T) {
 	list, err := ListTargets()
 	require.NoError(t, err)
-	require.Len(t, list, 26)
+	require.Len(t, list, 27)
 	for i := 1; i < len(list); i++ {
 		assert.Less(t, list[i-1].ID, list[i].ID, "targets should be sorted by id")
 	}
@@ -62,6 +63,7 @@ func TestListTargetsSorted(t *testing.T) {
 		"nauta/kalya-feed-tokens",
 		"nauta/oidc-janua",
 		"nauta/oidc-janua-portal",
+		"nauta/symbiosis-hcm-oauth",
 		"nauta/symbiosis-hcm-token",
 		"phynd-crm/oidc-janua",
 		"platform/comms-resend-api-key",
@@ -94,6 +96,32 @@ func TestSeptember2026Targets(t *testing.T) {
 			assert.NotEmpty(t, tgt.Label)
 			assert.NotEmpty(t, tgt.Namespace)
 		})
+	}
+}
+
+// The nauta→Symbiosis-HCM OAuth machine edge (2026-09-08). Its id+secret pair
+// is filed by `enclii secrets provision oidc --platform nauta-symbiosis-hcm`.
+// Distinct from nauta/symbiosis-hcm-token (a static bearer) by BOTH its keys
+// and its ExternalSecret: it projects through nauta-hcm-oauth — nauta #264's
+// DEDICATED, isolated ExternalSecret — not nauta-web-secrets, so a not-yet-
+// provisioned client degrades only the RH slice. It shares secret/nauta with
+// every other nauta target; the intake write is a merge, so it lands alongside
+// them without clobbering. Lowercase properties to match the ExternalSecret's
+// `property:` fields (ESO is all-or-nothing per ExternalSecret).
+func TestNautaSymbiosisHCMOAuthTarget(t *testing.T) {
+	tgt, err := GetTarget("nauta/symbiosis-hcm-oauth")
+	require.NoError(t, err)
+	assert.Equal(t, "secret/nauta", tgt.VaultPath)
+	assert.Equal(t, "nauta", tgt.Namespace)
+	assert.Equal(t, "nauta-hcm-oauth", tgt.ExternalSecret,
+		"must be the dedicated isolated ExternalSecret, not nauta-web-secrets")
+	assert.Equal(t, []string{
+		"symbiosis_hcm_oauth_client_id",
+		"symbiosis_hcm_oauth_client_secret",
+	}, tgt.Keys)
+	for _, k := range tgt.Keys {
+		assert.Equal(t, strings.ToLower(k), k,
+			"key %q must be lowercase to match nauta's ExternalSecret property", k)
 	}
 }
 

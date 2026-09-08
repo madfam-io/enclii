@@ -58,13 +58,24 @@ func (c *JanuaClient) registerOrReconcile(ctx context.Context, spec JanuaClientS
 	body := map[string]interface{}{
 		"name":            spec.Name,
 		"description":     spec.Description,
-		"redirect_uris":   spec.RedirectURIs,
 		"allowed_scopes":  spec.AllowedScopes,
 		"grant_types":     spec.GrantTypes,
 		"audience":        spec.Audience,
 		"client_key":      spec.ClientKey,
 		"website_url":     spec.WebsiteURL,
 		"is_confidential": spec.confidential(),
+	}
+	// A login client carries redirect_uris; a client_credentials machine client
+	// has none. Sending an empty/null redirect_uris on a machine client invites
+	// a validation error from Janua, so send the field only when it has values.
+	if len(spec.RedirectURIs) > 0 {
+		body["redirect_uris"] = spec.RedirectURIs
+	}
+	// Org-bound machine clients (nauta-symbiosis-hcm) pass their tenant so Janua
+	// scopes the service identity — and, per Janua #595, emits its app:role
+	// scopes verbatim into the roles claim. Omitted for unbound login clients.
+	if spec.OrganizationID != "" {
+		body["organization_id"] = spec.OrganizationID
 	}
 	if spec.ClientID != "" {
 		body["client_id"] = spec.ClientID
