@@ -118,3 +118,46 @@ func TestLoadRegistry_nautaBothClientsPinned(t *testing.T) {
 		}
 	}
 }
+
+// nauta-symbiosis-hcm is the ecosystem's first client_credentials machine edge.
+// This pins the shape nauta #264 depends on: org-bound, one scope, no browser
+// leg, and the two lowercase Vault properties its ExternalSecret reads. If any
+// of these drift, `enclii secrets provision oidc --platform nauta-symbiosis-hcm`
+// mints the wrong thing and the RH slice stays NOT_CONNECTED (or worse, 403s).
+func TestLoadRegistry_nautaSymbiosisHCMMachineClient(t *testing.T) {
+	reg, err := LoadRegistry("")
+	require.NoError(t, err)
+
+	p, ok := reg.Platforms["nauta-symbiosis-hcm"]
+	require.True(t, ok, "nauta-symbiosis-hcm platform missing")
+
+	// Intake lands the pair at nauta's Vault path (a merge — see switchyard's
+	// MergeSecretData) as the two properties nauta #264's ExternalSecret reads.
+	assert.Equal(t, "nauta/symbiosis-hcm-oauth", p.IntakeTarget)
+	require.Equal(t, map[string]string{
+		"symbiosis_hcm_oauth_client_id":     "client_id",
+		"symbiosis_hcm_oauth_client_secret": "client_secret",
+	}, p.IntakeKeyMap)
+	for k := range p.IntakeKeyMap {
+		assert.Equal(t, strings.ToLower(k), k,
+			"intake key %q must be lowercase to match nauta's ExternalSecret property", k)
+	}
+
+	jc := p.JanuaClient
+	assert.Equal(t, "symbiosis-hcm", jc.Audience)
+	assert.Equal(t, []string{"client_credentials"}, jc.GrantTypes,
+		"machine edge must be client_credentials, not authorization_code")
+	assert.Equal(t, []string{"hcm:hr"}, jc.AllowedScopes)
+	assert.Empty(t, jc.RedirectURIs, "a client_credentials client has no browser leg")
+	assert.True(t, jc.confidential(), "the machine client must be confidential")
+	// Org binding is what makes Janua #595 emit the app:role scope verbatim.
+	assert.Equal(t, "e6cbd51d-8329-4c4e-8c74-aba643ab4575", jc.OrganizationID,
+		"machine client must be org-bound to CTM/crea or Janua will not emit hcm:hr into the roles claim")
+
+	// The minted pair maps to exactly the two lowercase properties, nothing else.
+	values := buildIntakeValues(reg.Issuer, "jnc_hcm", "s3cr3t", p)
+	assert.Equal(t, map[string]string{
+		"symbiosis_hcm_oauth_client_id":     "jnc_hcm",
+		"symbiosis_hcm_oauth_client_secret": "s3cr3t",
+	}, values)
+}

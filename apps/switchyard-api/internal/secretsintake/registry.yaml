@@ -229,6 +229,32 @@ targets:
     keys:
       - symbiosis_hcm_token
 
+  # The OIDC-autoprovision landing for the nauta→Symbiosis-HCM machine edge.
+  # `enclii secrets provision oidc --platform nauta-symbiosis-hcm` mints an
+  # org-bound client_credentials client (audience symbiosis-hcm, scope hcm:hr)
+  # and files its id+secret HERE. Distinct from nauta/symbiosis-hcm-token above:
+  # that one holds a single static bearer (the pre-OAuth path); these two are the
+  # runtime-minted OAuth pair nauta #264's `nauta-hcm-oauth` ExternalSecret reads.
+  #
+  # Same vault_path (secret/nauta) as every other nauta target — the write is a
+  # MERGE (VaultClient.MergeSecretData reads-then-overlays), so these two keys
+  # land ALONGSIDE janua_client_id, database_url and the rest; nothing is
+  # clobbered. LOWERCASE properties, because nauta's ExternalSecret references
+  # `property: symbiosis_hcm_oauth_client_id` and ESO is all-or-nothing.
+  #
+  # external_secret is nauta-hcm-oauth (the DEDICATED, isolated ExternalSecret
+  # nauta #264 added), NOT nauta-web-secrets — so a not-yet-synced key degrades
+  # only the RH slice, and the post-intake force-sync annotates the right object.
+  nauta/symbiosis-hcm-oauth:
+    label: Nauta cliente OAuth de symbiosis-hcm (client_credentials)
+    description: Par id+secreto del cliente máquina org-bound (audience symbiosis-hcm, scope hcm:hr) con el que nauta acuña tokens de RH; lo escribe `enclii secrets provision oidc --platform nauta-symbiosis-hcm`
+    vault_path: secret/nauta
+    namespace: nauta
+    external_secret: nauta-hcm-oauth
+    keys:
+      - symbiosis_hcm_oauth_client_id
+      - symbiosis_hcm_oauth_client_secret
+
   janua/internal-api-key:
     label: Janua internal API key
     description: Shared internal key for service-to-service calls into janua-api (peer of enclii/internal-api-key)

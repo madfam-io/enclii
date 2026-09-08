@@ -27,6 +27,14 @@ type Platform struct {
 }
 
 // JanuaClientSpec is sent to Janua register/create APIs.
+//
+// Two client shapes flow through here. A LOGIN client (authorization_code) has
+// redirect_uris and no OrganizationID. A machine client (client_credentials)
+// has an OrganizationID (org-bound service identity) and NO redirect_uris —
+// nauta-symbiosis-hcm is the first of these. Janua #595 (merged 2026-09-04)
+// emits an org-bound client's app:role scopes verbatim into the roles claim,
+// which is what makes an org binding + a scope like hcm:hr a working edge; a
+// machine client that is NOT org-bound would not get that treatment.
 type JanuaClientSpec struct {
 	Name           string   `yaml:"name"`
 	ClientKey      string   `yaml:"client_key"`
@@ -35,7 +43,8 @@ type JanuaClientSpec struct {
 	Description    string   `yaml:"description,omitempty"`
 	IsConfidential *bool    `yaml:"is_confidential,omitempty"`
 	WebsiteURL     string   `yaml:"website_url,omitempty"`
-	RedirectURIs   []string `yaml:"redirect_uris"`
+	OrganizationID string   `yaml:"organization_id,omitempty"`
+	RedirectURIs   []string `yaml:"redirect_uris,omitempty"`
 	AllowedScopes  []string `yaml:"allowed_scopes"`
 	GrantTypes     []string `yaml:"grant_types"`
 }
