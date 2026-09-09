@@ -368,15 +368,20 @@ describe('login', () => {
 
     const mockSetItem = jest.spyOn(Storage.prototype, 'setItem')
 
-    // Mock window.location
+    // Mock window.location. `window.location` is declared with a
+    // string-accepting setter (`set location(href: string)`), so a plain
+    // assignment of a Location object does not type-check; define the
+    // property instead, as done for `crypto` above.
     const originalLocation = window.location
-    // @ts-expect-error - overriding location for test
-    delete window.location
-    window.location = {
-      ...originalLocation,
-      origin: 'https://admin.enclii.dev',
-      href: '',
-    } as Location
+    Object.defineProperty(window, 'location', {
+      value: {
+        ...originalLocation,
+        origin: 'https://admin.enclii.dev',
+        href: '',
+      } as Location,
+      writable: true,
+      configurable: true,
+    })
 
     render(
       <AuthProvider>
@@ -395,7 +400,11 @@ describe('login', () => {
     expect(mockSetItem).toHaveBeenCalledWith('dispatch_code_verifier', expect.any(String))
 
     mockSetItem.mockRestore()
-    window.location = originalLocation
+    Object.defineProperty(window, 'location', {
+      value: originalLocation,
+      writable: true,
+      configurable: true,
+    })
     Object.defineProperty(global, 'crypto', {
       value: originalCrypto,
       writable: true,
